@@ -45,7 +45,7 @@
    ENABLE_GPU_TIMESLICING=true
 
    # Re-run Docker setup
-   sudo ./scripts/03-setup-docker.sh
+   sudo ./scripts/05-setup-docker.sh
 
    # Restart containers
    cd docker && docker compose restart
@@ -246,7 +246,7 @@
 
 9. **Verify everything works**
    ```bash
-   ./scripts/09-run-tests.sh
+   ./scripts/11-run-tests.sh
    ```
 
 10. **Decommission old server**

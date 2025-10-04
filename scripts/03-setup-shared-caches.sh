@@ -125,7 +125,7 @@ chmod 777 "${CACHE_ROOT}/browser/firefox"
 chmod 777 "${CACHE_ROOT}/browser/chromium"
 
 # 9. Google Drive VFS cache directory
-# Note: This is created and managed by 01b-setup-gdrive-shared.sh
+# Note: This is created and managed by 02-setup-gdrive-shared.sh
 # We ensure it exists here for consistency, but don't recreate if already present
 echo "9. Google Drive VFS cache..."
 mkdir -p "${CACHE_ROOT}/gdrive"

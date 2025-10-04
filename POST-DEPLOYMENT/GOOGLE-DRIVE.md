@@ -29,7 +29,7 @@
 
 4. **Re-run setup script**
    ```bash
-   sudo ./scripts/01b-setup-gdrive-shared.sh
+   sudo ./scripts/02-setup-gdrive-shared.sh
    ```
 
 5. **Verify mount**
@@ -78,7 +78,7 @@
 
 4. **Remount with new settings**
    ```bash
-   sudo ./scripts/01b-setup-gdrive-shared.sh
+   sudo ./scripts/02-setup-gdrive-shared.sh
    ```
 
 5. **Monitor cache growth**
@@ -178,7 +178,7 @@
 
 6. **Re-run setup**
    ```bash
-   sudo ./scripts/01b-setup-gdrive-shared.sh
+   sudo ./scripts/02-setup-gdrive-shared.sh
    ```
 
 7. **Verify mount**

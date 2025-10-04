@@ -249,7 +249,7 @@ EOF
 
 echo "Automatic security updates enabled"
 
-# Step 5: Harden SSH (already done in 02-setup-users.sh, verify here)
+# Step 5: Harden SSH (already done in 04-setup-users.sh, verify here)
 echo ""
 echo "=== Step 5: Verifying SSH hardening ==="
 

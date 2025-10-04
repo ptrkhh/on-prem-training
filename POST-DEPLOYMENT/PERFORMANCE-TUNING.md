@@ -130,7 +130,7 @@
    nano ~/train-server/config.sh
    ENABLE_GPU_TIMESLICING=true
 
-   sudo ./scripts/03-setup-docker.sh
+   sudo ./scripts/05-setup-docker.sh
    cd ~/train-server/docker
    docker compose restart
    ```
@@ -203,8 +203,8 @@ torch.cuda.set_per_process_memory_fraction(0.5, 0)  # Use max 50% GPU memory
 
 2. **Re-run affected setup scripts**
    ```bash
-   sudo ./scripts/07-setup-backups.sh
-   sudo ./scripts/08-setup-data-pipeline.sh
+   sudo ./scripts/09-setup-backups.sh
+   sudo ./scripts/10-setup-data-pipeline.sh
    ```
 
 3. **Test bandwidth usage**

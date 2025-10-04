@@ -50,14 +50,14 @@
 7. **Re-run setup scripts** (skip storage setup)
    ```bash
    # Skip: 01-setup-storage.sh (already mounted)
-   sudo ./scripts/01b-setup-gdrive-shared.sh
-   sudo ./scripts/02-setup-users.sh
-   sudo ./scripts/03-setup-docker.sh
-   sudo ./scripts/04-setup-cloudflare-tunnel.sh
-   sudo ./scripts/05-setup-firewall.sh
-   sudo ./scripts/06-setup-monitoring.sh
-   sudo ./scripts/07-setup-backups.sh
-   sudo ./scripts/08-setup-data-pipeline.sh
+   sudo ./scripts/02-setup-gdrive-shared.sh
+   sudo ./scripts/04-setup-users.sh
+   sudo ./scripts/05-setup-docker.sh
+   sudo ./scripts/06-setup-cloudflare-tunnel.sh
+   sudo ./scripts/07-setup-firewall.sh
+   sudo ./scripts/08-setup-monitoring.sh
+   sudo ./scripts/09-setup-backups.sh
+   sudo ./scripts/10-setup-data-pipeline.sh
    ```
 
 8. **Build and start containers**
@@ -73,7 +73,7 @@
    docker ps
    nvidia-smi
    df -h
-   ./scripts/09-run-tests.sh
+   ./scripts/11-run-tests.sh
    ```
 
 **Time estimate:** 2-4 hours

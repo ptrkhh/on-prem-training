@@ -50,7 +50,7 @@ fi
 echo "Validating required directories..."
 if [[ ! -d "${MOUNT_POINT}/shared" ]]; then
     echo "ERROR: ${MOUNT_POINT}/shared does not exist!"
-    echo "Please run 01-setup-storage.sh first, or 01b-setup-gdrive-shared.sh if using Google Drive."
+    echo "Please run 01-setup-storage.sh first, then 02-setup-gdrive-shared.sh if using Google Drive."
     exit 1
 fi
 

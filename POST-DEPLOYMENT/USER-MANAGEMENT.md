@@ -24,7 +24,7 @@
 
 3. **Create system user**
    ```bash
-   sudo ./scripts/02-setup-users.sh
+   sudo ./scripts/04-setup-users.sh
    # This will create: /home/frank, /mnt/storage/homes/frank, /mnt/storage/workspaces/frank
    ```
 

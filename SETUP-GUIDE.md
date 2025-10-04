@@ -159,7 +159,7 @@ The `/shared` directory should be mounted from a Google Workspace Shared Drive w
 
 ```bash
 cd ~/train-server/scripts
-sudo ./01b-setup-gdrive-shared.sh
+sudo ./02-setup-gdrive-shared.sh
 ```
 
 This script will:
@@ -248,7 +248,7 @@ Run the user setup script:
 
 ```bash
 cd ~/train-server/scripts
-sudo ./02-setup-users.sh
+sudo ./04-setup-users.sh
 ```
 
 This script will:
@@ -291,7 +291,7 @@ sudo chown -R alice:alice /mnt/storage/homes/alice/.ssh
 
 ```bash
 cd ~/train-server/scripts
-sudo ./03-setup-docker.sh
+sudo ./05-setup-docker.sh
 ```
 
 This installs:
@@ -422,7 +422,7 @@ Cloudflare Edge ──────────────> Local DNS/Hosts
 
    ```bash
    cd ~/train-server/scripts
-   sudo ./04-setup-cloudflare-tunnel.sh
+   sudo ./06-setup-cloudflare-tunnel.sh
    ```
 
 2. **Configure Public Hostnames**
@@ -479,7 +479,7 @@ After configuration, local users get:
 
 ```bash
 cd ~/train-server/scripts
-sudo ./05-setup-firewall.sh
+sudo ./07-setup-firewall.sh
 ```
 
 This configures:
@@ -540,7 +540,7 @@ Alerts are sent for:
 
 ```bash
 cd ~/train-server/scripts
-sudo ./06-setup-monitoring.sh
+sudo ./08-setup-monitoring.sh
 ```
 
 This installs:
@@ -570,7 +570,7 @@ This installs:
 
 ```bash
 cd ~/train-server/scripts
-sudo ./07-setup-backups.sh
+sudo ./09-setup-backups.sh
 ```
 
 This configures:
@@ -792,9 +792,9 @@ All setup and maintenance scripts are in the `scripts/` directory.
    Creates: BTRFS RAID10, bcache, directory structure, fstab entries
    **REBOOT REQUIRED AFTER THIS STEP**
 
-2b. **01b-setup-gdrive-shared.sh** - Mount Google Drive Shared Drive (Recommended)
+2b. **02-setup-gdrive-shared.sh** - Mount Google Drive Shared Drive (Recommended)
    ```bash
-   sudo ./scripts/01b-setup-gdrive-shared.sh
+   sudo ./scripts/02-setup-gdrive-shared.sh
    ```
    Configures: Google Workspace Shared Drive mount /shared, cached locally
    Features: VFS cache, auto-recovery, health monitoring
@@ -802,37 +802,37 @@ All setup and maintenance scripts are in the `scripts/` directory.
 
 3. **02-setup-users.sh** - Create user accounts
    ```bash
-   sudo ./scripts/02-setup-users.sh
+   sudo ./scripts/04-setup-users.sh
    ```
    Creates: Linux users, home directories, SSH key-based authentication
 
 4. **03-setup-docker.sh** - Install Docker and NVIDIA runtime
    ```bash
-   sudo ./scripts/03-setup-docker.sh
+   sudo ./scripts/05-setup-docker.sh
    ```
    Installs: Docker Engine, docker-compose, nvidia-container-toolkit
 
 5. **04-setup-cloudflare-tunnel.sh** - Configure Cloudflare Tunnel
    ```bash
-   sudo ./scripts/04-setup-cloudflare-tunnel.sh
+   sudo ./scripts/06-setup-cloudflare-tunnel.sh
    ```
    Creates: Cloudflare Tunnel, DNS records, systemd service
 
 6. **05-setup-firewall.sh** - Configure firewall and security
    ```bash
-   sudo ./scripts/05-setup-firewall.sh
+   sudo ./scripts/07-setup-firewall.sh
    ```
    Configures: UFW firewall, fail2ban, automatic updates
 
 7. **06-setup-monitoring.sh** - Set up monitoring and alerts
    ```bash
-   sudo ./scripts/06-setup-monitoring.sh
+   sudo ./scripts/08-setup-monitoring.sh
    ```
    Creates: Monitoring scripts, Telegram alerts, cron jobs
 
 8. **07-setup-backups.sh** - Configure backup system
    ```bash
-   sudo ./scripts/07-setup-backups.sh
+   sudo ./scripts/09-setup-backups.sh
    ```
    Configures: Restic, BTRFS snapshots, backup schedules
 

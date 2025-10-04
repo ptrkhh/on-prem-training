@@ -120,7 +120,49 @@ for dir in homes workspaces shared docker-volumes snapshots; do
     fi
 done
 
-# Test 2: GPU
+# Test 2: Google Drive Mounts
+section "Google Drive Mount Tests"
+
+# Check if Google Drive mounts are configured
+if [[ -n "${GOOGLE_DRIVE_MOUNTS:-}" ]]; then
+    # Parse Google Drive mount configuration (format: "user1:folder1,user2:folder2")
+    IFS=',' read -ra MOUNT_PAIRS <<< "${GOOGLE_DRIVE_MOUNTS}"
+    for mount_pair in "${MOUNT_PAIRS[@]}"; do
+        user="${mount_pair%%:*}"
+        folder="${mount_pair##*:}"
+
+        # Check if rclone remote exists
+        if rclone listremotes 2>/dev/null | grep -q "gdrive-${user}:"; then
+            pass "Google Drive remote configured for ${user}"
+
+            # Check if mount point exists and is mounted
+            MOUNT_PATH="${MOUNT_POINT}/homes/${user}/GoogleDrive"
+            if [[ -d "${MOUNT_PATH}" ]]; then
+                # Check if actually mounted (look for .rclone-health file or test mount)
+                if mountpoint -q "${MOUNT_PATH}" 2>/dev/null || findmnt "${MOUNT_PATH}" &>/dev/null; then
+                    pass "  Google Drive mounted at ${MOUNT_PATH}"
+
+                    # Test read access
+                    if timeout 5 ls "${MOUNT_PATH}" &>/dev/null; then
+                        pass "  Google Drive mount is accessible"
+                    else
+                        fail "  Google Drive mount is not responding"
+                    fi
+                else
+                    warn "  Google Drive directory exists but is not mounted"
+                fi
+            else
+                fail "  Mount point missing: ${MOUNT_PATH}"
+            fi
+        else
+            warn "Google Drive remote not configured for ${user}"
+        fi
+    done
+else
+    warn "No Google Drive mounts configured (GOOGLE_DRIVE_MOUNTS not set)"
+fi
+
+# Test 3: GPU
 section "GPU Tests"
 
 if command -v nvidia-smi &> /dev/null; then
@@ -161,6 +203,36 @@ else
     fail "Docker NVIDIA runtime is NOT working"
 fi
 
+# Test GPU access from user containers
+if [[ ${USER_COUNT} -gt 0 ]]; then
+    TEST_USER="${USER_ARRAY[0]}"
+    USER_CONTAINER=$(docker ps --filter "name=${TEST_USER}" --format '{{.Names}}' | head -1)
+
+    if [[ -n "${USER_CONTAINER}" ]]; then
+        # Check if container has GPU access
+        if docker exec "${USER_CONTAINER}" nvidia-smi &>/dev/null 2>&1; then
+            pass "User container ${USER_CONTAINER} has GPU access"
+
+            # Get GPU info from container
+            GPU_COUNT=$(docker exec "${USER_CONTAINER}" nvidia-smi --query-gpu=count --format=csv,noheader 2>/dev/null | head -1)
+            if [[ -n "${GPU_COUNT}" && "${GPU_COUNT}" -gt 0 ]]; then
+                pass "  ${GPU_COUNT} GPU(s) accessible from user container"
+            fi
+        else
+            warn "User container ${USER_CONTAINER} does not have GPU access (check if --gpus flag is set)"
+        fi
+    else
+        # Try creating a temporary test container with GPU access
+        if docker run --rm --gpus all --name test-gpu-access-$$ nvidia/cuda:latest nvidia-smi &>/dev/null 2>&1; then
+            pass "GPU access verified via test container"
+        else
+            warn "Could not verify GPU access in user containers (no user containers running)"
+        fi
+    fi
+else
+    warn "Skipping user container GPU test (no users configured)"
+fi
+
 # Check running containers
 RUNNING_CONTAINERS=$(docker ps --format '{{.Names}}' | wc -l)
 HEALTHY_CONTAINERS=$(docker ps --filter "health=healthy" --format '{{.Names}}' | wc -l)
@@ -174,7 +246,7 @@ else
     warn "No containers are running"
 fi
 
-# Test 4: Networking
+# Test 5: Networking
 section "Network Tests"
 
 if ping -c 1 8.8.8.8 &>/dev/null; then
@@ -195,7 +267,7 @@ else
     warn "Cloudflare Tunnel is not running"
 fi
 
-# Test 5: Monitoring
+# Test 6: Monitoring
 section "Monitoring Tests"
 
 # Check Prometheus
@@ -219,7 +291,7 @@ else
     warn "Netdata is not responding"
 fi
 
-# Test 6: Backups
+# Test 7: Backups
 section "Backup Tests"
 
 # Check BTRFS snapshots
@@ -250,7 +322,7 @@ else
     warn "Restic not configured"
 fi
 
-# Test 7: Users
+# Test 8: Users
 section "User Tests"
 
 for user in ${USER_ARRAY[@]}; do
@@ -268,7 +340,55 @@ for user in ${USER_ARRAY[@]}; do
     fi
 done
 
-# Test 8: Services
+# Test 9: User Container Functionality
+section "User Container Tests"
+
+# Test if user containers can be created and accessed
+if [[ ${USER_COUNT} -gt 0 ]]; then
+    TEST_USER="${USER_ARRAY[0]}"
+
+    # Check if user has a container running
+    USER_CONTAINER=$(docker ps --filter "name=${TEST_USER}" --format '{{.Names}}' | head -1)
+
+    if [[ -n "${USER_CONTAINER}" ]]; then
+        pass "Container exists for user ${TEST_USER}: ${USER_CONTAINER}"
+
+        # Test container health
+        CONTAINER_STATUS=$(docker inspect --format='{{.State.Status}}' "${USER_CONTAINER}" 2>/dev/null)
+        if [[ "${CONTAINER_STATUS}" == "running" ]]; then
+            pass "  Container is running"
+
+            # Test if we can execute commands in the container
+            if docker exec "${USER_CONTAINER}" echo "test" &>/dev/null; then
+                pass "  Can execute commands in container"
+
+                # Test if home directory is mounted correctly
+                if docker exec "${USER_CONTAINER}" test -d "/home/${TEST_USER}" 2>/dev/null; then
+                    pass "  Home directory is accessible in container"
+                else
+                    fail "  Home directory not accessible in container"
+                fi
+
+                # Test if workspace is mounted
+                if docker exec "${USER_CONTAINER}" test -d "/workspace" 2>/dev/null; then
+                    pass "  Workspace directory is accessible in container"
+                else
+                    warn "  Workspace directory not found in container"
+                fi
+            else
+                fail "  Cannot execute commands in container"
+            fi
+        else
+            fail "  Container is not running (status: ${CONTAINER_STATUS})"
+        fi
+    else
+        warn "No container found for user ${TEST_USER} (this may be expected if containers are created on-demand)"
+    fi
+else
+    warn "No users configured to test containers"
+fi
+
+# Test 10: Services
 section "Service Tests"
 
 SERVICES=(
@@ -280,6 +400,7 @@ SERVICES=(
     "filebrowser:8081"
     "dozzle:8082"
     "tensorboard:6006"
+    "guacamole:8083"
 )
 
 for service in "${SERVICES[@]}"; do
@@ -293,7 +414,7 @@ for service in "${SERVICES[@]}"; do
     fi
 done
 
-# Test 9: Smart Monitoring
+# Test 11: Smart Monitoring
 section "SMART Monitoring Tests"
 
 if command -v smartctl &> /dev/null; then
@@ -312,7 +433,7 @@ else
     fail "smartmontools is NOT installed"
 fi
 
-# Test 10: Cron Jobs
+# Test 12: Cron Jobs
 section "Cron Job Tests"
 
 CRON_FILES=(
