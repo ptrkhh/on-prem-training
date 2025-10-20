@@ -41,8 +41,6 @@ for i in "${!USERS[@]}"; do
         echo "  Created user ${USER}"
     fi
 
-    # Add to docker and sudo groups
-    usermod -aG docker,sudo ${USER}
 
     # Set initial password (prompt)
     echo "  Setting password for ${USER}:"
