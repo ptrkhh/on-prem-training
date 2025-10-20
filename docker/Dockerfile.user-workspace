@@ -1,0 +1,282 @@
+# ML Training Server - User Workspace Container
+# This container behaves like a full VM with desktop, dev tools, and ML stack
+
+FROM nvidia/cuda:12.4.0-devel-ubuntu22.04
+
+# Prevent interactive prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Set locale
+RUN apt-get update && apt-get install -y locales && \
+    locale-gen en_US.UTF-8
+ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
+
+#==============================================================================
+# SYSTEM PACKAGES
+#==============================================================================
+
+RUN apt-get update && apt-get install -y \
+    # Core utilities
+    sudo curl wget git vim nano htop tmux screen \
+    build-essential cmake pkg-config \
+    software-properties-common apt-transport-https \
+    ca-certificates gnupg lsb-release \
+    # Networking
+    net-tools iputils-ping dnsutils \
+    openssh-server rsync \
+    # Compression
+    zip unzip p7zip-full \
+    # System monitoring
+    sysstat iotop nethogs \
+    # Development tools
+    gdb valgrind strace \
+    # Version control
+    git-lfs subversion mercurial \
+    # Shells
+    zsh fish \
+    && rm -rf /var/lib/apt/lists/*
+
+#==============================================================================
+# DESKTOP ENVIRONMENT (KDE Plasma - Lightweight)
+#==============================================================================
+
+RUN apt-get update && apt-get install -y \
+    # KDE Plasma Desktop
+    kde-plasma-desktop plasma-workspace-wayland \
+    # Essential KDE apps
+    konsole dolphin kate okular gwenview \
+    # Display server
+    xorg x11-xserver-utils \
+    # VNC server for remote access
+    tigervnc-standalone-server tigervnc-common \
+    # X2Go server components
+    x2goserver x2goserver-xsession \
+    # Audio
+    pulseaudio pulseaudio-utils pavucontrol \
+    # Fonts
+    fonts-noto fonts-noto-color-emoji \
+    fonts-liberation fonts-dejavu \
+    # File manager integration
+    kio-extras \
+    # System settings
+    systemsettings \
+    && rm -rf /var/lib/apt/lists/*
+
+#==============================================================================
+# REMOTE ACCESS SERVICES
+#==============================================================================
+
+# Note: Guacamole server runs as a separate shared service
+# This container only needs X2Go server for remote desktop access
+# Users can connect via:
+#  - X2Go client (best performance, low bandwidth)
+#  - Guacamole web interface (browser-based, routes to X2Go)
+
+#==============================================================================
+# DEVELOPMENT TOOLS
+#==============================================================================
+
+# Install code-server (VS Code in browser)
+RUN curl -fsSL https://code-server.dev/install.sh | sh
+
+# Install Node.js and npm
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g yarn pnpm
+
+# Install Python build dependencies
+RUN apt-get update && apt-get install -y \
+    python3-dev python3-pip python3-venv \
+    libpython3-dev python3-setuptools \
+    && rm -rf /var/lib/apt/lists/*
+
+#==============================================================================
+# ML/DATA SCIENCE STACK
+#==============================================================================
+
+# Install Python ML libraries
+RUN pip3 install --no-cache-dir \
+    # Deep Learning
+    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 \
+    tensorflow[and-cuda] \
+    jax[cuda12] \
+    # Data Science
+    numpy pandas scipy scikit-learn \
+    matplotlib seaborn plotly \
+    jupyter jupyterlab ipywidgets \
+    notebook \
+    # ML Tools
+    transformers accelerate \
+    datasets \
+    tensorboard \
+    wandb \
+    mlflow \
+    # Computer Vision
+    opencv-python-headless pillow \
+    albumentations \
+    # NLP
+    spacy nltk gensim \
+    # Utilities
+    tqdm rich click typer \
+    pyyaml toml \
+    requests httpx \
+    # Development
+    pytest pytest-cov black flake8 mypy \
+    ipdb pudb \
+    # Jupyter extensions
+    jupyterlab-git jupyterlab-lsp \
+    python-lsp-server
+
+# Install JupyterLab extensions
+RUN pip3 install --no-cache-dir \
+    jupyterlab-vim \
+    jupyterlab-code-formatter \
+    jupyterlab-spreadsheet-editor
+
+#==============================================================================
+# IDE & EDITORS
+#==============================================================================
+
+# Install PyCharm Community (headless for now, can be accessed via desktop)
+RUN wget -q https://download.jetbrains.com/python/pycharm-community-2024.1.tar.gz -O /tmp/pycharm.tar.gz && \
+    tar -xzf /tmp/pycharm.tar.gz -C /opt/ && \
+    mv /opt/pycharm-* /opt/pycharm && \
+    rm /tmp/pycharm.tar.gz && \
+    ln -s /opt/pycharm/bin/pycharm.sh /usr/local/bin/pycharm
+
+# Install VSCodium (open source VS Code)
+RUN wget -qO - https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg | gpg --dearmor | dd of=/usr/share/keyrings/vscodium-archive-keyring.gpg && \
+    echo 'deb [ signed-by=/usr/share/keyrings/vscodium-archive-keyring.gpg ] https://download.vscodium.com/debs vscodium main' | tee /etc/apt/sources.list.d/vscodium.list && \
+    apt-get update && apt-get install -y codium && \
+    rm -rf /var/lib/apt/lists/*
+
+#==============================================================================
+# BROWSERS & GUI APPS
+#==============================================================================
+
+RUN apt-get update && apt-get install -y \
+    # Browsers
+    firefox chromium-browser \
+    # PDF viewers
+    evince \
+    # Image editors
+    gimp inkscape \
+    # Office suite (lightweight)
+    libreoffice-writer libreoffice-calc \
+    # Media player
+    vlc \
+    # Screenshot tools
+    spectacle \
+    && rm -rf /var/lib/apt/lists/*
+
+#==============================================================================
+# DATABASE & TOOLS
+#==============================================================================
+
+RUN apt-get update && apt-get install -y \
+    # Databases
+    sqlite3 \
+    postgresql-client \
+    mysql-client \
+    redis-tools \
+    # Database GUI
+    sqlitebrowser \
+    && rm -rf /var/lib/apt/lists/*
+
+#==============================================================================
+# CONTAINERIZATION TOOLS (Docker-in-Docker support)
+#==============================================================================
+
+RUN apt-get update && apt-get install -y \
+    docker.io docker-compose \
+    && rm -rf /var/lib/apt/lists/*
+
+#==============================================================================
+# LANGUAGE RUNTIMES
+#==============================================================================
+
+# Go
+RUN wget -q https://go.dev/dl/go1.22.0.linux-amd64.tar.gz -O /tmp/go.tar.gz && \
+    tar -C /usr/local -xzf /tmp/go.tar.gz && \
+    rm /tmp/go.tar.gz
+ENV PATH="${PATH}:/usr/local/go/bin"
+
+# Rust
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Julia (for scientific computing)
+RUN wget -q https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.0-linux-x86_64.tar.gz -O /tmp/julia.tar.gz && \
+    tar -C /opt -xzf /tmp/julia.tar.gz && \
+    ln -s /opt/julia-*/bin/julia /usr/local/bin/julia && \
+    rm /tmp/julia.tar.gz
+
+# R (for statistics)
+RUN apt-get update && apt-get install -y \
+    r-base r-base-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+#==============================================================================
+# VERSION CONTROL & COLLABORATION
+#==============================================================================
+
+RUN pip3 install --no-cache-dir \
+    # Git tools
+    git-review gitpython \
+    # Collaboration
+    jupyterlab-github \
+    jupyterlab-gitlab
+
+#==============================================================================
+# SYSTEM INITIALIZATION
+#==============================================================================
+
+# Configure SSH
+RUN mkdir /var/run/sshd && \
+    echo 'PermitRootLogin no' >> /etc/ssh/sshd_config && \
+    echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config && \
+    echo 'X11Forwarding yes' >> /etc/ssh/sshd_config && \
+    echo 'X11UseLocalhost no' >> /etc/ssh/sshd_config
+
+# Configure sudo
+RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+# Create startup script
+COPY docker/entrypoint-user.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Configure X2Go
+# X2Go will automatically start KDE Plasma session
+
+# Configure systemd-like services using supervisord
+RUN apt-get update && apt-get install -y supervisor && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY docker/supervisord.conf /etc/supervisor/conf.d/user-services.conf
+
+#==============================================================================
+# USER SETUP SCRIPT
+#==============================================================================
+
+# This will be run at container startup to setup the actual user
+COPY docker/setup-user.sh /usr/local/bin/setup-user.sh
+RUN chmod +x /usr/local/bin/setup-user.sh
+
+#==============================================================================
+# CONTAINER METADATA
+#==============================================================================
+
+# Expose all necessary ports
+EXPOSE 22      # SSH (for X2Go and terminal access)
+EXPOSE 8080    # code-server
+EXPOSE 8888    # Jupyter
+EXPOSE 6006    # TensorBoard
+# Note: X2Go uses SSH (port 22) for both transport and session management
+# Guacamole (separate service) will connect to this container via SSH/X2Go
+
+# Set working directory
+WORKDIR /workspace
+
+# Default command
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisord.conf"]

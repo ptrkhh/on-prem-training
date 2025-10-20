@@ -1,0 +1,225 @@
+#!/bin/bash
+# ML Training Server - Configuration Template
+# Copy this file to config.sh and customize for your setup:
+#   cp config.sh.example config.sh
+#   nano config.sh
+
+#==============================================================================
+# SYSTEM CONFIGURATION
+#==============================================================================
+
+SERVER_HOSTNAME="ml-train-server"
+MOUNT_POINT="/mnt/storage"
+
+#==============================================================================
+# USER CONFIGURATION
+#==============================================================================
+
+# List of users to create (space-separated)
+# Example: "alice bob charlie dave eve"
+# Example: "user1 user2 user3"
+USERS="alice bob charlie dave eve"
+
+# Starting UID for users (default: 1000)
+FIRST_UID=1000
+
+USER_SHELL="/bin/bash"
+USER_GROUPS="docker sudo"
+
+#==============================================================================
+# STORAGE CONFIGURATION
+#==============================================================================
+
+# Leave empty for auto-detection, or specify devices
+# Auto-detection will find NVMe/SSD and all rotational HDDs
+
+# SSD/NVMe device (auto-detected if empty)
+# Example: "/dev/nvme0n1" or "/dev/sda"
+NVME_DEVICE=""
+
+# Size to reserve for OS (in GB), rest used for bcache
+OS_PARTITION_SIZE_GB=100
+
+# HDD devices for BTRFS (auto-detected if empty)
+# Example: "/dev/sdb /dev/sdc /dev/sdd /dev/sde"
+HDD_DEVICES=""
+
+# BTRFS RAID level
+# Options: raid10 (4+ disks), raid1 (2+ disks), raid0 (2+ disks, no redundancy), single (1+ disk, no redundancy)
+BTRFS_RAID_LEVEL="raid10"
+
+# Compression: zstd:1-15 (higher=better compression, more CPU), lzo, zlib, none
+BTRFS_COMPRESSION="zstd:3"
+
+# bcache mode: writeback (fast, needs UPS), writethrough (safer), writearound, none (disable)
+BCACHE_MODE="writeback"
+
+#==============================================================================
+# RESOURCE LIMITS (PER USER)
+#==============================================================================
+
+MEMORY_GUARANTEE_GB=32
+MEMORY_LIMIT_GB=100
+SWAP_SIZE_GB=50
+USER_QUOTA_TB=1
+QUOTA_WARNING_DAYS=7
+
+#==============================================================================
+# DOCKER CONFIGURATION
+#==============================================================================
+
+DOCKER_STORAGE_DRIVER="btrfs"
+DOCKER_LOG_MAX_SIZE="10m"
+DOCKER_LOG_MAX_FILES="3"
+
+#==============================================================================
+# NETWORKING
+#==============================================================================
+
+# Your domain for Cloudflare Tunnel
+# Example: "example.com" creates alice-code.example.com, jupyter-alice.example.com, etc.
+DOMAIN=""
+
+CODE_SERVER_PREFIX="code"
+JUPYTER_PREFIX="jupyter"
+
+# Local network CIDR for firewall (optional)
+# Example: "192.168.1.0/24"
+LOCAL_NETWORK_CIDR=""
+
+#==============================================================================
+# BACKUP CONFIGURATION
+#==============================================================================
+
+BACKUP_REMOTE="gdrive:backups/ml-train-server"
+BACKUP_BANDWIDTH_LIMIT_MBPS=100
+
+SNAPSHOT_HOURLY_KEEP=24
+SNAPSHOT_DAILY_KEEP=7
+SNAPSHOT_WEEKLY_KEEP=4
+
+RESTIC_KEEP_DAILY=7
+RESTIC_KEEP_WEEKLY=52
+
+BACKUP_HOUR=6
+BACKUP_MINUTE=0
+
+#==============================================================================
+# DATA PIPELINE
+#==============================================================================
+
+GCS_BUCKET="gcs:customer-daily-bucket"
+GDRIVE_CUSTOMER_DATA="gdrive:customer-daily"
+DATA_SYNC_BANDWIDTH_LIMIT_MBPS=100
+DATA_SYNC_HOUR=4
+DATA_SYNC_MINUTE=0
+DATA_CLEANUP_DAYS=90
+
+#==============================================================================
+# MONITORING & ALERTING
+#==============================================================================
+
+# Leave empty to skip
+SLACK_WEBHOOK_URL=""
+HEALTHCHECK_BACKUP_URL=""
+HEALTHCHECK_DATA_SYNC_URL=""
+
+GPU_TEMP_THRESHOLD=80
+DISK_TEMP_THRESHOLD=50
+FS_USAGE_THRESHOLD=90
+SMART_MONITORING=true
+
+#==============================================================================
+# SERVICE PORTS
+#==============================================================================
+
+CODE_SERVER_BASE_PORT=8443
+JUPYTER_BASE_PORT=8888
+
+TRAEFIK_PORT=8080
+NETDATA_PORT=19999
+PROMETHEUS_PORT=9090
+GRAFANA_PORT=3000
+PORTAINER_PORT=9000
+FILEBROWSER_PORT=8081
+DOZZLE_PORT=8082
+TENSORBOARD_PORT=6006
+GUACAMOLE_PORT=8080
+
+#==============================================================================
+# ADVANCED SETTINGS
+#==============================================================================
+
+ENABLE_SSH_2FA=false
+ENABLE_AUDITD=false
+ENABLE_UPS_MONITORING=false
+ENABLE_GPU_TIMESLICING=false
+ENABLE_AUTO_UPDATES=true
+
+COMPOSE_PROJECT_NAME="ml-train-server"
+
+#==============================================================================
+# HELPER FUNCTIONS (DO NOT EDIT)
+#==============================================================================
+
+get_users() { echo ${USERS}; }
+get_user_count() { echo ${USERS} | wc -w; }
+
+get_user_uid() {
+    local username=$1
+    local index=0
+    for user in ${USERS}; do
+        [[ "$user" == "$username" ]] && echo $((FIRST_UID + index)) && return
+        ((index++))
+    done
+}
+
+get_user_port() {
+    local username=$1
+    local base_port=$2
+    local index=0
+    for user in ${USERS}; do
+        [[ "$user" == "$username" ]] && echo $((base_port + index)) && return
+        ((index++))
+    done
+}
+
+detect_nvme_device() {
+    [[ -n "${NVME_DEVICE}" ]] && echo "${NVME_DEVICE}" && return
+    [[ -b "/dev/nvme0n1" ]] && echo "/dev/nvme0n1" && return
+    [[ -b "/dev/sda" ]] && echo "/dev/sda" && return
+}
+
+detect_hdd_devices() {
+    [[ -n "${HDD_DEVICES}" ]] && echo "${HDD_DEVICES}" && return
+    local nvme_dev=$(detect_nvme_device)
+    local hdds=""
+    for dev in /dev/sd{b..z}; do
+        if [[ -b "${dev}" ]] && [[ "${dev}" != "${nvme_dev}" ]]; then
+            local disk_name=$(basename ${dev})
+            if [[ -f "/sys/block/${disk_name}/queue/rotational" ]]; then
+                [[ "$(cat /sys/block/${disk_name}/queue/rotational)" == "1" ]] && hdds="${hdds} ${dev}"
+            fi
+        fi
+    done
+    echo ${hdds}
+}
+
+get_rclone_bandwidth() { echo "${1}M"; }
+
+# Export all
+export SERVER_HOSTNAME MOUNT_POINT USERS FIRST_UID USER_SHELL USER_GROUPS
+export NVME_DEVICE HDD_DEVICES OS_PARTITION_SIZE_GB
+export BTRFS_RAID_LEVEL BTRFS_COMPRESSION BCACHE_MODE
+export MEMORY_GUARANTEE_GB MEMORY_LIMIT_GB SWAP_SIZE_GB USER_QUOTA_TB QUOTA_WARNING_DAYS
+export DOCKER_STORAGE_DRIVER DOCKER_LOG_MAX_SIZE DOCKER_LOG_MAX_FILES
+export DOMAIN CODE_SERVER_PREFIX JUPYTER_PREFIX LOCAL_NETWORK_CIDR
+export BACKUP_REMOTE BACKUP_BANDWIDTH_LIMIT_MBPS
+export SNAPSHOT_HOURLY_KEEP SNAPSHOT_DAILY_KEEP SNAPSHOT_WEEKLY_KEEP
+export RESTIC_KEEP_DAILY RESTIC_KEEP_WEEKLY BACKUP_HOUR BACKUP_MINUTE
+export GCS_BUCKET GDRIVE_CUSTOMER_DATA DATA_SYNC_BANDWIDTH_LIMIT_MBPS
+export DATA_SYNC_HOUR DATA_SYNC_MINUTE DATA_CLEANUP_DAYS
+export SLACK_WEBHOOK_URL HEALTHCHECK_BACKUP_URL HEALTHCHECK_DATA_SYNC_URL
+export GPU_TEMP_THRESHOLD DISK_TEMP_THRESHOLD FS_USAGE_THRESHOLD SMART_MONITORING
+export ENABLE_SSH_2FA ENABLE_AUDITD ENABLE_UPS_MONITORING ENABLE_GPU_TIMESLICING ENABLE_AUTO_UPDATES
+export CODE_SERVER_BASE_PORT JUPYTER_BASE_PORT COMPOSE_PROJECT_NAME
