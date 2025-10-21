@@ -331,12 +331,12 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - "traefik.http.routers.${USERNAME}-code.service=${USERNAME}-code"
       - "traefik.http.services.${USERNAME}-code.loadbalancer.server.port=8080"
       # Jupyter Lab
-      - "traefik.http.routers.${USERNAME}-jupyter.rule=Host(\`jupyter-${USERNAME}.\${DOMAIN:-localhost}\`)"
+      - "traefik.http.routers.${USERNAME}-jupyter.rule=Host(\`${USERNAME}-jupyter.\${DOMAIN:-localhost}\`)"
       - "traefik.http.routers.${USERNAME}-jupyter.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-jupyter.service=${USERNAME}-jupyter"
       - "traefik.http.services.${USERNAME}-jupyter.loadbalancer.server.port=8888"
       # Per-user TensorBoard
-      - "traefik.http.routers.${USERNAME}-tensorboard.rule=Host(\`tensorboard-${USERNAME}.\${DOMAIN:-localhost}\`)"
+      - "traefik.http.routers.${USERNAME}-tensorboard.rule=Host(\`${USERNAME}-tensorboard.\${DOMAIN:-localhost}\`)"
       - "traefik.http.routers.${USERNAME}-tensorboard.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-tensorboard.service=${USERNAME}-tensorboard"
       - "traefik.http.services.${USERNAME}-tensorboard.loadbalancer.server.port=6006"
@@ -377,8 +377,8 @@ for USERNAME in ${USER_ARRAY[@]}; do
     echo "      - Desktop (NoMachine Web): http://${USERNAME}-desktop.${DOMAIN}"
     echo "      - Desktop (NoMachine Client): SERVER_IP:${NX_PORT}"
     echo "      - VS Code: http://${USERNAME}-code.${DOMAIN}"
-    echo "      - Jupyter: http://jupyter-${USERNAME}.${DOMAIN}"
-    echo "      - TensorBoard: http://tensorboard-${USERNAME}.${DOMAIN}"
+    echo "      - Jupyter: http://${USERNAME}-jupyter.${DOMAIN}"
+    echo "      - TensorBoard: http://${USERNAME}-tensorboard.${DOMAIN}"
     echo "      - SSH: ssh ${USERNAME}@SERVER_IP -p ${SSH_PORT}"
     USER_INDEX=$((USER_INDEX + 1))
 done

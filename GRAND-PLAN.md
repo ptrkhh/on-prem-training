@@ -47,7 +47,7 @@ FileBrowser: files.mydomain.com
 Dozzle: logs.mydomain.com (7-day retention)
 Portainer: portainer.mydomain.com
 smartmontools: Automated disk health checks + alerts
-Per-User Jupyter: jupyter-alice.mydomain.com, jupyter-bob.mydomain.com
+Per-User Jupyter: alice-jupyter.mydomain.com, bob-jupyter.mydomain.com
 
 ## Authentication & Security
 

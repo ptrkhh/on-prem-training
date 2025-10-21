@@ -93,7 +93,7 @@ DOCKER_LOG_MAX_FILES="3"
 #==============================================================================
 
 # Your domain for Cloudflare Tunnel
-# Example: "example.com" creates alice-code.example.com, jupyter-alice.example.com, etc.
+# Example: "example.com" creates alice-code.example.com, alice-jupyter.example.com, etc.
 DOMAIN=""
 
 CODE_SERVER_PREFIX="code"

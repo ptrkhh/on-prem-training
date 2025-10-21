@@ -116,8 +116,8 @@ cd ../scripts && sudo ./10-run-tests.sh
 **Per-User (example for Alice):**
 - Desktop (NoMachine Web): `http://alice-desktop.yourdomain.com`
 - VS Code: `http://alice-code.yourdomain.com`
-- Jupyter: `http://jupyter-alice.yourdomain.com`
-- TensorBoard: `http://tensorboard-alice.yourdomain.com`
+- Jupyter: `http://alice-jupyter.yourdomain.com`
+- TensorBoard: `http://alice-tensorboard.yourdomain.com`
 
 ### Via NoMachine Client (Best Performance)
 
@@ -229,7 +229,8 @@ Traefik (:80) ←─────────────────────
 Routes by hostname:
 ├── alice-desktop.domain.com → Alice's NoMachine Web
 ├── alice-code.domain.com → Alice's VS Code
-├── jupyter-alice.domain.com → Alice's Jupyter
+├── alice-jupyter.domain.com → Alice's Jupyter
+├── alice-tensorboard.domain.com → Alice's TensorBoard
 └── ...
 
 Direct NoMachine Protocol (ports 4000+):

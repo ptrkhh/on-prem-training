@@ -304,9 +304,9 @@ services:
       - "traefik.enable=true"
 
   # Jupyter instances (one per user)
-  jupyter-alice:
+  alice-jupyter:
     image: jupyter/tensorflow-notebook:latest
-    container_name: jupyter-alice
+    container_name: alice-jupyter
     restart: unless-stopped
     user: "1000:1000"
     environment:
@@ -331,9 +331,9 @@ services:
     labels:
       - "traefik.enable=true"
 
-  jupyter-bob:
+  bob-jupyter:
     image: jupyter/tensorflow-notebook:latest
-    container_name: jupyter-bob
+    container_name: bob-jupyter
     restart: unless-stopped
     user: "1001:1001"
     environment:
@@ -358,9 +358,9 @@ services:
     labels:
       - "traefik.enable=true"
 
-  jupyter-charlie:
+  charlie-jupyter:
     image: jupyter/tensorflow-notebook:latest
-    container_name: jupyter-charlie
+    container_name: charlie-jupyter
     restart: unless-stopped
     user: "1002:1002"
     environment:
@@ -385,9 +385,9 @@ services:
     labels:
       - "traefik.enable=true"
 
-  jupyter-dave:
+  dave-jupyter:
     image: jupyter/tensorflow-notebook:latest
-    container_name: jupyter-dave
+    container_name: dave-jupyter
     restart: unless-stopped
     user: "1003:1003"
     environment:
@@ -412,9 +412,9 @@ services:
     labels:
       - "traefik.enable=true"
 
-  jupyter-eve:
+  eve-jupyter:
     image: jupyter/tensorflow-notebook:latest
-    container_name: jupyter-eve
+    container_name: eve-jupyter
     restart: unless-stopped
     user: "1004:1004"
     environment:

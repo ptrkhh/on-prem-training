@@ -115,20 +115,52 @@ ingress:
     service: http://localhost:8447
 
   # Jupyter instances
-  - hostname: jupyter-alice.${DOMAIN}
+  - hostname: alice-jupyter.${DOMAIN}
     service: http://localhost:8888
 
-  - hostname: jupyter-bob.${DOMAIN}
+  - hostname: bob-jupyter.${DOMAIN}
     service: http://localhost:8889
 
-  - hostname: jupyter-charlie.${DOMAIN}
+  - hostname: charlie-jupyter.${DOMAIN}
     service: http://localhost:8890
 
-  - hostname: jupyter-dave.${DOMAIN}
+  - hostname: dave-jupyter.${DOMAIN}
     service: http://localhost:8891
 
-  - hostname: jupyter-eve.${DOMAIN}
+  - hostname: eve-jupyter.${DOMAIN}
     service: http://localhost:8892
+
+  # Per-user TensorBoard instances
+  - hostname: alice-tensorboard.${DOMAIN}
+    service: http://localhost:6007
+
+  - hostname: bob-tensorboard.${DOMAIN}
+    service: http://localhost:6008
+
+  - hostname: charlie-tensorboard.${DOMAIN}
+    service: http://localhost:6009
+
+  - hostname: dave-tensorboard.${DOMAIN}
+    service: http://localhost:6010
+
+  - hostname: eve-tensorboard.${DOMAIN}
+    service: http://localhost:6011
+
+  # NoMachine Web Desktop instances
+  - hostname: alice-desktop.${DOMAIN}
+    service: http://localhost:4080
+
+  - hostname: bob-desktop.${DOMAIN}
+    service: http://localhost:4081
+
+  - hostname: charlie-desktop.${DOMAIN}
+    service: http://localhost:4082
+
+  - hostname: dave-desktop.${DOMAIN}
+    service: http://localhost:4083
+
+  - hostname: eve-desktop.${DOMAIN}
+    service: http://localhost:4084
 
   # Catch-all rule
   - service: http_status:404
@@ -176,7 +208,8 @@ echo ""
 echo "Per-user services (example for Alice):"
 echo "  https://alice-desktop.${DOMAIN} → NoMachine Web Desktop"
 echo "  https://alice-code.${DOMAIN} → VS Code"
-echo "  https://jupyter-alice.${DOMAIN} → Jupyter"
+echo "  https://alice-jupyter.${DOMAIN} → Jupyter"
+echo "  https://alice-tensorboard.${DOMAIN} → TensorBoard"
 echo "  ... (repeat for bob, charlie, dave, eve)"
 echo ""
 echo "NoMachine client connections:"

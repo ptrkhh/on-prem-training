@@ -310,7 +310,7 @@ Cloudflare Edge ──────────────> Local DNS/Hosts
 [Traefik :80] ───> Routes by hostname
      |
      ├──> alice-code.domain.com  -> Alice's VS Code
-     ├──> jupyter-alice.domain.com -> Alice's Jupyter
+     ├──> alice-jupyter.domain.com -> Alice's Jupyter
      └──> ... (all other services)
 ```
 
@@ -351,8 +351,8 @@ Cloudflare Edge ──────────────> Local DNS/Hosts
    alice-code.yourdomain.com   → http://localhost:8443 (code-server alice)
    bob-code.yourdomain.com     → http://localhost:8444 (code-server bob)
    # ... repeat for charlie, dave, eve
-   jupyter-alice.yourdomain.com → http://localhost:8888
-   jupyter-bob.yourdomain.com   → http://localhost:8889
+   alice-jupyter.yourdomain.com → http://localhost:8888
+   bob-jupyter.yourdomain.com   → http://localhost:8889
    # ... repeat for charlie, dave, eve
    ```
 
@@ -376,7 +376,7 @@ For users on the same local network, configure direct access to bypass the inter
 # On each local machine, edit /etc/hosts (Linux/Mac)
 # or C:\Windows\System32\drivers\etc\hosts (Windows)
 192.168.1.100 alice-code.yourdomain.com
-192.168.1.100 jupyter-alice.yourdomain.com
+192.168.1.100 alice-jupyter.yourdomain.com
 192.168.1.100 health.yourdomain.com
 192.168.1.100 metrics.yourdomain.com
 # ... add all subdomains you use
