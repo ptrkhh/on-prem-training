@@ -105,7 +105,6 @@ cat > /etc/ssh/sshd_config.d/ml-train-server.conf <<EOF
 PermitRootLogin no
 PasswordAuthentication no
 PubkeyAuthentication yes
-ChallengeResponseAuthentication yes
 UsePAM yes
 X11Forwarding yes
 PrintMotd no
@@ -113,25 +112,7 @@ AcceptEnv LANG LC_*
 Subsystem sftp /usr/lib/openssh/sftp-server
 EOF
 
-echo "SSH configured for key-based authentication"
-
-# Install Google Authenticator for 2FA (optional)
-echo ""
-read -p "Install Google Authenticator for 2FA? (y/n): " install_2fa
-if [[ "$install_2fa" == "y" ]]; then
-    apt install -y libpam-google-authenticator
-
-    # Configure PAM for Google Authenticator
-    if ! grep -q "pam_google_authenticator.so" /etc/pam.d/sshd; then
-        echo "auth required pam_google_authenticator.so" >> /etc/pam.d/sshd
-        echo "Google Authenticator PAM module added"
-    fi
-
-    echo ""
-    echo "Users must run 'google-authenticator' to set up 2FA"
-else
-    echo "Skipping 2FA setup"
-fi
+echo "SSH configured for key-based authentication only"
 
 # Restart SSH
 systemctl restart sshd
@@ -202,14 +183,6 @@ echo "  - SSH: ssh <user>@<server-ip> -p 2222 (or 2223, 2224, etc.)"
 echo "  - NoMachine: Download client from https://nomachine.com/"
 echo "    - Connect to ports 4000 (alice), 4001 (bob), etc."
 echo ""
-
-if [[ "$install_2fa" == "y" ]]; then
-    echo "2FA Setup:"
-    echo "  Each user should run: google-authenticator"
-    echo "  and scan the QR code with their authenticator app"
-    echo ""
-fi
-
 echo "Next steps:"
 echo "  1. Add SSH keys for each user"
 echo "  2. Test SSH login: ssh alice@localhost"

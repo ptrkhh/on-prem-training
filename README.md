@@ -41,7 +41,7 @@ Complete automated setup for migrating 5 trusted ML Engineers from Google Cloud 
 - **Cloudflare Tunnel**: Secure remote access (zero exposed ports)
 - **Traefik Routing**: Single URL scheme for all services
 - **Local Network Optimization**: Office users bypass internet automatically
-- **Cloudflare Access**: Optional Google Workspace SSO + 2FA
+- **Cloudflare Access**: Google Workspace SSO with 2FA enforcement
 
 ### Automated Operations
 - **Backups**: BTRFS snapshots (hourly/daily/weekly) + Restic to GDrive (daily)

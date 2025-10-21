@@ -54,8 +54,8 @@ Each user has a regular Linux account (useradd alice, bob, charlie, dave, eve)
 Passwords stored in /etc/shadow, SSH keys in ~/.ssh/authorized_keys, Users in docker and sudo groups
 
 Cloudflare Tunnel: All traffic routed through Cloudflare (no ports exposed)
-Cloudflare Access: Google Workspace login (2FA enforced)
-SSH: SSH keys (required) + optional 2FA via Google Authenticator
+Cloudflare Access: Google Workspace login with 2FA enforcement (provides application-level authentication)
+SSH: SSH key-based authentication only (no passwords, no additional 2FA since Cloudflare Access already enforces 2FA)
 NoMachine: Password authentication (over Cloudflare Tunnel or local network)
 Local users: All users in docker and sudo groups
 UFW: Deny all incoming, allow all outgoing

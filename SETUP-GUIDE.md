@@ -167,8 +167,7 @@ This script will:
 2. Add users to docker and sudo groups
 3. Create home directories in /mnt/storage/homes/
 4. Create workspace directories in /mnt/storage/workspaces/
-5. Set up SSH key authentication
-6. Configure Google Authenticator for 2FA (optional)
+5. Set up SSH key authentication (keys only, no passwords)
 
 ### Manual User Setup (if needed)
 
@@ -357,8 +356,7 @@ Cloudflare Edge ──────────────> Local DNS/Hosts
    ```
 
 3. **Configure Cloudflare Access**
-   - Enable Google Workspace authentication
-   - Enforce 2FA for all users
+   - Enable Google Workspace authentication (includes 2FA enforcement)
    - Create access policies for each service
 
 ### Local Network Setup (Optional but Recommended)
@@ -402,25 +400,12 @@ This configures:
 
 ### SSH Configuration
 
-Edit `/etc/ssh/sshd_config`:
+SSH is configured automatically by the user setup script with:
+- Key-based authentication only (no passwords)
+- Root login disabled
+- PAM enabled for user account integration
 
-```bash
-sudo nano /etc/ssh/sshd_config
-```
-
-Add/modify:
-```
-PermitRootLogin no
-PasswordAuthentication no
-PubkeyAuthentication yes
-ChallengeResponseAuthentication yes
-UsePAM yes
-```
-
-Restart SSH:
-```bash
-sudo systemctl restart sshd
-```
+The configuration is located at `/etc/ssh/sshd_config.d/ml-train-server.conf`
 
 ---
 
@@ -736,7 +721,7 @@ All setup and maintenance scripts are in the `scripts/` directory.
    ```bash
    sudo ./scripts/02-setup-users.sh
    ```
-   Creates: Linux users, home directories, SSH keys, 2FA setup
+   Creates: Linux users, home directories, SSH key-based authentication
 
 4. **03-setup-docker.sh** - Install Docker and NVIDIA runtime
    ```bash

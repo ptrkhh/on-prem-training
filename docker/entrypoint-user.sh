@@ -61,7 +61,7 @@ cat > /usr/NX/etc/server.cfg << 'NXCFG'
 # NoMachine Server Configuration
 EnableClipboard both
 EnableNetworkBroadcast 0
-AcceptedAuthenticationMethods NX-private-key password
+AcceptedAuthenticationMethods password
 EnablePasswordDB 1
 NXCFG
 
