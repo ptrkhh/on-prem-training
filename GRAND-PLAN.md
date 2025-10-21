@@ -36,11 +36,10 @@ Container Runtime: Docker + nvidia-container-toolkit
 ## Core Services
 
 Traefik: Reverse proxy + routing (no rate limiting - handled by Cloudflare)
-Guacamole: remote.mydomain.com (browser-based access)
-X2Go: Direct SSH access for KDE desktop
+NoMachine: Per-user remote desktop access (NX protocol + web browser access)
 Netdata: health.mydomain.com (includes disk SMART monitoring)
-Prometheus: metrics-backend.mydomain.com (scrapes nvidia-smi exporter, node exporter)
-Grafana: metrics.mydomain.com (dashboards for GPU, disk, network, container resources)
+Prometheus: prometheus.mydomain.com (scrapes nvidia-smi exporter, node exporter)
+Grafana: grafana.mydomain.com (dashboards for GPU, disk, network, container resources)
 code-server: alice-code.mydomain.com, bob-code.mydomain.com (VS Code in browser)
 Shared TensorBoard: tensorboard.mydomain.com (users write logs to /mnt/storage/shared/tensorboard/)
 FileBrowser: files.mydomain.com
@@ -56,7 +55,8 @@ Passwords stored in /etc/shadow, SSH keys in ~/.ssh/authorized_keys, Users in do
 
 Cloudflare Tunnel: All traffic routed through Cloudflare (no ports exposed)
 Cloudflare Access: Google Workspace login (2FA enforced)
-SSH/X2Go: SSH keys (required) + optional 2FA via Google Authenticator
+SSH: SSH keys (required) + optional 2FA via Google Authenticator
+NoMachine: Password authentication (over Cloudflare Tunnel or local network)
 Local users: All users in docker and sudo groups
 UFW: Deny all incoming, allow all outgoing
 fail2ban: Monitor auth logs for SSH brute force attempts
@@ -66,11 +66,12 @@ Automatic security updates: unattended-upgrades enabled
 
 UID/GID: Mapped to host users (1000-1004)
 Desktop: KDE Plasma
-Remote access: X2Go (primary) + Guacamole (fallback)
-ML stack: PyTorch, CUDA 12.x, cuDNN
-Development tools: Jupyter, Python 3.11+, Git
-GUI apps: PyCharm Community, Firefox, Konsole
+Remote access: NoMachine (NX protocol on ports 4000-4004, web access via Traefik)
+ML stack: PyTorch, TensorFlow, JAX, CUDA 12.4, cuDNN
+Development tools: VS Code, PyCharm, Jupyter Lab, Python 3.11+, Git, Go, Rust, Julia, R
+GUI apps: Firefox, Chromium, LibreOffice, GIMP, Inkscape, Konsole
 Audio: PulseAudio
+Docker-in-Docker: Run containers inside workspace
 
 Volumes:
 /mnt/storage/homes/${USER}:/home/${USER}:rw
@@ -84,7 +85,7 @@ Volumes:
 Memory: 32 GB guaranteed, 100 GB limit. Swap 50GB on NVMe per container as fallback
 oom-kill-disable: false
 CPU: cpuset-cpus per CCX
-GPU: Shared access via time-slicing (manual coordination via Slack)
+GPU: Shared access via time-slicing (manual coordination via Telegram)
 Traefik: 50 average, 200 burst
 
 No formal reservation system (RTX 5080 much faster than T4, conflicts unlikely)
@@ -124,7 +125,7 @@ OS/packages: Reproducible from install scripts
 Backup verification:
 
 Monthly automated restore test to /tmp/restore-test/
-Alert via healthchecks.io + Slack if restore fails
+Alert via healthchecks.io + Telegram if restore fails
 
 BTRFS Monthly Scrub
 
@@ -151,7 +152,7 @@ Network bandwidth per interface (Netdata)
 BTRFS filesystem health (custom script)
 Per-user disk usage (custom script, daily check)
 
-## Alerts sent to Slack:
+## Alerts sent to Telegram:
 
 Disk SMART warnings/failures (critical)
 GPU temperature >80°C (warning)

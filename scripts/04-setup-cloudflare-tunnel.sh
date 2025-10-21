@@ -11,6 +11,22 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Load configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+    echo "ERROR: Configuration file not found: ${CONFIG_FILE}"
+    echo "Please create config.sh from config.sh.example"
+    exit 1
+fi
+
+source "${CONFIG_FILE}"
+
+# Convert users string to array
+USER_ARRAY=(${USERS})
+USER_COUNT=${#USER_ARRAY[@]}
+
 # Step 1: Install cloudflared
 echo ""
 echo "=== Step 1: Installing cloudflared ==="
@@ -59,112 +75,64 @@ echo "Tunnel ID: ${TUNNEL_ID}"
 # Step 3: Configure tunnel
 echo ""
 echo "=== Step 3: Configuring tunnel ==="
+echo "Domain: ${DOMAIN}"
+echo "Users: ${USERS}"
+echo ""
 
-read -p "Enter your domain (e.g., example.com): " DOMAIN
-
-cat > /root/.cloudflared/config.yml <<EOF
+# Generate Cloudflare Tunnel configuration dynamically
+cat > /root/.cloudflared/config.yml <<EOFCONFIG
 tunnel: ${TUNNEL_ID}
 credentials-file: /root/.cloudflared/${TUNNEL_ID}.json
 
 ingress:
-  # Note: NoMachine desktop access is handled per-user via Traefik
-  # See user-specific desktop hostnames below (e.g., alice-desktop.${DOMAIN})
-
-  # Netdata - System Monitoring
+  # Infrastructure Services
   - hostname: health.${DOMAIN}
-    service: http://localhost:19999
+    service: http://localhost:80
 
-  # Prometheus - Metrics Backend
-  - hostname: metrics-backend.${DOMAIN}
-    service: http://localhost:9090
+  - hostname: prometheus.${DOMAIN}
+    service: http://localhost:80
 
-  # Grafana - Metrics Dashboard
-  - hostname: metrics.${DOMAIN}
-    service: http://localhost:3000
+  - hostname: grafana.${DOMAIN}
+    service: http://localhost:80
 
-  # TensorBoard - Shared Training Logs
   - hostname: tensorboard.${DOMAIN}
-    service: http://localhost:6006
+    service: http://localhost:80
 
-  # FileBrowser
   - hostname: files.${DOMAIN}
-    service: http://localhost:8081
+    service: http://localhost:80
 
-  # Dozzle - Container Logs
   - hostname: logs.${DOMAIN}
-    service: http://localhost:8082
+    service: http://localhost:80
 
-  # Portainer
   - hostname: portainer.${DOMAIN}
-    service: http://localhost:9000
+    service: http://localhost:80
+EOFCONFIG
 
-  # Code-server instances
-  - hostname: alice-code.${DOMAIN}
-    service: http://localhost:8443
+# Add per-user services dynamically
+USER_INDEX=0
+for USERNAME in ${USER_ARRAY[@]}; do
+    cat >> /root/.cloudflared/config.yml <<EOFUSER
 
-  - hostname: bob-code.${DOMAIN}
-    service: http://localhost:8444
+  # ${USERNAME} services
+  - hostname: ${USERNAME}-desktop.${DOMAIN}
+    service: http://localhost:80
 
-  - hostname: charlie-code.${DOMAIN}
-    service: http://localhost:8445
+  - hostname: ${USERNAME}-code.${DOMAIN}
+    service: http://localhost:80
 
-  - hostname: dave-code.${DOMAIN}
-    service: http://localhost:8446
+  - hostname: ${USERNAME}-jupyter.${DOMAIN}
+    service: http://localhost:80
+EOFUSER
 
-  - hostname: eve-code.${DOMAIN}
-    service: http://localhost:8447
+    USER_INDEX=$((USER_INDEX + 1))
+done
 
-  # Jupyter instances
-  - hostname: alice-jupyter.${DOMAIN}
-    service: http://localhost:8888
-
-  - hostname: bob-jupyter.${DOMAIN}
-    service: http://localhost:8889
-
-  - hostname: charlie-jupyter.${DOMAIN}
-    service: http://localhost:8890
-
-  - hostname: dave-jupyter.${DOMAIN}
-    service: http://localhost:8891
-
-  - hostname: eve-jupyter.${DOMAIN}
-    service: http://localhost:8892
-
-  # Per-user TensorBoard instances
-  - hostname: alice-tensorboard.${DOMAIN}
-    service: http://localhost:6007
-
-  - hostname: bob-tensorboard.${DOMAIN}
-    service: http://localhost:6008
-
-  - hostname: charlie-tensorboard.${DOMAIN}
-    service: http://localhost:6009
-
-  - hostname: dave-tensorboard.${DOMAIN}
-    service: http://localhost:6010
-
-  - hostname: eve-tensorboard.${DOMAIN}
-    service: http://localhost:6011
-
-  # NoMachine Web Desktop instances
-  - hostname: alice-desktop.${DOMAIN}
-    service: http://localhost:4080
-
-  - hostname: bob-desktop.${DOMAIN}
-    service: http://localhost:4081
-
-  - hostname: charlie-desktop.${DOMAIN}
-    service: http://localhost:4082
-
-  - hostname: dave-desktop.${DOMAIN}
-    service: http://localhost:4083
-
-  - hostname: eve-desktop.${DOMAIN}
-    service: http://localhost:4084
+# Add catch-all rule
+cat >> /root/.cloudflared/config.yml <<EOFCATCH
 
   # Catch-all rule
   - service: http_status:404
-EOF
+EOFCATCH
 
 echo "Tunnel configuration created"
 
@@ -199,18 +167,23 @@ systemctl status cloudflared --no-pager
 echo ""
 echo "Configured services:"
 echo "  https://health.${DOMAIN} → Netdata"
-echo "  https://metrics.${DOMAIN} → Grafana"
+echo "  https://prometheus.${DOMAIN} → Prometheus"
+echo "  https://grafana.${DOMAIN} → Grafana"
 echo "  https://tensorboard.${DOMAIN} → TensorBoard"
 echo "  https://files.${DOMAIN} → FileBrowser"
 echo "  https://logs.${DOMAIN} → Dozzle"
 echo "  https://portainer.${DOMAIN} → Portainer"
 echo ""
-echo "Per-user services (example for Alice):"
-echo "  https://alice-desktop.${DOMAIN} → NoMachine Web Desktop"
-echo "  https://alice-code.${DOMAIN} → VS Code"
-echo "  https://alice-jupyter.${DOMAIN} → Jupyter"
-echo "  https://alice-tensorboard.${DOMAIN} → TensorBoard"
-echo "  ... (repeat for bob, charlie, dave, eve)"
+echo "Per-user services (${USER_COUNT} users):"
+for USERNAME in ${USER_ARRAY[@]}; do
+    echo "  ${USERNAME}:"
+    echo "    https://${USERNAME}-desktop.${DOMAIN} → NoMachine Web Desktop"
+    echo "    https://${USERNAME}-code.${DOMAIN} → VS Code"
+    echo "    https://${USERNAME}-jupyter.${DOMAIN} → Jupyter"
+done
+echo ""
+echo "Note: All users share TensorBoard at https://tensorboard.${DOMAIN}"
+echo "      Each user has their own directory: /shared/tensorboard/\${username}/"
 echo ""
 echo "NoMachine client connections:"
 echo "  Use NoMachine client to connect directly to ports 4000+ (best performance)"

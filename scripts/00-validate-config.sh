@@ -106,7 +106,7 @@ case "${BTRFS_RAID_LEVEL}" in
         fi
         ;;
     single)
-        echo "  ⚠ WARN ING: Single disk mode (NO REDUNDANCY!)"
+        echo "  ⚠ WARNING: Single disk mode (NO REDUNDANCY!)"
         ((WARNINGS++))
         ;;
     *)

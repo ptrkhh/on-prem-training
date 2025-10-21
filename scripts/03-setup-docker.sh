@@ -11,6 +11,18 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Load configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+    echo "ERROR: Configuration file not found: ${CONFIG_FILE}"
+    echo "Please create config.sh from config.sh.example"
+    exit 1
+fi
+
+source "${CONFIG_FILE}"
+
 # Step 1: Install Docker
 echo ""
 echo "=== Step 1: Installing Docker ==="
@@ -91,12 +103,12 @@ echo ""
 echo "=== Step 4: Configuring Docker Daemon ==="
 
 # Configure Docker to store data on BTRFS storage
-mkdir -p /mnt/storage/docker
+mkdir -p ${MOUNT_POINT}/docker
 
 # Create Docker daemon config
-cat > /etc/docker/daemon.json <<'EOF'
+cat > /etc/docker/daemon.json <<EOF
 {
-  "data-root": "/mnt/storage/docker",
+  "data-root": "${MOUNT_POINT}/docker",
   "storage-driver": "btrfs",
   "log-driver": "json-file",
   "log-opts": {

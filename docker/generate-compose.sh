@@ -34,6 +34,13 @@ echo "  - Infrastructure services (Traefik, monitoring, storage)"
 echo "  - ${USER_COUNT} user workspace containers (with NoMachine remote desktop)"
 echo ""
 
+# Warn about default passwords
+if [[ "${GRAFANA_ADMIN_PASSWORD:-admin}" == "admin" ]]; then
+    echo "⚠️  WARNING: Grafana is using default password 'admin'"
+    echo "   Set GRAFANA_ADMIN_PASSWORD in .env file for security"
+    echo ""
+fi
+
 ###############################################################################
 # Write the complete docker-compose.yml
 ###############################################################################
@@ -135,6 +142,11 @@ services:
       - '--storage.tsdb.path=/prometheus'
     networks:
       - ml-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.prometheus.entrypoints=web"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
 
   # Grafana - Metrics Visualization
   grafana:
@@ -150,7 +162,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.grafana.rule=Host(`metrics.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN:-localhost}`)"
       - "traefik.http.routers.grafana.entrypoints=web"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
 
@@ -361,7 +373,8 @@ echo ""
 echo "Access URLs (via Cloudflare Tunnel or local network):"
 echo "  Infrastructure:"
 echo "    - Netdata (Health): http://health.${DOMAIN}"
-echo "    - Grafana (Metrics): http://metrics.${DOMAIN}"
+echo "    - Prometheus: http://prometheus.${DOMAIN}"
+echo "    - Grafana: http://grafana.${DOMAIN}"
 echo "    - TensorBoard (Shared): http://tensorboard.${DOMAIN}"
 echo "    - FileBrowser: http://files.${DOMAIN}"
 echo "    - Dozzle (Logs): http://logs.${DOMAIN}"

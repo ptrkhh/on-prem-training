@@ -341,9 +341,9 @@ Cloudflare Edge ──────────────> Local DNS/Hosts
    Map these subdomains to local services:
 
    ```
-   remote.yourdomain.com       → http://localhost:8080 (Guacamole)
    health.yourdomain.com       → http://localhost:19999 (Netdata)
-   metrics.yourdomain.com      → http://localhost:3000 (Grafana)
+   prometheus.yourdomain.com   → http://localhost:9090 (Prometheus)
+   grafana.yourdomain.com      → http://localhost:3000 (Grafana)
    tensorboard.yourdomain.com  → http://localhost:6006 (TensorBoard)
    files.yourdomain.com        → http://localhost:8081 (FileBrowser)
    logs.yourdomain.com         → http://localhost:8082 (Dozzle)
@@ -445,12 +445,13 @@ Configuration is in [docker/prometheus/prometheus.yml](docker/prometheus/prometh
    - Node Exporter Full (ID: 1860)
    - Docker Container Metrics (ID: 193)
 
-### Slack Alerts
+### Telegram Alerts
 
-Configure Slack webhook in `scripts/monitoring/send-slack-alert.sh`:
+Configure Telegram bot in config.sh or environment:
 
 ```bash
-export SLACK_WEBHOOK_URL="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+TELEGRAM_BOT_TOKEN="your_bot_token_here"
+TELEGRAM_CHAT_ID="your_chat_id_here"
 ```
 
 Alerts are sent for:
@@ -567,7 +568,7 @@ sudo ./09-setup-data-pipeline.sh
 This configures:
 - rclone sync from GCS to GDrive (bandwidth limited to 100 Mbps)
 - Cron job at 4 AM daily
-- Slack alerts on failure
+- Telegram alerts on failure
 - Incremental sync (only new files)
 
 ### Manual Data Sync
@@ -600,7 +601,7 @@ This tests:
 - [ ] Network: Internet connectivity, Cloudflare tunnel
 - [ ] Monitoring: Prometheus targets, Grafana dashboards
 - [ ] Backups: BTRFS snapshots, Restic repository
-- [ ] Alerts: Test Slack webhook delivery
+- [ ] Alerts: Test Telegram bot delivery
 - [ ] Per-user services: SSH, code-server, Jupyter access
 
 ### GPU Training Test
@@ -638,7 +639,7 @@ Monitors:
 ## Maintenance
 
 ### Daily Tasks
-- Check Slack for alerts
+- Check Telegram for alerts
 - Review Grafana dashboards for anomalies
 - Monitor Netdata for disk health
 

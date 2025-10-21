@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # ML Training Server - User Account Setup Script
-# Creates 5 user accounts: alice, bob, charlie, dave, eve
+# Creates user accounts from config.sh
 
 echo "=== ML Training Server User Setup ==="
 
@@ -12,10 +12,21 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Configuration
-USERS=("alice" "bob" "charlie" "dave" "eve")
-UIDS=(1000 1001 1002 1003 1004)
-MOUNT_POINT="/mnt/storage"
+# Load configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+    echo "ERROR: Configuration file not found: ${CONFIG_FILE}"
+    echo "Please create config.sh from config.sh.example"
+    exit 1
+fi
+
+source "${CONFIG_FILE}"
+
+# Convert users string to array
+USER_ARRAY=(${USERS})
+USER_COUNT=${#USER_ARRAY[@]}
 
 # Check storage is mounted
 if ! mountpoint -q ${MOUNT_POINT}; then
@@ -23,61 +34,63 @@ if ! mountpoint -q ${MOUNT_POINT}; then
     exit 1
 fi
 
-echo "Creating 5 user accounts..."
+echo "Creating ${USER_COUNT} user accounts..."
 echo ""
 
-for i in "${!USERS[@]}"; do
-    USER="${USERS[$i]}"
-    UID="${UIDS[$i]}"
+USER_INDEX=0
+for USERNAME in ${USER_ARRAY[@]}; do
+    UID=$((FIRST_UID + USER_INDEX))
 
-    echo "Setting up user: ${USER} (UID: ${UID})"
+    echo "Setting up user: ${USERNAME} (UID: ${UID})"
 
     # Create user if doesn't exist
-    if id "${USER}" &>/dev/null; then
-        echo "  User ${USER} already exists, skipping creation"
+    if id "${USERNAME}" &>/dev/null; then
+        echo "  User ${USERNAME} already exists, skipping creation"
     else
         # Create user with specific UID
-        useradd -m -u ${UID} -s /bin/bash -d ${MOUNT_POINT}/homes/${USER} ${USER}
-        echo "  Created user ${USER}"
+        useradd -m -u ${UID} -s /bin/bash -d ${MOUNT_POINT}/homes/${USERNAME} ${USERNAME}
+        echo "  Created user ${USERNAME}"
     fi
 
 
     # Set initial password (prompt)
-    echo "  Setting password for ${USER}:"
-    passwd ${USER}
+    echo "  Setting password for ${USERNAME}:"
+    passwd ${USERNAME}
 
     # Create home directory on BTRFS storage
-    mkdir -p ${MOUNT_POINT}/homes/${USER}
-    chown ${USER}:${USER} ${MOUNT_POINT}/homes/${USER}
-    chmod 700 ${MOUNT_POINT}/homes/${USER}
+    mkdir -p ${MOUNT_POINT}/homes/${USERNAME}
+    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/homes/${USERNAME}
+    chmod 700 ${MOUNT_POINT}/homes/${USERNAME}
 
     # Create workspace directory
-    mkdir -p ${MOUNT_POINT}/workspaces/${USER}
-    chown ${USER}:${USER} ${MOUNT_POINT}/workspaces/${USER}
-    chmod 755 ${MOUNT_POINT}/workspaces/${USER}
+    mkdir -p ${MOUNT_POINT}/workspaces/${USERNAME}
+    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/workspaces/${USERNAME}
+    chmod 755 ${MOUNT_POINT}/workspaces/${USERNAME}
 
     # Create docker-volumes directory
-    mkdir -p ${MOUNT_POINT}/docker-volumes/${USER}-state
-    chown ${USER}:${USER} ${MOUNT_POINT}/docker-volumes/${USER}-state
-    chmod 755 ${MOUNT_POINT}/docker-volumes/${USER}-state
+    mkdir -p ${MOUNT_POINT}/docker-volumes/${USERNAME}-state
+    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/docker-volumes/${USERNAME}-state
+    chmod 755 ${MOUNT_POINT}/docker-volumes/${USERNAME}-state
 
     # Create tensorboard directory
-    mkdir -p ${MOUNT_POINT}/shared/tensorboard/${USER}
-    chown ${USER}:${USER} ${MOUNT_POINT}/shared/tensorboard/${USER}
-    chmod 755 ${MOUNT_POINT}/shared/tensorboard/${USER}
+    mkdir -p ${MOUNT_POINT}/shared/tensorboard/${USERNAME}
+    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/shared/tensorboard/${USERNAME}
+    chmod 755 ${MOUNT_POINT}/shared/tensorboard/${USERNAME}
 
     # Create .ssh directory
-    mkdir -p ${MOUNT_POINT}/homes/${USER}/.ssh
-    chmod 700 ${MOUNT_POINT}/homes/${USER}/.ssh
-    chown ${USER}:${USER} ${MOUNT_POINT}/homes/${USER}/.ssh
+    mkdir -p ${MOUNT_POINT}/homes/${USERNAME}/.ssh
+    chmod 700 ${MOUNT_POINT}/homes/${USERNAME}/.ssh
+    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/homes/${USERNAME}/.ssh
 
     # Create placeholder for authorized_keys
-    touch ${MOUNT_POINT}/homes/${USER}/.ssh/authorized_keys
-    chmod 600 ${MOUNT_POINT}/homes/${USER}/.ssh/authorized_keys
-    chown ${USER}:${USER} ${MOUNT_POINT}/homes/${USER}/.ssh/authorized_keys
+    touch ${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys
+    chmod 600 ${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys
+    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys
 
-    echo "  Directory structure created for ${USER}"
+    echo "  Directory structure created for ${USERNAME}"
     echo ""
+
+    USER_INDEX=$((USER_INDEX + 1))
 done
 
 # Configure SSH

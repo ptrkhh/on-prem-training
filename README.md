@@ -6,11 +6,8 @@ Complete automated setup for migrating 5 trusted ML users from Google Cloud (GCE
 
 ## Quick Links
 
-- **[GRAND-PLAN.md](GRAND-PLAN.md)** - Original specification (immutable reference)
 - **[SETUP-GUIDE.md](SETUP-GUIDE.md)** - Complete step-by-step setup instructions
-- **[CONFIGURATION.md](CONFIGURATION.md)** - Customize users, hardware, and all settings
-- **[NETWORK-ARCHITECTURE.md](NETWORK-ARCHITECTURE.md)** - Cloudflare Tunnel + Traefik + local network
-- **[scripts/README.md](scripts/README.md)** - Scripts documentation
+- **[config.sh.example](config.sh.example)** - Configuration template (customize users, hardware, and all settings)
 
 ## What You Get
 
@@ -109,7 +106,8 @@ cd ../scripts && sudo ./10-run-tests.sh
 
 **Infrastructure:**
 - System Health: `http://health.yourdomain.com` (Netdata)
-- Metrics: `http://metrics.yourdomain.com` (Grafana)
+- Prometheus: `http://prometheus.yourdomain.com`
+- Grafana: `http://grafana.yourdomain.com`
 - Files: `http://files.yourdomain.com`
 - Logs: `http://logs.yourdomain.com`
 
@@ -117,7 +115,9 @@ cd ../scripts && sudo ./10-run-tests.sh
 - Desktop (NoMachine Web): `http://alice-desktop.yourdomain.com`
 - VS Code: `http://alice-code.yourdomain.com`
 - Jupyter: `http://alice-jupyter.yourdomain.com`
-- TensorBoard: `http://alice-tensorboard.yourdomain.com`
+
+**Shared:**
+- TensorBoard: `http://tensorboard.yourdomain.com` (all users, organized by `/shared/tensorboard/{username}/`)
 
 ### Via NoMachine Client (Best Performance)
 
@@ -147,9 +147,8 @@ ssh alice@server_ip -p 2222
 ## Documentation
 
 - **[SETUP-GUIDE.md](SETUP-GUIDE.md)** - Comprehensive 600+ line manual with detailed instructions
-- **[CONFIGURATION.md](CONFIGURATION.md)** - Complete configuration reference (100+ parameters)
-- **[NETWORK-ARCHITECTURE.md](NETWORK-ARCHITECTURE.md)** - How Cloudflare Tunnel + Traefik + local network work
-- **[scripts/README.md](scripts/README.md)** - Scripts usage, troubleshooting, maintenance
+- **[GRAND-PLAN.md](GRAND-PLAN.md)** - Original architecture and design decisions
+- **[config.sh.example](config.sh.example)** - Complete configuration reference (100+ parameters)
 
 ## Example Configurations
 
