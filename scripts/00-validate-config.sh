@@ -42,6 +42,13 @@ else
     echo "  ✓ Mount point: ${MOUNT_POINT}"
 fi
 
+if [[ -z "${DOMAIN}" ]]; then
+    echo "  ✗ ERROR: DOMAIN is not set (required for Cloudflare Tunnel)"
+    ((ERRORS++))
+else
+    echo "  ✓ Domain: ${DOMAIN}"
+fi
+
 # Check storage configuration
 echo ""
 echo "Checking storage configuration..."
@@ -128,6 +135,38 @@ for var in FIRST_UID OS_PARTITION_SIZE_GB MEMORY_GUARANTEE_GB MEMORY_LIMIT_GB SW
         echo "  ✓ ${var}: ${val}"
     fi
 done
+
+# Logic validation
+echo ""
+echo "Checking logic constraints..."
+
+if [[ ${MEMORY_GUARANTEE_GB} -gt ${MEMORY_LIMIT_GB} ]]; then
+    echo "  ✗ ERROR: MEMORY_GUARANTEE_GB (${MEMORY_GUARANTEE_GB}) > MEMORY_LIMIT_GB (${MEMORY_LIMIT_GB})"
+    ((ERRORS++))
+else
+    echo "  ✓ Memory limits are logical"
+fi
+
+# Check if total user quota exceeds expected storage
+TOTAL_USER_QUOTA=$((USER_QUOTA_TB * $(get_user_count)))
+if [[ ${TOTAL_USER_QUOTA} -gt 40 ]]; then
+    echo "  ⚠ WARNING: Total user quota (${TOTAL_USER_QUOTA}TB) may exceed available storage (~40TB)"
+    ((WARNINGS++))
+else
+    echo "  ✓ Total user quota: ${TOTAL_USER_QUOTA}TB (reasonable)"
+fi
+
+# Check port ranges
+MAX_USERS=$(get_user_count)
+MAX_SSH_PORT=$((SSH_BASE_PORT + MAX_USERS))
+MAX_NX_PORT=$((NOMACHINE_BASE_PORT + MAX_USERS))
+
+echo "  ✓ Port ranges: SSH ${SSH_BASE_PORT}-${MAX_SSH_PORT}, NoMachine ${NOMACHINE_BASE_PORT}-${MAX_NX_PORT}"
+
+if [[ ${MAX_USERS} -gt 50 ]]; then
+    echo "  ⚠ WARNING: ${MAX_USERS} users may strain resources"
+    ((WARNINGS++))
+fi
 
 # Check domain if Cloudflare is being used
 echo ""

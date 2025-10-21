@@ -100,7 +100,6 @@ services:
   # Each user can access their desktop via:
   #  - NoMachine client (download from nomachine.com)
   #  - Web browser at http://<username>-desktop.${DOMAIN}
-  # No shared infrastructure needed - simpler and better performance than Guacamole
 
   # Netdata - Real-time System Monitoring
   netdata:
@@ -277,14 +276,14 @@ USER_INDEX=0
 for USERNAME in ${USER_ARRAY[@]}; do
     UID=$((FIRST_UID + USER_INDEX))
 
-    # SSH port: 2222 + user_index
-    SSH_PORT=$((2222 + USER_INDEX))
+    # SSH port: SSH_BASE_PORT + user_index
+    SSH_PORT=$((SSH_BASE_PORT + USER_INDEX))
 
-    # NoMachine port: 4000 + user_index
-    NX_PORT=$((4000 + USER_INDEX))
+    # NoMachine port: NOMACHINE_BASE_PORT + user_index
+    NX_PORT=$((NOMACHINE_BASE_PORT + USER_INDEX))
 
-    # NoMachine web port: 4080 + user_index
-    NX_WEB_PORT=$((4080 + USER_INDEX))
+    # NoMachine web port: NOMACHINE_WEB_BASE_PORT + user_index
+    NX_WEB_PORT=$((NOMACHINE_WEB_BASE_PORT + USER_INDEX))
 
     echo "Adding user container: ${USERNAME} (UID: ${UID}, SSH: ${SSH_PORT}, NX: ${NX_PORT}, NX-Web: ${NX_WEB_PORT})"
 

@@ -9,7 +9,22 @@ echo "  ML Training Server - System Tests"
 echo "========================================="
 echo ""
 
-MOUNT_POINT="/mnt/storage"
+# Load configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+    echo "ERROR: Configuration file not found: ${CONFIG_FILE}"
+    echo "Please create config.sh from config.sh.example"
+    exit 1
+fi
+
+source "${CONFIG_FILE}"
+
+# Convert users string to array
+USER_ARRAY=(${USERS})
+USER_COUNT=${#USER_ARRAY[@]}
+
 FAILED_TESTS=0
 PASSED_TESTS=0
 
@@ -197,8 +212,7 @@ fi
 # Test 7: Users
 section "User Tests"
 
-USERS=("alice" "bob" "charlie" "dave" "eve")
-for user in "${USERS[@]}"; do
+for user in ${USER_ARRAY[@]}; do
     if id "${user}" &>/dev/null; then
         pass "User ${user} exists"
 

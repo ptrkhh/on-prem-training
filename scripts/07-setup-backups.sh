@@ -12,7 +12,17 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-MOUNT_POINT="/mnt/storage"
+# Load configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+    echo "ERROR: Configuration file not found: ${CONFIG_FILE}"
+    echo "Please create config.sh from config.sh.example"
+    exit 1
+fi
+
+source "${CONFIG_FILE}"
 SNAPSHOT_DIR="${MOUNT_POINT}/snapshots"
 SCRIPTS_DIR="/opt/scripts/backup"
 
@@ -53,38 +63,38 @@ echo "=== Step 2: Creating backup scripts ==="
 mkdir -p ${SCRIPTS_DIR}
 
 # BTRFS Snapshot Script
-cat > ${SCRIPTS_DIR}/create-snapshot.sh <<'EOF'
+cat > ${SCRIPTS_DIR}/create-snapshot.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
-MOUNT_POINT="/mnt/storage"
-SNAPSHOT_DIR="${MOUNT_POINT}/snapshots"
-TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-SNAPSHOT_TYPE="$1"  # hourly, daily, weekly
+MOUNT_POINT="${MOUNT_POINT}"
+SNAPSHOT_DIR="\${MOUNT_POINT}/snapshots"
+TIMESTAMP=\$(date +%Y%m%d_%H%M%S)
+SNAPSHOT_TYPE="\$1"  # hourly, daily, weekly
 
 # Create snapshot
-SNAPSHOT_NAME="${SNAPSHOT_TYPE}_${TIMESTAMP}"
-btrfs subvolume snapshot -r ${MOUNT_POINT} ${SNAPSHOT_DIR}/${SNAPSHOT_NAME}
+SNAPSHOT_NAME="\${SNAPSHOT_TYPE}_\${TIMESTAMP}"
+btrfs subvolume snapshot -r \${MOUNT_POINT} \${SNAPSHOT_DIR}/\${SNAPSHOT_NAME}
 
-echo "Created snapshot: ${SNAPSHOT_NAME}"
+echo "Created snapshot: \${SNAPSHOT_NAME}"
 
 # Cleanup old snapshots
-case "${SNAPSHOT_TYPE}" in
+case "\${SNAPSHOT_TYPE}" in
     hourly)
         # Keep last 24 hourly snapshots
-        ls -t ${SNAPSHOT_DIR}/hourly_* 2>/dev/null | tail -n +25 | xargs -r rm -rf
+        ls -t \${SNAPSHOT_DIR}/hourly_* 2>/dev/null | tail -n +25 | xargs -r rm -rf
         ;;
     daily)
         # Keep last 7 daily snapshots
-        ls -t ${SNAPSHOT_DIR}/daily_* 2>/dev/null | tail -n +8 | xargs -r rm -rf
+        ls -t \${SNAPSHOT_DIR}/daily_* 2>/dev/null | tail -n +8 | xargs -r rm -rf
         ;;
     weekly)
         # Keep last 4 weekly snapshots
-        ls -t ${SNAPSHOT_DIR}/weekly_* 2>/dev/null | tail -n +5 | xargs -r rm -rf
+        ls -t \${SNAPSHOT_DIR}/weekly_* 2>/dev/null | tail -n +5 | xargs -r rm -rf
         ;;
 esac
 
-echo "Cleaned up old ${SNAPSHOT_TYPE} snapshots"
+echo "Cleaned up old \${SNAPSHOT_TYPE} snapshots"
 EOF
 
 chmod +x ${SCRIPTS_DIR}/create-snapshot.sh
@@ -123,13 +133,13 @@ EOF
 chmod +x ${SCRIPTS_DIR}/init-restic.sh
 
 # Restic Backup Script
-cat > ${SCRIPTS_DIR}/restic-backup.sh <<'EOF'
+cat > ${SCRIPTS_DIR}/restic-backup.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
-RESTIC_REPOSITORY="rclone:gdrive:backups/ml-train-server"
+RESTIC_REPOSITORY="${BACKUP_REMOTE}"
 RESTIC_PASSWORD_FILE="/root/.restic-password"
-MOUNT_POINT="/mnt/storage"
+MOUNT_POINT="${MOUNT_POINT}"
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 LOG_FILE="/var/log/restic-backup.log"
 

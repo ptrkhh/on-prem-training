@@ -47,6 +47,25 @@ Thumbs.db
 *.flv
 *.mov
 *.wmv
+# Sensitive configuration files
 .env
-
 config.sh
+docker/.env
+
+# Generated docker-compose (regenerated from generate-compose.sh)
+docker/docker-compose.yml
+
+# Secrets and credentials
+*.pem
+*.key
+*.token
+*_password
+.restic-password
+.telegram-*
+
+# Cloudflare credentials
+.cloudflared/
+
+# Backup data
+*.restic
+backups/

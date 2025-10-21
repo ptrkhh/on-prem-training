@@ -143,32 +143,32 @@ echo "Setting up disk quota monitoring..."
 
 mkdir -p /opt/scripts/monitoring
 
-cat > /opt/scripts/monitoring/check-user-quotas.sh <<'EOF'
+cat > /opt/scripts/monitoring/check-user-quotas.sh <<EOF
 #!/bin/bash
 # Check user disk usage and send alerts
 
-MOUNT_POINT="/mnt/storage"
-QUOTA_LIMIT_TB=1
-QUOTA_LIMIT_BYTES=$((QUOTA_LIMIT_TB * 1024 * 1024 * 1024 * 1024))
+MOUNT_POINT="${MOUNT_POINT}"
+QUOTA_LIMIT_TB=${USER_QUOTA_TB}
+QUOTA_LIMIT_BYTES=\$((QUOTA_LIMIT_TB * 1024 * 1024 * 1024 * 1024))
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 
-for user_dir in ${MOUNT_POINT}/homes/*; do
-    if [[ -d "${user_dir}" ]]; then
-        USER=$(basename ${user_dir})
-        USAGE=$(du -sb ${user_dir} | cut -f1)
-        USAGE_TB=$(echo "scale=2; ${USAGE} / 1024 / 1024 / 1024 / 1024" | bc)
+for user_dir in \${MOUNT_POINT}/homes/*; do
+    if [[ -d "\${user_dir}" ]]; then
+        USER=\$(basename \${user_dir})
+        USAGE=\$(du -sb \${user_dir} | cut -f1)
+        USAGE_TB=\$(echo "scale=2; \${USAGE} / 1024 / 1024 / 1024 / 1024" | bc)
 
-        if [[ ${USAGE} -gt ${QUOTA_LIMIT_BYTES} ]]; then
-            MESSAGE="User ${USER} has exceeded 1TB quota: ${USAGE_TB}TB used"
-            echo "${MESSAGE}"
+        if [[ \${USAGE} -gt \${QUOTA_LIMIT_BYTES} ]]; then
+            MESSAGE="User \${USER} has exceeded \${QUOTA_LIMIT_TB}TB quota: \${USAGE_TB}TB used"
+            echo "\${MESSAGE}"
 
             # Send alert if script exists
-            if [[ -x "${ALERT_SCRIPT}" ]]; then
-                ${ALERT_SCRIPT} "warning" "${MESSAGE}"
+            if [[ -x "\${ALERT_SCRIPT}" ]]; then
+                \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
             fi
 
             # Send email to user
-            echo "${MESSAGE}" | mail -s "Disk Quota Warning" ${USER}@localhost
+            echo "\${MESSAGE}" | mail -s "Disk Quota Warning" \${USER}@localhost
         fi
     fi
 done
@@ -190,17 +190,18 @@ echo "Disk quota monitoring configured (daily check at 6:25 AM)"
 echo ""
 echo "=== User Setup Complete ==="
 echo ""
-echo "Created users: ${USERS[*]}"
+echo "Created users: ${USERS}"
 echo ""
 echo "IMPORTANT: Add SSH public keys for each user:"
-for USER in "${USERS[@]}"; do
-    echo "  ${MOUNT_POINT}/homes/${USER}/.ssh/authorized_keys"
+for USERNAME in ${USER_ARRAY[@]}; do
+    echo "  ${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys"
 done
 echo ""
 echo "Users can access the server via:"
-echo "  - SSH: ssh <user>@<server-ip>"
-echo "  - X2Go: Install X2Go client and connect"
-echo "  - Guacamole: https://remote.yourdomain.com (after Cloudflare setup)"
+echo "  - SSH: ssh <user>@<server-ip> -p 2222 (or 2223, 2224, etc.)"
+echo "  - NoMachine: Download client from https://nomachine.com/"
+echo "    - Connect to ports 4000 (alice), 4001 (bob), etc."
+echo "    - Or via web browser at https://<user>-desktop.${DOMAIN}"
 echo ""
 
 if [[ "$install_2fa" == "y" ]]; then

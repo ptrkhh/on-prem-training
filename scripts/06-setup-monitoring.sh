@@ -11,6 +11,18 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Load configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+    echo "ERROR: Configuration file not found: ${CONFIG_FILE}"
+    echo "Please create config.sh from config.sh.example"
+    exit 1
+fi
+
+source "${CONFIG_FILE}"
+
 SCRIPTS_DIR="/opt/scripts/monitoring"
 
 # Install required packages
@@ -173,38 +185,38 @@ EOF
 chmod +x ${SCRIPTS_DIR}/check-gpu-temperature.sh
 
 # BTRFS Health Check Script
-cat > ${SCRIPTS_DIR}/check-btrfs-health.sh <<'EOF'
+cat > ${SCRIPTS_DIR}/check-btrfs-health.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
-MOUNT_POINT="/mnt/storage"
+MOUNT_POINT="${MOUNT_POINT}"
 
-if ! mountpoint -q ${MOUNT_POINT}; then
-    MESSAGE="CRITICAL: ${MOUNT_POINT} is not mounted!"
-    echo "${MESSAGE}"
-    [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "critical" "${MESSAGE}"
+if ! mountpoint -q \${MOUNT_POINT}; then
+    MESSAGE="CRITICAL: \${MOUNT_POINT} is not mounted!"
+    echo "\${MESSAGE}"
+    [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "critical" "\${MESSAGE}"
     exit 1
 fi
 
 # Check filesystem usage
-USAGE=$(btrfs filesystem usage ${MOUNT_POINT} | grep "Free (estimated)" | awk '{print $3}' | sed 's/[^0-9.]//g')
-TOTAL=$(btrfs filesystem usage ${MOUNT_POINT} | grep "Device size" | awk '{print $3}' | sed 's/[^0-9.]//g')
+USAGE=\$(btrfs filesystem usage \${MOUNT_POINT} | grep "Free (estimated)" | awk '{print \$3}' | sed 's/[^0-9.]//g')
+TOTAL=\$(btrfs filesystem usage \${MOUNT_POINT} | grep "Device size" | awk '{print \$3}' | sed 's/[^0-9.]//g')
 
-if [[ -n "${USAGE}" ]] && [[ -n "${TOTAL}" ]]; then
-    USAGE_PERCENT=$(echo "scale=2; (1 - ${USAGE} / ${TOTAL}) * 100" | bc)
-    if (( $(echo "${USAGE_PERCENT} > 90" | bc -l) )); then
-        MESSAGE="WARNING: BTRFS filesystem is ${USAGE_PERCENT}% full"
-        echo "${MESSAGE}"
-        [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "warning" "${MESSAGE}"
+if [[ -n "\${USAGE}" ]] && [[ -n "\${TOTAL}" ]]; then
+    USAGE_PERCENT=\$(echo "scale=2; (1 - \${USAGE} / \${TOTAL}) * 100" | bc)
+    if (( \$(echo "\${USAGE_PERCENT} > 90" | bc -l) )); then
+        MESSAGE="WARNING: BTRFS filesystem is \${USAGE_PERCENT}% full"
+        echo "\${MESSAGE}"
+        [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
     fi
 fi
 
 # Check device stats for errors
-if btrfs device stats ${MOUNT_POINT} | grep -v " 0$"; then
-    MESSAGE="WARNING: BTRFS device has errors. Run 'btrfs device stats ${MOUNT_POINT}'"
-    echo "${MESSAGE}"
-    [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "warning" "${MESSAGE}"
+if btrfs device stats \${MOUNT_POINT} | grep -v " 0\$"; then
+    MESSAGE="WARNING: BTRFS device has errors. Run 'btrfs device stats \${MOUNT_POINT}'"
+    echo "\${MESSAGE}"
+    [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
 fi
 EOF
 
@@ -269,32 +281,50 @@ chmod +x ${SCRIPTS_DIR}/check-gpu-usage.sh
 echo ""
 echo "=== Step 2: Configuring Telegram Bot ==="
 
-read -p "Do you want to configure Telegram alerts? (y/n): " setup_telegram
-
-if [[ "$setup_telegram" == "y" ]]; then
-    echo ""
-    echo "To setup Telegram notifications:"
-    echo "1. Open Telegram and search for @BotFather"
-    echo "2. Send /newbot and follow the instructions"
-    echo "3. Copy the bot token (looks like: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz)"
-    echo "4. Search for @userinfobot or @RawDataBot to get your Chat ID"
-    echo "5. Start a chat with your bot (search for it by name)"
-    echo ""
-    read -p "Bot Token: " telegram_bot_token
-    read -p "Chat ID: " telegram_chat_id
+# Check if already configured in config.sh
+if [[ -n "${TELEGRAM_BOT_TOKEN}" ]] && [[ -n "${TELEGRAM_CHAT_ID}" ]]; then
+    echo "Telegram credentials found in config.sh"
+    telegram_bot_token="${TELEGRAM_BOT_TOKEN}"
+    telegram_chat_id="${TELEGRAM_CHAT_ID}"
 
     echo "${telegram_bot_token}" > /root/.telegram-bot-token
     echo "${telegram_chat_id}" > /root/.telegram-chat-id
     chmod 600 /root/.telegram-bot-token
     chmod 600 /root/.telegram-chat-id
 
-    echo "Telegram bot configured"
+    echo "Telegram bot configured from config.sh"
 
     # Test alert
     export TELEGRAM_BOT_TOKEN="${telegram_bot_token}"
     export TELEGRAM_CHAT_ID="${telegram_chat_id}"
     ${SCRIPTS_DIR}/send-telegram-alert.sh "success" "Monitoring setup complete on ML Training Server"
 else
+    read -p "Do you want to configure Telegram alerts? (y/n): " setup_telegram
+
+    if [[ "$setup_telegram" == "y" ]]; then
+        echo ""
+        echo "To setup Telegram notifications:"
+        echo "1. Open Telegram and search for @BotFather"
+        echo "2. Send /newbot and follow the instructions"
+        echo "3. Copy the bot token (looks like: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz)"
+        echo "4. Search for @userinfobot or @RawDataBot to get your Chat ID"
+        echo "5. Start a chat with your bot (search for it by name)"
+        echo ""
+        read -p "Bot Token: " telegram_bot_token
+        read -p "Chat ID: " telegram_chat_id
+
+        echo "${telegram_bot_token}" > /root/.telegram-bot-token
+        echo "${telegram_chat_id}" > /root/.telegram-chat-id
+        chmod 600 /root/.telegram-bot-token
+        chmod 600 /root/.telegram-chat-id
+
+        echo "Telegram bot configured"
+
+        # Test alert
+        export TELEGRAM_BOT_TOKEN="${telegram_bot_token}"
+        export TELEGRAM_CHAT_ID="${telegram_chat_id}"
+        ${SCRIPTS_DIR}/send-telegram-alert.sh "success" "Monitoring setup complete on ML Training Server"
+    else
     echo "Skipping Telegram configuration"
 fi
 

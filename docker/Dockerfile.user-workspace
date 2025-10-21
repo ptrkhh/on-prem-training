@@ -63,7 +63,6 @@ RUN apt-get update && apt-get install -y \
 #==============================================================================
 
 # Install NoMachine server
-# NoMachine provides superior performance compared to VNC/X2Go
 # Features:
 #  - Hardware-accelerated desktop streaming
 #  - Multi-platform client (Windows, Mac, Linux, iOS, Android)
@@ -259,9 +258,6 @@ RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 # Create startup script
 COPY docker/entrypoint-user.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
-
-# Configure X2Go
-# X2Go will automatically start KDE Plasma session
 
 # Configure systemd-like services using supervisord
 RUN apt-get update && apt-get install -y supervisor && \

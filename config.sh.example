@@ -158,9 +158,9 @@ SMART_MONITORING=true
 #==============================================================================
 # SERVICE PORTS
 #==============================================================================
-
-CODE_SERVER_BASE_PORT=8443
-JUPYTER_BASE_PORT=8888
+# Note: VS Code and Jupyter are accessed via Traefik hostnames, not direct ports
+# They run on container ports 8080 (code-server) and 8888 (jupyter) internally
+# Access via: https://{username}-code.{domain} and https://{username}-jupyter.{domain}
 
 TRAEFIK_PORT=8080
 NETDATA_PORT=19999
@@ -249,4 +249,4 @@ export DATA_SYNC_HOUR DATA_SYNC_MINUTE DATA_CLEANUP_DAYS
 export TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID HEALTHCHECK_BACKUP_URL HEALTHCHECK_DATA_SYNC_URL
 export GPU_TEMP_THRESHOLD DISK_TEMP_THRESHOLD FS_USAGE_THRESHOLD SMART_MONITORING
 export ENABLE_SSH_2FA ENABLE_AUDITD ENABLE_UPS_MONITORING ENABLE_GPU_TIMESLICING ENABLE_AUTO_UPDATES
-export CODE_SERVER_BASE_PORT JUPYTER_BASE_PORT COMPOSE_PROJECT_NAME
+export COMPOSE_PROJECT_NAME
