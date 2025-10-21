@@ -143,11 +143,100 @@ After setup, you should have:
 ```
 /mnt/storage/
 ├── homes/              # User home directories (backed up)
-├── workspaces/         # Ephemeral work areas (not backed up)
-├── shared/             # Shared datasets (from GDrive)
+├── workspaces/         # User scratch space (persistent but NOT backed up)
+├── shared/             # Mount point for Google Drive Shared Drive
 ├── docker-volumes/     # Persistent container data (backed up)
+├── cache/
+│   └── gdrive/         # Cache for Google Drive
 └── snapshots/          # BTRFS snapshots (local only)
 ```
+
+### Google Drive Shared Drive Setup (Recommended)
+
+The `/shared` directory should be mounted from a Google Workspace Shared Drive with local caching for near-disk performance.
+
+**Run the Google Drive setup script:**
+
+```bash
+cd ~/train-server/scripts
+sudo ./01b-setup-gdrive-shared.sh
+```
+
+This script will:
+1. Install rclone (if not already installed)
+2. Configure OAuth access to Google Workspace Shared Drive
+3. Create local cache directory
+4. Mount Shared Drive to `/mnt/storage/shared` with VFS cache
+5. Configure systemd service for automatic mounting on boot
+6. Setup health monitoring (checks mount every 5 minutes)
+
+**Configuration details:**
+- **Cache mode**: Full VFS cache (files downloaded on first access, cached locally)
+- **Cache size**: 80% of available BTRFS storage (configurable)
+- **Cache expiry**: 30 days (LRU eviction)
+- **Performance**: First access downloads from cloud (~10-100 MB/s), subsequent access is near-local speed
+- **Auto-recovery**: Systemd service restarts on failure
+
+**Verify the mount:**
+
+```bash
+# Check mount status
+systemctl status gdrive-shared.service
+mountpoint /mnt/storage/shared
+
+# Test access
+ls /mnt/storage/shared
+
+# View cache stats
+/opt/scripts/monitoring/gdrive-cache-stats.sh
+```
+
+**Management commands:**
+```bash
+# View logs
+journalctl -u gdrive-shared.service -f
+tail -f /var/log/gdrive-shared.log
+
+# Restart mount
+sudo systemctl restart gdrive-shared.service
+
+# Check health
+/opt/scripts/monitoring/check-gdrive-mount.sh
+```
+
+See `/root/GDRIVE-SHARED-GUIDE.md` for detailed usage and troubleshooting.
+
+### Storage Architecture Explained
+
+The system uses a two-tier storage strategy for each user:
+
+**Tier 1: `/home/${USERNAME}` (Backed Up Daily)**
+- **Purpose:** Precious, irreplaceable files
+- **Contents:** Code repositories, configs, dotfiles, papers, virtual environments, small datasets
+- **Size limit:** ~100GB per user (soft limit, users get reminders)
+- **Backup:** Daily to GDrive via Restic (7 daily + 52 weekly snapshots)
+- **Performance:** Fast (bcache-accelerated BTRFS)
+- **Mounted in container as:** `/home/${USERNAME}`
+
+**Tier 2: `/workspace` (NOT Backed Up)**
+- **Purpose:** Fast scratch space for expendable/reproducible data
+- **Contents:** Training data, model checkpoints, experiment outputs, large datasets
+- **Size limit:** ~1TB per user (soft limit, users get reminders)
+- **Backup:** NOT backed up (too large, data is reproducible or re-downloadable)
+- **Performance:** Fastest (bcache-accelerated BTRFS, same as home but no backup overhead)
+- **Mounted in container as:** `/workspace`
+
+**Why Separate Them?**
+
+1. **Backup Efficiency:** Only back up what matters (code/configs), not multi-TB datasets
+2. **Clear Mental Model:** Users know what's safe vs what needs re-downloading
+3. **Cost Savings:** GDrive storage costs based on backed-up data
+4. **Faster Restores:** Restoring 100GB of code is fast; restoring 5TB of checkpoints is slow
+
+**User Guidance:**
+- "Put your code in `~` (home), put your data in `/workspace`"
+- "If the server dies, your code is safe. Your training checkpoints? Re-train or re-download."
+- "Store final model weights in `~` after training completes"
 
 ---
 
@@ -716,6 +805,14 @@ All setup and maintenance scripts are in the `scripts/` directory.
    ```
    Creates: BTRFS RAID10, bcache, directory structure, fstab entries
    **REBOOT REQUIRED AFTER THIS STEP**
+
+2b. **01b-setup-gdrive-shared.sh** - Mount Google Drive Shared Drive (Recommended)
+   ```bash
+   sudo ./scripts/01b-setup-gdrive-shared.sh
+   ```
+   Configures: Google Workspace Shared Drive mount /shared, cached locally
+   Features: VFS cache, auto-recovery, health monitoring
+   **Note**: Skip if you prefer local storage for /shared
 
 3. **02-setup-users.sh** - Create user accounts
    ```bash

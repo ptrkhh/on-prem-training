@@ -124,35 +124,90 @@ echo "Setting up disk quota monitoring..."
 
 mkdir -p /opt/scripts/monitoring
 
-cat > /opt/scripts/monitoring/check-user-quotas.sh <<EOF
+cat > /opt/scripts/monitoring/check-user-quotas.sh <<'EOF'
 #!/bin/bash
-# Check user disk usage and send alerts
+# Check user disk usage across home, workspace, and docker-volumes
+# Sends alerts when users exceed quota thresholds
 
 MOUNT_POINT="${MOUNT_POINT}"
-QUOTA_LIMIT_TB=${USER_QUOTA_TB}
-QUOTA_LIMIT_BYTES=\$((QUOTA_LIMIT_TB * 1024 * 1024 * 1024 * 1024))
+QUOTA_LIMIT_GB=${USER_QUOTA_GB}
+QUOTA_WARNING_PERCENT=${USER_QUOTA_WARNING_PERCENT}
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
+
+# Convert GB to bytes for comparison
+QUOTA_LIMIT_BYTES=\$((QUOTA_LIMIT_GB * 1024 * 1024 * 1024))
+QUOTA_WARNING_BYTES=\$(awk "BEGIN {printf \"%.0f\", ${QUOTA_LIMIT_BYTES} * ${QUOTA_WARNING_PERCENT} / 100.0}")
+
+echo "=== User Quota Check: \$(date) ==="
+echo ""
 
 for user_dir in \${MOUNT_POINT}/homes/*; do
     if [[ -d "\${user_dir}" ]]; then
         USER=\$(basename \${user_dir})
-        USAGE=\$(du -sb \${user_dir} | cut -f1)
-        USAGE_TB=\$(echo "scale=2; \${USAGE} / 1024 / 1024 / 1024 / 1024" | bc)
 
-        if [[ \${USAGE} -gt \${QUOTA_LIMIT_BYTES} ]]; then
-            MESSAGE="User \${USER} has exceeded \${QUOTA_LIMIT_TB}TB quota: \${USAGE_TB}TB used"
-            echo "\${MESSAGE}"
+        # Calculate usage across all three directories
+        HOME_USAGE=0
+        WORKSPACE_USAGE=0
+        DOCKER_USAGE=0
 
-            # Send alert if script exists
+        if [[ -d "\${MOUNT_POINT}/homes/\${USER}" ]]; then
+            HOME_USAGE=\$(du -sb "\${MOUNT_POINT}/homes/\${USER}" 2>/dev/null | cut -f1 || echo 0)
+        fi
+
+        if [[ -d "\${MOUNT_POINT}/workspaces/\${USER}" ]]; then
+            WORKSPACE_USAGE=\$(du -sb "\${MOUNT_POINT}/workspaces/\${USER}" 2>/dev/null | cut -f1 || echo 0)
+        fi
+
+        if [[ -d "\${MOUNT_POINT}/docker-volumes/\${USER}-state" ]]; then
+            DOCKER_USAGE=\$(du -sb "\${MOUNT_POINT}/docker-volumes/\${USER}-state" 2>/dev/null | cut -f1 || echo 0)
+        fi
+
+        # Total usage
+        TOTAL_USAGE=\$((HOME_USAGE + WORKSPACE_USAGE + DOCKER_USAGE))
+
+        # Convert to human-readable
+        TOTAL_GB=\$(awk "BEGIN {printf \"%.2f\", \${TOTAL_USAGE} / 1024 / 1024 / 1024}")
+        HOME_GB=\$(awk "BEGIN {printf \"%.2f\", \${HOME_USAGE} / 1024 / 1024 / 1024}")
+        WORKSPACE_GB=\$(awk "BEGIN {printf \"%.2f\", \${WORKSPACE_USAGE} / 1024 / 1024 / 1024}")
+        DOCKER_GB=\$(awk "BEGIN {printf \"%.2f\", \${DOCKER_USAGE} / 1024 / 1024 / 1024}")
+        PERCENT=\$(awk "BEGIN {printf \"%.1f\", \${TOTAL_USAGE} * 100.0 / \${QUOTA_LIMIT_BYTES}}")
+
+        echo "User: \${USER}"
+        echo "  Total: \${TOTAL_GB}GB / \${QUOTA_LIMIT_GB}GB (\${PERCENT}%)"
+        echo "  Breakdown:"
+        echo "    - Home:      \${HOME_GB}GB"
+        echo "    - Workspace: \${WORKSPACE_GB}GB"
+        echo "    - Docker:    \${DOCKER_GB}GB"
+
+        # Check if exceeded quota
+        if [[ \${TOTAL_USAGE} -gt \${QUOTA_LIMIT_BYTES} ]]; then
+            OVER_GB=\$(awk "BEGIN {printf \"%.2f\", (\${TOTAL_USAGE} - \${QUOTA_LIMIT_BYTES}) / 1024 / 1024 / 1024}")
+            MESSAGE="⚠️ User \${USER} has EXCEEDED quota: \${TOTAL_GB}GB / \${QUOTA_LIMIT_GB}GB (over by \${OVER_GB}GB)"
+            echo "  STATUS: ⚠️ OVER QUOTA by \${OVER_GB}GB"
+
+            # Send alert
             if [[ -x "\${ALERT_SCRIPT}" ]]; then
                 \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
             fi
 
-            # Send email to user
-            echo "\${MESSAGE}" | mail -s "Disk Quota Warning" \${USER}@localhost
+        # Check if approaching quota (warning threshold)
+        elif [[ \${TOTAL_USAGE} -gt \${QUOTA_WARNING_BYTES} ]]; then
+            MESSAGE="User \${USER} approaching quota: \${TOTAL_GB}GB / \${QUOTA_LIMIT_GB}GB (\${PERCENT}%)"
+            echo "  STATUS: ⚠️ WARNING (>\${QUOTA_WARNING_PERCENT}%)"
+
+            # Send warning (less urgent)
+            if [[ -x "\${ALERT_SCRIPT}" ]]; then
+                \${ALERT_SCRIPT} "info" "\${MESSAGE}"
+            fi
+        else
+            echo "  STATUS: ✅ OK"
         fi
+
+        echo ""
     fi
 done
+
+echo "=== Quota Check Complete ==="
 EOF
 
 chmod +x /opt/scripts/monitoring/check-user-quotas.sh

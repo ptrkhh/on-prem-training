@@ -23,11 +23,12 @@ bcache: 900GB (writeback mode)
 4x20TB BTRFS RAID10 relatime zstd:3 space_cache=v2 (skip autodefrag)
 
 Usable capacity: ~40TB
-User home folders: /mnt/storage/homes/
-Docker volumes: /mnt/storage/docker-volumes/
-Workspaces (ephemeral, not backed up): /mnt/storage/workspaces/
-Shared data: /mnt/storage/shared/
-Snapshots: /mnt/storage/snapshots/
+User home folders: /mnt/storage/homes/ (backed up daily)
+Docker volumes: /mnt/storage/docker-volumes/ (backed up daily)
+Workspaces (persistent, NOT backed up): /mnt/storage/workspaces/
+Shared data: /mnt/storage/shared/ (Google Drive Workspace Shared Drive)
+Cache directory: /mnt/storage/cache/gdrive/ (Google Drive VFS cache)
+Snapshots: /mnt/storage/snapshots/ (local BTRFS snapshots)
 
 # Software Configuration
 OS: Ubuntu 24.04 LTS
@@ -41,7 +42,7 @@ Netdata: health.mydomain.com (includes disk SMART monitoring)
 Prometheus: prometheus.mydomain.com (scrapes nvidia-smi exporter, node exporter)
 Grafana: grafana.mydomain.com (dashboards for GPU, disk, network, container resources)
 code-server: alice-code.mydomain.com, bob-code.mydomain.com (VS Code in browser)
-Shared TensorBoard: tensorboard.mydomain.com (users write logs to /mnt/storage/shared/tensorboard/)
+Shared TensorBoard: tensorboard.mydomain.com (users write logs to Google Drive Shared Drive via /shared/tensorboard/)
 FileBrowser: files.mydomain.com
 Dozzle: logs.mydomain.com (7-day retention)
 Portainer: portainer.mydomain.com
@@ -111,14 +112,16 @@ Tier 2: Restic to GDrive Workspace (Daily 6 AM, 100 Mbps) 7 daily, 52 weekly
 
 Backed up:
 
-User home folders: /mnt/storage/homes/
+User home folders: /mnt/storage/homes/ (code, configs, venvs)
 Docker volumes: /mnt/storage/docker-volumes/ (containers paused during backup)
-Shared tensorboard: /mnt/storage/shared/tensorboard/
+Shared data: Already in Google Drive Workspace Shared Drive (source of truth in cloud)
 
 NOT backed up:
 
-Workspaces: /mnt/storage/workspaces/ (ephemeral)
-Customer data: Already in GDrive
+Workspaces: /mnt/storage/workspaces/ (training data, checkpoints - persistent but not backed up)
+/shared mount: Google Drive Shared Drive is the source of truth (cloud-based)
+Google Drive cache: /mnt/storage/cache/gdrive/ (cache is ephemeral, can be recreated)
+Customer data: Already in GDrive (source of truth)
 Docker images: Reproducible from Dockerfiles
 OS/packages: Reproducible from install scripts
 

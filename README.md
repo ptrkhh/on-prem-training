@@ -93,6 +93,7 @@ cd docker && ./generate-compose.sh && cd ..
 
 # 5. Run setup scripts (in order)
 sudo ./scripts/01-setup-storage.sh  # REBOOT after this!
+sudo ./scripts/01b-setup-gdrive-shared.sh  # Mount Google Drive Shared Drive to /shared
 sudo ./scripts/02-setup-users.sh
 sudo ./scripts/03-setup-docker.sh
 sudo ./scripts/04-setup-cloudflare-tunnel.sh
@@ -198,7 +199,16 @@ MEMORY_LIMIT_GB=64
 
 4x 20TB HDDs
 └── BTRFS RAID10 (~40TB usable)
-    └── with bcache acceleration
+    ├── with bcache acceleration
+    ├── /homes (backed up to GDrive)
+    ├── /workspaces (ephemeral, not backed up)
+    └── /cache/gdrive (80% of storage for Google Drive cache)
+
+Google Workspace Shared Drive
+└── Mounted at /shared via rclone VFS
+    ├── Local cache: ~25TB (80% of free space after user data + snapshots)
+    ├── Near-local performance after first access
+    └── Auto-sync with cloud (LRU eviction, 30-day max age)
 ```
 
 ### Containers
@@ -243,6 +253,165 @@ Routes by hostname:
 Direct NoMachine Protocol (ports 4000+):
 └── Best performance, bypasses HTTP
 ```
+
+## User Guide
+
+### Understanding Your Environment: Container vs VM
+
+Your workspace runs in a Docker container, not a traditional VM. Here's what you need to know:
+
+**What This Means:**
+- You have `sudo` access inside your container
+- You can install packages with `apt-get`, but they're temporary
+- System packages disappear when we rebuild containers (image updates)
+- Your personal files in `/home` and `/workspace` are always safe
+
+**Persistent Storage (Survives Container Rebuilds):**
+- `/home/${USERNAME}` - Your home directory (backed up daily to GDrive)
+  - Use for: Code, configs, dotfiles, papers, small datasets
+  - Suggested size: ~100GB (part of 1200GB total quota)
+
+- `/workspace` - Fast scratch space (NOT backed up)
+  - Use for: Training data, model checkpoints, experiments, large datasets
+  - Suggested size: ~1000GB (part of 1200GB total quota)
+  - Re-download datasets here if needed after system issues
+
+- `/shared` - Google Drive Workspace Shared Drive (cached locally)
+  - **Backed by:** Google Workspace Shared Drive (cloud storage)
+  - **Performance:** Near-local speed after first access (aggressive caching)
+  - **Access:** Read-only for most content
+  - **Use for:** Common datasets, shared files, team resources
+  - **Cache:** Auto-calculated (typically 60-70% of total disk, ~24TB for 5 users)
+  - **Allocation:** Uses 80% of space remaining after user data + snapshot reservations
+  - **Syncing:** Automatic background sync with Google Drive
+
+- `/shared/tensorboard/${USERNAME}` - Your TensorBoard logs (read-write)
+  - Stored in Google Drive Shared Drive, accessible to all team members
+
+**Your Total Quota: 1200GB**
+- Combined across `/home/${USERNAME}` + `/workspace` + docker volumes
+- Monitored daily with breakdown by directory
+- Warning alert at 80% (960GB), critical alert when exceeded
+- Flexible allocation between directories (no per-directory enforcement)
+
+**Ephemeral Locations (Reset on Container Rebuild):**
+- Everything else: `/tmp`, `/var`, system directories
+- Global Python packages installed with `sudo pip3 install`
+- System packages installed with `sudo apt-get install`
+
+**Best Practices for Python Packages:**
+
+Always use virtual environments in your home directory:
+
+```bash
+# Good - persists across container rebuilds
+cd ~/my-project
+python3 -m venv venv
+source venv/bin/activate
+pip install torch transformers wandb
+
+# Also good - use conda
+conda create -n myproject python=3.11
+conda activate myproject
+pip install -r requirements.txt
+
+# Bad - disappears on container rebuild
+sudo pip3 install some-package  # Goes to /usr/local (ephemeral)
+```
+
+**Requesting System Packages:**
+
+If you need a system library (like `libopencv-dev`, `postgresql-client`, etc.):
+
+1. Message the admin (e.g., via Telegram/Slack)
+2. Specify the exact package name
+3. Admin will add it to the Dockerfile and rebuild your container
+4. Your container will restart (save your work first!)
+5. Package will be available to all users going forward
+
+Example request: "Can we add `ffmpeg` and `libsndfile1-dev` to the base image? Need them for audio processing."
+
+### Storage Strategy Summary
+
+| Location | Backed Up? | Persistent? | Speed | Backend | Use For |
+|----------|------------|-------------|-------|---------|---------|
+| `/home/${USER}` | ✅ Daily | ✅ Yes | Fast | Local BTRFS | Code, configs, venvs |
+| `/workspace` | ❌ No | ✅ Yes | Fastest | Local BTRFS | Training data, checkpoints |
+| `/shared` | ✅ GDrive | ✅ Yes | Fast (cached) | Google Workspace Shared Drive | Common datasets, shared files |
+| `/tmp`, system dirs | ❌ No | ❌ No | Fast | Container tmpfs | Truly temporary files |
+
+**Storage Allocation (5 users, 40TB BTRFS):**
+- **User data**: 6TB (5 users × 1200GB quota per user)
+  - Each user gets 1200GB total across home + workspace + docker-volumes (combined, monitored)
+- **Snapshots**: 3TB (50% of user data, auto-calculated based on 24h+7d+4w retention)
+- **VFS cache**: ~25TB (80% of remaining 31TB after user data + snapshots)
+- **Safety buffer**: ~6TB (20% margin to prevent BTRFS performance degradation)
+
+**Quota Enforcement:**
+- **Monitoring**: Daily quota checks across all three directories (home + workspace + docker-volumes)
+- **Alerts**: Warning at 80% usage, critical alert when quota exceeded
+- **No hard limits**: Users can temporarily exceed quota (soft limit with monitoring)
+- **Breakdown visibility**: Daily reports show usage per directory
+
+**Notes:**
+- `/workspace` is persistent but NOT backed up to save costs. Store only reproducible/re-downloadable data here.
+- `/shared` cache is auto-calculated and validated at setup time. Configuration fails if insufficient space.
+- First access downloads from cloud (~10-100 MB/s), subsequent access is near-local speed (from cache).
+- Cache managed by rclone VFS with LRU eviction (30-day max age, auto-evicted when cache is full).
+
+## Admin Guide
+
+### Adding System Packages (When Users Request Them)
+
+When a user requests a new system package:
+
+1. **Verify the package exists:**
+   ```bash
+   # On the host or in any container
+   apt-cache search package-name
+   ```
+
+2. **Add to Dockerfile:**
+   ```bash
+   cd docker
+   nano Dockerfile.user-workspace
+
+   # Find the appropriate section and add the package
+   # For example, in the DEVELOPMENT TOOLS section:
+   RUN apt-get update && apt-get install -y \
+       existing-package \
+       new-package-requested \
+       && rm -rf /var/lib/apt/lists/*
+   ```
+
+3. **Rebuild affected container(s):**
+   ```bash
+   # Option A: Rebuild just one user (less disruption)
+   cd docker
+   docker compose build workspace-alice
+   docker compose up -d workspace-alice
+
+   # Option B: Rebuild all users (for widely-needed packages)
+   docker compose build
+   docker compose up -d
+
+   # Note: Containers will restart automatically
+   ```
+
+4. **Verify installation:**
+   ```bash
+   docker exec -it workspace-alice which new-package-name
+   # or
+   docker exec -it workspace-alice apt list --installed | grep new-package
+   ```
+
+5. **Notify users:**
+   - Inform them the package is now available
+   - Remind them to save work before container restarts
+
+**Time estimate:** 5-10 minutes per package request
+
+**Tip:** For Python packages, direct users to use `pip install` in their virtual environments instead. Only system libraries (with `-dev` suffix, command-line tools, etc.) need Dockerfile changes.
 
 ## Maintenance
 

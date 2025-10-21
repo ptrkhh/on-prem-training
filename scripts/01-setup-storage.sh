@@ -340,12 +340,16 @@ mkdir -p ${MOUNT_POINT}/shared
 mkdir -p ${MOUNT_POINT}/shared/tensorboard
 mkdir -p ${MOUNT_POINT}/docker-volumes
 mkdir -p ${MOUNT_POINT}/snapshots
+mkdir -p ${MOUNT_POINT}/cache
+mkdir -p ${MOUNT_POINT}/cache/gdrive
 
 chmod 755 ${MOUNT_POINT}/homes
 chmod 755 ${MOUNT_POINT}/workspaces
 chmod 755 ${MOUNT_POINT}/shared
 chmod 755 ${MOUNT_POINT}/docker-volumes
 chmod 700 ${MOUNT_POINT}/snapshots
+chmod 755 ${MOUNT_POINT}/cache
+chmod 755 ${MOUNT_POINT}/cache/gdrive
 
 echo "Directory structure created:"
 ls -la ${MOUNT_POINT}/
@@ -459,5 +463,12 @@ echo "✅ Storage setup complete!"
 echo ""
 echo "Next steps:"
 echo "  1. REBOOT to verify mounts persist"
-echo "  2. Run ./02-setup-users.sh to create user accounts"
+echo "  2. Run ./01b-setup-gdrive-shared.sh to mount Google Drive Shared Drive to /shared"
+echo "     (Optional: Skip if using local storage for /shared)"
+echo "  3. Run ./02-setup-users.sh to create user accounts"
+echo ""
+echo "Note: The /shared directory is prepared for either:"
+echo "  - Local BTRFS storage (current default)"
+echo "  - Google Drive Workspace Shared Drive"
+echo "  Run ./01b-setup-gdrive-shared.sh to configure Google Drive mount."
 echo ""

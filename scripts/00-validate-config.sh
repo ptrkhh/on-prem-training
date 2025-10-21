@@ -126,7 +126,7 @@ esac
 echo ""
 echo "Checking numeric values..."
 
-for var in FIRST_UID OS_PARTITION_SIZE_GB MEMORY_GUARANTEE_GB MEMORY_LIMIT_GB SWAP_SIZE_GB; do
+for var in FIRST_UID OS_PARTITION_SIZE_GB MEMORY_GUARANTEE_GB MEMORY_LIMIT_GB SWAP_SIZE_GB USER_QUOTA_GB; do
     val="${!var}"
     if [[ ! "${val}" =~ ^[0-9]+$ ]]; then
         echo "  ✗ ERROR: ${var} must be a number, got '${val}'"
@@ -148,16 +148,28 @@ else
 fi
 
 # Check if total user quota exceeds expected storage
-TOTAL_USER_QUOTA=$((USER_QUOTA_TB * $(get_user_count)))
-if [[ ${TOTAL_USER_QUOTA} -gt 40 ]]; then
-    echo "  ⚠ WARNING: Total user quota (${TOTAL_USER_QUOTA}TB) may exceed available storage (~40TB)"
+TOTAL_USER_QUOTA_GB=$((USER_QUOTA_GB * $(get_user_count)))
+
+# Estimate total BTRFS capacity (conservative: assume 40TB for typical 4x20TB RAID10 setup)
+ESTIMATED_CAPACITY_GB=40000
+
+# Check if user data + snapshots (50% overhead) exceeds safe limit (80% of disk)
+TOTAL_WITH_SNAPSHOTS=$(awk "BEGIN {printf \"%.0f\", ${TOTAL_USER_QUOTA_GB} * 1.5}")  # User data + 50% snapshots
+SAFE_LIMIT_GB=$((ESTIMATED_CAPACITY_GB * 80 / 100))  # 80% of 40TB in GB
+
+if [[ ${TOTAL_WITH_SNAPSHOTS} -gt ${SAFE_LIMIT_GB} ]]; then
+    echo "  ⚠ WARNING: Total user quota + snapshots (${TOTAL_USER_QUOTA_GB}GB + 50%) may exceed safe storage limit"
+    echo "    User data: ${TOTAL_USER_QUOTA_GB}GB, With snapshots: ~$(awk "BEGIN {printf \"%.1f\", ${TOTAL_USER_QUOTA_GB} * 1.5}")GB"
+    echo "    Safe limit: $(awk "BEGIN {printf \"%.0f\", ${SAFE_LIMIT_GB} / 1024}")TB (80% of estimated ${ESTIMATED_CAPACITY_GB}GB)"
     ((WARNINGS++))
 else
-    echo "  ✓ Total user quota: ${TOTAL_USER_QUOTA}TB (reasonable)"
+    echo "  ✓ Total user quota: ${TOTAL_USER_QUOTA_GB}GB (${TOTAL_USER_QUOTA_GB}GB) - reasonable for ${ESTIMATED_CAPACITY_GB}GB storage"
 fi
 
 # Check port ranges
 MAX_USERS=$(get_user_count)
+SSH_BASE_PORT=${SSH_BASE_PORT:-2222}  # Default: 2222
+NOMACHINE_BASE_PORT=${NOMACHINE_BASE_PORT:-4000}  # Default: 4000
 MAX_SSH_PORT=$((SSH_BASE_PORT + MAX_USERS))
 MAX_NX_PORT=$((NOMACHINE_BASE_PORT + MAX_USERS))
 

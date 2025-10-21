@@ -77,8 +77,6 @@ BCACHE_MODE="writeback"
 MEMORY_GUARANTEE_GB=32
 MEMORY_LIMIT_GB=100
 SWAP_SIZE_GB=50
-USER_QUOTA_TB=1
-QUOTA_WARNING_DAYS=7
 
 #==============================================================================
 # DOCKER CONFIGURATION
@@ -130,6 +128,90 @@ DATA_SYNC_BANDWIDTH_LIMIT_MBPS=100
 DATA_SYNC_HOUR=4
 DATA_SYNC_MINUTE=0
 DATA_CLEANUP_DAYS=90
+
+#==============================================================================
+# STORAGE ALLOCATION LIMITS (per user)
+#==============================================================================
+
+# Per-user total storage quota (in GB)
+# Covers combined usage across home directory, workspace, and docker volumes
+# Breakdown suggestion (not enforced separately):
+#   - Home directory (~100GB): Code, configs, dotfiles, papers, venvs (backed up)
+#   - Workspace (~1000GB): Training data, model checkpoints, datasets (NOT backed up)
+#   - Docker volumes (~100GB): Container persistent state (backed up)
+# Total: 1200GB (1.2TB) per user
+USER_QUOTA_GB=1200
+
+# Quota warning threshold (percentage)
+# Alert when user exceeds this percentage of their quota
+USER_QUOTA_WARNING_PERCENT=80  # Warn at 80% usage (960GB for 1200GB quota)
+
+# Snapshot overhead multiplier
+# BTRFS snapshots use copy-on-write, storing only changed blocks
+# With retention policy of 24 hourly + 7 daily + 4 weekly snapshots,
+# snapshots typically hold 30-50% of changed data over time
+# Formula: snapshot_overhead = total_user_data × SNAPSHOT_OVERHEAD_MULTIPLIER
+SNAPSHOT_OVERHEAD_MULTIPLIER=0.5  # 50% of user data
+
+# Storage safety margin (percentage)
+# This percentage of free space (after user data + snapshots) is kept as buffer
+# Prevents BTRFS performance degradation (performs poorly when >90% full)
+# Also allows for unexpected growth and ensures VFS cache has eviction headroom
+STORAGE_SAFETY_MARGIN_PERCENT=20  # Keep 20% free, VFS cache uses remaining 80%
+
+#==============================================================================
+# GOOGLE DRIVE SHARED DRIVE (for /shared mount)
+#==============================================================================
+
+# Remote name for Google Workspace Shared Drive
+# This will be created during setup with: rclone config
+GDRIVE_SHARED_REMOTE="gdrive-shared"
+
+# Local cache directory for Google Drive files
+# Large cache provides near-local performance
+GDRIVE_CACHE_DIR="${MOUNT_POINT}/cache/gdrive"
+
+# Maximum age for cached files (examples: "24h", "72h", "168h"/1week, "720h"/30days)
+# Files not accessed for this duration will be evicted from cache
+GDRIVE_CACHE_MAX_AGE="720h"
+
+# rclone VFS cache mode (recommended: full)
+# - full: Download entire file on first access, keep in cache
+# - writes: Cache writes only
+# - minimal: Minimal caching
+GDRIVE_VFS_CACHE_MODE="full"
+
+# Write-back cache duration (how long to buffer writes before uploading)
+# Examples: "5s", "30s", "1m", "5m"
+GDRIVE_WRITE_BACK="5s"
+
+# Read chunk sizes (tune for performance)
+# Larger chunks = fewer API calls but more memory
+GDRIVE_READ_CHUNK_SIZE="128M"
+GDRIVE_READ_CHUNK_LIMIT="off"  # Disable limit for best performance
+
+# Buffer size for reading files
+GDRIVE_BUFFER_SIZE="128M"
+
+# Directory cache time (how long to cache directory listings)
+GDRIVE_DIR_CACHE_TIME="5m"
+
+# Poll interval for detecting remote changes
+# Lower = more API calls but faster change detection
+GDRIVE_POLL_INTERVAL="1m"
+
+# Upload chunk size (must be multiple of 256K)
+GDRIVE_CHUNK_SIZE="256M"
+
+# Files smaller than this are uploaded in one request
+GDRIVE_UPLOAD_CUTOFF="256M"
+
+# Number of parallel transfers and checkers
+GDRIVE_TRANSFERS=8
+GDRIVE_CHECKERS=16
+
+# Logging
+GDRIVE_LOG_LEVEL="INFO"  # DEBUG, INFO, NOTICE, ERROR
 
 #==============================================================================
 # MONITORING & ALERTING
@@ -237,7 +319,7 @@ get_rclone_bandwidth() { echo "${1}M"; }
 export SERVER_HOSTNAME MOUNT_POINT USERS FIRST_UID USER_SHELL USER_GROUPS
 export NVME_DEVICE HDD_DEVICES OS_PARTITION_SIZE_GB
 export BTRFS_RAID_LEVEL BTRFS_COMPRESSION BCACHE_MODE
-export MEMORY_GUARANTEE_GB MEMORY_LIMIT_GB SWAP_SIZE_GB USER_QUOTA_TB QUOTA_WARNING_DAYS
+export MEMORY_GUARANTEE_GB MEMORY_LIMIT_GB SWAP_SIZE_GB
 export DOCKER_STORAGE_DRIVER DOCKER_LOG_MAX_SIZE DOCKER_LOG_MAX_FILES
 export DOMAIN CODE_SERVER_PREFIX JUPYTER_PREFIX LOCAL_NETWORK_CIDR
 export BACKUP_REMOTE BACKUP_BANDWIDTH_LIMIT_MBPS
@@ -245,6 +327,12 @@ export SNAPSHOT_HOURLY_KEEP SNAPSHOT_DAILY_KEEP SNAPSHOT_WEEKLY_KEEP
 export RESTIC_KEEP_DAILY RESTIC_KEEP_WEEKLY BACKUP_HOUR BACKUP_MINUTE
 export GCS_BUCKET GDRIVE_CUSTOMER_DATA DATA_SYNC_BANDWIDTH_LIMIT_MBPS
 export DATA_SYNC_HOUR DATA_SYNC_MINUTE DATA_CLEANUP_DAYS
+export USER_QUOTA_GB USER_QUOTA_WARNING_PERCENT
+export SNAPSHOT_OVERHEAD_MULTIPLIER STORAGE_SAFETY_MARGIN_PERCENT
+export GDRIVE_SHARED_REMOTE GDRIVE_CACHE_DIR GDRIVE_CACHE_MAX_AGE
+export GDRIVE_VFS_CACHE_MODE GDRIVE_WRITE_BACK GDRIVE_READ_CHUNK_SIZE GDRIVE_READ_CHUNK_LIMIT
+export GDRIVE_BUFFER_SIZE GDRIVE_DIR_CACHE_TIME GDRIVE_POLL_INTERVAL
+export GDRIVE_CHUNK_SIZE GDRIVE_UPLOAD_CUTOFF GDRIVE_TRANSFERS GDRIVE_CHECKERS GDRIVE_LOG_LEVEL
 export TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID HEALTHCHECK_BACKUP_URL HEALTHCHECK_DATA_SYNC_URL
 export GPU_TEMP_THRESHOLD DISK_TEMP_THRESHOLD FS_USAGE_THRESHOLD SMART_MONITORING
 export ENABLE_AUDITD ENABLE_UPS_MONITORING ENABLE_GPU_TIMESLICING ENABLE_AUTO_UPDATES
