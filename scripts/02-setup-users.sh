@@ -137,7 +137,7 @@ cat > /opt/scripts/monitoring/check-user-quotas.sh <<'EOF'
 MOUNT_POINT="/mnt/storage"
 QUOTA_LIMIT_TB=1
 QUOTA_LIMIT_BYTES=$((QUOTA_LIMIT_TB * 1024 * 1024 * 1024 * 1024))
-ALERT_SCRIPT="/opt/scripts/monitoring/send-slack-alert.sh"
+ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 
 for user_dir in ${MOUNT_POINT}/homes/*; do
     if [[ -d "${user_dir}" ]]; then

@@ -24,73 +24,90 @@ echo "=== Step 1: Creating monitoring scripts ==="
 
 mkdir -p ${SCRIPTS_DIR}
 
-# Slack Alert Script
-cat > ${SCRIPTS_DIR}/send-slack-alert.sh <<'EOF'
+# Telegram Alert Script
+cat > ${SCRIPTS_DIR}/send-telegram-alert.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
-# Send alert to Slack
-# Usage: send-slack-alert.sh <level> <message>
-# Level: info, warning, critical
+# Send alert to Telegram
+# Usage: send-telegram-alert.sh <level> <message>
+# Level: info, warning, critical, success
 
 LEVEL="$1"
 MESSAGE="$2"
-SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}"
 
-if [[ -z "${SLACK_WEBHOOK_URL}" ]] && [[ -f /root/.slack-webhook ]]; then
-    SLACK_WEBHOOK_URL=$(cat /root/.slack-webhook)
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
+
+# Load from config files if not in environment
+if [[ -z "${TELEGRAM_BOT_TOKEN}" ]] && [[ -f /root/.telegram-bot-token ]]; then
+    TELEGRAM_BOT_TOKEN=$(cat /root/.telegram-bot-token)
 fi
 
-if [[ -z "${SLACK_WEBHOOK_URL}" ]]; then
-    echo "No Slack webhook URL configured"
+if [[ -z "${TELEGRAM_CHAT_ID}" ]] && [[ -f /root/.telegram-chat-id ]]; then
+    TELEGRAM_CHAT_ID=$(cat /root/.telegram-chat-id)
+fi
+
+if [[ -z "${TELEGRAM_BOT_TOKEN}" ]] || [[ -z "${TELEGRAM_CHAT_ID}" ]]; then
+    echo "No Telegram configuration found"
     echo "${LEVEL}: ${MESSAGE}"
     exit 0
 fi
 
-# Set color based on level
+# Set emoji based on level
 case "${LEVEL}" in
     info)
-        COLOR="#36a64f"  # green
-        EMOJI=":information_source:"
+        EMOJI="ℹ️"
         ;;
     warning)
-        COLOR="#ff9900"  # orange
-        EMOJI=":warning:"
+        EMOJI="⚠️"
         ;;
     critical)
-        COLOR="#ff0000"  # red
-        EMOJI=":rotating_light:"
+        EMOJI="🔥"
+        ;;
+    success)
+        EMOJI="✅"
         ;;
     *)
-        COLOR="#cccccc"  # gray
-        EMOJI=":bell:"
+        EMOJI="📢"
         ;;
 esac
 
-# Send to Slack
-curl -X POST "${SLACK_WEBHOOK_URL}" \
+HOSTNAME=$(hostname)
+TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+
+# Format message (Telegram supports Markdown)
+TEXT="${EMOJI} *ML Training Server Alert*
+
+*Level:* ${LEVEL^^}
+*Server:* \`${HOSTNAME}\`
+*Time:* ${TIMESTAMP}
+
+${MESSAGE}"
+
+# Send to Telegram using Bot API
+curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
     -H 'Content-Type: application/json' \
-    -d @- <<PAYLOAD
+    -d @- > /dev/null <<PAYLOAD
 {
-    "attachments": [{
-        "color": "${COLOR}",
-        "title": "${EMOJI} ML Train Server Alert",
-        "text": "${MESSAGE}",
-        "footer": "ML Training Server",
-        "ts": $(date +%s)
-    }]
+    "chat_id": "${TELEGRAM_CHAT_ID}",
+    "text": $(echo "${TEXT}" | jq -Rs .),
+    "parse_mode": "Markdown",
+    "disable_web_page_preview": true
 }
 PAYLOAD
+
+echo "Alert sent to Telegram: ${LEVEL}"
 EOF
 
-chmod +x ${SCRIPTS_DIR}/send-slack-alert.sh
+chmod +x ${SCRIPTS_DIR}/send-telegram-alert.sh
 
 # SMART Monitoring Script
 cat > ${SCRIPTS_DIR}/check-disk-smart.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
-ALERT_SCRIPT="/opt/scripts/monitoring/send-slack-alert.sh"
+ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 DEVICES=("/dev/sda" "/dev/sdb" "/dev/sdc" "/dev/sdd" "/dev/nvme0n1")
 
 for device in "${DEVICES[@]}"; do
@@ -134,7 +151,7 @@ cat > ${SCRIPTS_DIR}/check-gpu-temperature.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
-ALERT_SCRIPT="/opt/scripts/monitoring/send-slack-alert.sh"
+ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 TEMP_THRESHOLD=80
 
 if ! command -v nvidia-smi &> /dev/null; then
@@ -160,7 +177,7 @@ cat > ${SCRIPTS_DIR}/check-btrfs-health.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
-ALERT_SCRIPT="/opt/scripts/monitoring/send-slack-alert.sh"
+ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 MOUNT_POINT="/mnt/storage"
 
 if ! mountpoint -q ${MOUNT_POINT}; then
@@ -198,7 +215,7 @@ cat > ${SCRIPTS_DIR}/check-oom-kills.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
-ALERT_SCRIPT="/opt/scripts/monitoring/send-slack-alert.sh"
+ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 LOG_FILE="/var/log/oom-kills.log"
 LAST_CHECK_FILE="/var/run/oom-last-check"
 
@@ -229,7 +246,7 @@ cat > ${SCRIPTS_DIR}/check-gpu-usage.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
-ALERT_SCRIPT="/opt/scripts/monitoring/send-slack-alert.sh"
+ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 
 if ! command -v nvidia-smi &> /dev/null; then
     exit 0
@@ -248,24 +265,37 @@ EOF
 
 chmod +x ${SCRIPTS_DIR}/check-gpu-usage.sh
 
-# Step 2: Configure Slack webhook
+# Step 2: Configure Telegram Bot
 echo ""
-echo "=== Step 2: Configuring Slack webhook ==="
+echo "=== Step 2: Configuring Telegram Bot ==="
 
-read -p "Do you want to configure Slack alerts? (y/n): " setup_slack
+read -p "Do you want to configure Telegram alerts? (y/n): " setup_telegram
 
-if [[ "$setup_slack" == "y" ]]; then
-    echo "Create a Slack incoming webhook at: https://api.slack.com/messaging/webhooks"
-    echo "Then paste the webhook URL here:"
-    read -p "Webhook URL: " slack_webhook
-    echo "${slack_webhook}" > /root/.slack-webhook
-    chmod 600 /root/.slack-webhook
-    echo "Slack webhook configured"
+if [[ "$setup_telegram" == "y" ]]; then
+    echo ""
+    echo "To setup Telegram notifications:"
+    echo "1. Open Telegram and search for @BotFather"
+    echo "2. Send /newbot and follow the instructions"
+    echo "3. Copy the bot token (looks like: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz)"
+    echo "4. Search for @userinfobot or @RawDataBot to get your Chat ID"
+    echo "5. Start a chat with your bot (search for it by name)"
+    echo ""
+    read -p "Bot Token: " telegram_bot_token
+    read -p "Chat ID: " telegram_chat_id
+
+    echo "${telegram_bot_token}" > /root/.telegram-bot-token
+    echo "${telegram_chat_id}" > /root/.telegram-chat-id
+    chmod 600 /root/.telegram-bot-token
+    chmod 600 /root/.telegram-chat-id
+
+    echo "Telegram bot configured"
 
     # Test alert
-    ${SCRIPTS_DIR}/send-slack-alert.sh "info" "Monitoring setup complete on ML Training Server"
+    export TELEGRAM_BOT_TOKEN="${telegram_bot_token}"
+    export TELEGRAM_CHAT_ID="${telegram_chat_id}"
+    ${SCRIPTS_DIR}/send-telegram-alert.sh "success" "Monitoring setup complete on ML Training Server"
 else
-    echo "Skipping Slack configuration"
+    echo "Skipping Telegram configuration"
 fi
 
 # Step 3: Enable SMART monitoring
@@ -339,7 +369,7 @@ echo "  - GPU temp: Every 15 minutes"
 echo "  - OOM: Every 30 minutes"
 echo "  - GPU usage: Every hour"
 echo ""
-echo "Alerts sent to Slack (if configured)"
+echo "Alerts sent to Telegram (if configured)"
 echo ""
 echo "Next steps:"
 echo "  - Check Docker services: cd docker && docker compose ps"

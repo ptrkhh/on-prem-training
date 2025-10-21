@@ -158,10 +158,10 @@ annotation-prefixes = ["cdi.k8s.io/"]
 spec-dirs = ["/etc/cdi", "/var/run/cdi"]
 EOF
 
-    # Note: Time-slicing is primarily handled by manual coordination via Slack
+    # Note: Time-slicing is primarily handled by manual coordination via Telegram
     # No formal reservation system needed due to RTX 5080 being much faster than T4
 
-    echo "GPU time-slicing config created (manual coordination via Slack)"
+    echo "GPU time-slicing config created (manual coordination via Telegram)"
 fi
 
 # Display summary

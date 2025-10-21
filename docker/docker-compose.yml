@@ -210,47 +210,12 @@ services:
     labels:
       - "traefik.enable=true"
 
-  # Guacamole - Browser-based Remote Desktop
-  guacamole-db:
-    image: postgres:15
-    container_name: guacamole-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: guacamole_db
-      POSTGRES_USER: guacamole_user
-      POSTGRES_PASSWORD: ${GUACAMOLE_DB_PASSWORD:-changeMe123}
-    volumes:
-      - guacamole-db-data:/var/lib/postgresql/data
-      - ./guacamole/initdb.sql:/docker-entrypoint-initdb.d/initdb.sql:ro
-    networks:
-      - ml-net
-
-  guacd:
-    image: guacamole/guacd:latest
-    container_name: guacd
-    restart: unless-stopped
-    networks:
-      - ml-net
-
-  guacamole:
-    image: guacamole/guacamole:latest
-    container_name: guacamole
-    restart: unless-stopped
-    environment:
-      GUACD_HOSTNAME: guacd
-      POSTGRES_HOSTNAME: guacamole-db
-      POSTGRES_DATABASE: guacamole_db
-      POSTGRES_USER: guacamole_user
-      POSTGRES_PASSWORD: ${GUACAMOLE_DB_PASSWORD:-changeMe123}
-    ports:
-      - "8080:8080"
-    networks:
-      - ml-net
-    depends_on:
-      - guacamole-db
-      - guacd
-    labels:
-      - "traefik.enable=true"
+  # NoMachine Web Interface (optional - each user container has NoMachine server)
+  # Note: NoMachine servers run inside each user workspace container
+  # Users can connect via:
+  #  - NoMachine client (best performance, cross-platform)
+  #  - Web browser (using NoMachine HTML5 interface on port 4080 per container)
+  #  - SSH tunneling for secure remote access
 
   # Code-server instances (one per user)
   code-server-alice:
@@ -483,4 +448,3 @@ volumes:
   grafana-data:
   portainer-data:
   filebrowser-data:
-  guacamole-db-data:

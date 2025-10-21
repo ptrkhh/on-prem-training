@@ -11,7 +11,7 @@ echo "=== GCS to GDrive Migration ==="
 GCS_BUCKET="gs://your-bucket-name"
 GDRIVE_REMOTE="gdrive:backups/gcs-migration"
 BANDWIDTH_LIMIT="100M"  # 100 Mbps
-ALERT_SCRIPT="/opt/scripts/monitoring/send-slack-alert.sh"
+ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 LOG_FILE="/var/log/gcs-gdrive-migration.log"
 
 # Redirect output to log file

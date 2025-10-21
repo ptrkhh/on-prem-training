@@ -71,7 +71,7 @@ set -euo pipefail
 GCS_BUCKET="gcs:customer-daily-bucket"
 GDRIVE_DEST="gdrive:customer-daily"
 BANDWIDTH_LIMIT="100M"  # 100 Mbps (12.5 MB/s)
-ALERT_SCRIPT="/opt/scripts/monitoring/send-slack-alert.sh"
+ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 LOG_FILE="/var/log/customer-data-sync.log"
 
 # Redirect output to log

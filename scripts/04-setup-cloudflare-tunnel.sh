@@ -67,9 +67,8 @@ tunnel: ${TUNNEL_ID}
 credentials-file: /root/.cloudflared/${TUNNEL_ID}.json
 
 ingress:
-  # Guacamole - Remote Desktop
-  - hostname: remote.${DOMAIN}
-    service: http://localhost:8080
+  # Note: NoMachine desktop access is handled per-user via Traefik
+  # See user-specific desktop hostnames below (e.g., alice-desktop.${DOMAIN})
 
   # Netdata - System Monitoring
   - hostname: health.${DOMAIN}
@@ -167,16 +166,21 @@ echo "Status:"
 systemctl status cloudflared --no-pager
 echo ""
 echo "Configured services:"
-echo "  https://remote.${DOMAIN} → Guacamole"
 echo "  https://health.${DOMAIN} → Netdata"
 echo "  https://metrics.${DOMAIN} → Grafana"
 echo "  https://tensorboard.${DOMAIN} → TensorBoard"
 echo "  https://files.${DOMAIN} → FileBrowser"
 echo "  https://logs.${DOMAIN} → Dozzle"
 echo "  https://portainer.${DOMAIN} → Portainer"
-echo "  https://alice-code.${DOMAIN} → VS Code (Alice)"
-echo "  https://jupyter-alice.${DOMAIN} → Jupyter (Alice)"
+echo ""
+echo "Per-user services (example for Alice):"
+echo "  https://alice-desktop.${DOMAIN} → NoMachine Web Desktop"
+echo "  https://alice-code.${DOMAIN} → VS Code"
+echo "  https://jupyter-alice.${DOMAIN} → Jupyter"
 echo "  ... (repeat for bob, charlie, dave, eve)"
+echo ""
+echo "NoMachine client connections:"
+echo "  Use NoMachine client to connect directly to ports 4000+ (best performance)"
 echo ""
 echo "Next steps:"
 echo "  1. Configure Cloudflare Access at: https://one.dash.cloudflare.com/"

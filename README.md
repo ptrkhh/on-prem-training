@@ -22,7 +22,7 @@ Complete automated setup for migrating 5 trusted ML users from Google Cloud (GCE
 - **Works with ANY disk configuration** (2-20+ disks, any sizes, any RAID level)
 
 ### Each User Gets ONE Container With Everything
-- **Full KDE Plasma Desktop** (access via X2Go or Guacamole web interface)
+- **Full KDE Plasma Desktop** (access via NoMachine client or web browser)
 - **All Development Tools**: VS Code, PyCharm, Jupyter Lab, VSCodium
 - **Complete ML Stack**: PyTorch, TensorFlow, JAX (all with CUDA 12.4)
 - **Multiple Languages**: Python 3.11+, Go, Rust, Julia, R, Node.js
@@ -32,7 +32,7 @@ Complete automated setup for migrating 5 trusted ML users from Google Cloud (GCE
 
 ### Infrastructure Services (Shared)
 - **Traefik**: Reverse proxy and router
-- **Guacamole**: Browser-based remote desktop (connects via X2Go)
+- **NoMachine**: High-performance remote desktop (runs in each user container)
 - **Netdata**: Real-time system monitoring + SMART disk monitoring
 - **Prometheus + Grafana**: Metrics collection and visualization
 - **Shared TensorBoard**: View all training logs
@@ -49,7 +49,7 @@ Complete automated setup for migrating 5 trusted ML users from Google Cloud (GCE
 ### Automated Operations
 - **Backups**: BTRFS snapshots (hourly/daily/weekly) + Restic to GDrive (daily)
 - **Monitoring**: SMART checks, GPU temperature, BTRFS health, user quotas
-- **Alerts**: Slack notifications for critical events
+- **Alerts**: Telegram notifications for critical events
 - **Data Pipeline**: Daily GCS → GDrive sync with bandwidth limits
 
 ## Cost Savings
@@ -108,27 +108,31 @@ cd ../scripts && sudo ./10-run-tests.sh
 ### Via Web Browser (Remote or Local)
 
 **Infrastructure:**
-- Remote Desktop: `http://remote.yourdomain.com` (Guacamole)
 - System Health: `http://health.yourdomain.com` (Netdata)
 - Metrics: `http://metrics.yourdomain.com` (Grafana)
 - Files: `http://files.yourdomain.com`
 - Logs: `http://logs.yourdomain.com`
 
 **Per-User (example for Alice):**
+- Desktop (NoMachine Web): `http://alice-desktop.yourdomain.com`
 - VS Code: `http://alice-code.yourdomain.com`
 - Jupyter: `http://jupyter-alice.yourdomain.com`
 - TensorBoard: `http://tensorboard-alice.yourdomain.com`
 
-### Via SSH/X2Go (Direct Connection)
+### Via NoMachine Client (Best Performance)
 
 ```bash
+# Download NoMachine client from: https://nomachine.com/download
+
+# Connect to Alice's desktop
+Server: server_ip
+Port: 4000 (alice), 4001 (bob), 4002 (charlie), etc.
+Protocol: NX
+Username: alice
+Password: <user_password>
+
 # SSH terminal access
 ssh alice@server_ip -p 2222
-
-# X2Go desktop (install X2Go client)
-Server: server_ip
-Port: 2222
-Session: XFCE or KDE
 ```
 
 ## Key Features
@@ -193,7 +197,6 @@ MEMORY_LIMIT_GB=64
 ```
 Infrastructure (Shared):
 ├── Traefik (reverse proxy)
-├── Guacamole (remote desktop gateway)
 ├── Netdata (monitoring)
 ├── Prometheus + Grafana (metrics)
 └── FileBrowser, Dozzle, Portainer, TensorBoard
@@ -207,8 +210,8 @@ Per-User Workspaces (One container each):
 
 Each workspace contains:
 ├── Full KDE Plasma desktop
-├── X2Go server (for remote desktop)
-├── SSH server (for terminal + X2Go transport)
+├── NoMachine server (for remote desktop - client & web access)
+├── SSH server (for terminal access)
 ├── VS Code + PyCharm + Jupyter
 ├── PyTorch + TensorFlow + JAX
 ├── Docker-in-Docker
@@ -224,15 +227,18 @@ Cloudflare Tunnel                Local DNS
 Traefik (:80) ←─────────────────────┘
      ↓
 Routes by hostname:
-├── remote.domain.com → Guacamole
+├── alice-desktop.domain.com → Alice's NoMachine Web
 ├── alice-code.domain.com → Alice's VS Code
 ├── jupyter-alice.domain.com → Alice's Jupyter
 └── ...
+
+Direct NoMachine Protocol (ports 4000+):
+└── Best performance, bypasses HTTP
 ```
 
 ## Maintenance
 
-**Daily**: Check Slack alerts, review dashboards
+**Daily**: Check Telegram alerts, review dashboards
 **Weekly**: Review logs, check disk usage
 **Monthly**: Verify backup restore (automated), BTRFS scrub
 **Quarterly**: Update Docker images, test failover

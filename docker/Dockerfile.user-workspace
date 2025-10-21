@@ -47,10 +47,6 @@ RUN apt-get update && apt-get install -y \
     konsole dolphin kate okular gwenview \
     # Display server
     xorg x11-xserver-utils \
-    # VNC server for remote access
-    tigervnc-standalone-server tigervnc-common \
-    # X2Go server components
-    x2goserver x2goserver-xsession \
     # Audio
     pulseaudio pulseaudio-utils pavucontrol \
     # Fonts
@@ -63,14 +59,33 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 #==============================================================================
-# REMOTE ACCESS SERVICES
+# REMOTE ACCESS SERVICES - NoMachine
 #==============================================================================
 
-# Note: Guacamole server runs as a separate shared service
-# This container only needs X2Go server for remote desktop access
+# Install NoMachine server
+# NoMachine provides superior performance compared to VNC/X2Go
+# Features:
+#  - Hardware-accelerated desktop streaming
+#  - Multi-platform client (Windows, Mac, Linux, iOS, Android)
+#  - Web-based HTML5 client (no installation needed)
+#  - Better compression and lower bandwidth usage
+#  - Native audio streaming
+#  - File transfer and printing support
+
+RUN wget -q https://download.nomachine.com/download/8.14/Linux/nomachine_8.14.2_1_amd64.deb -O /tmp/nomachine.deb && \
+    dpkg -i /tmp/nomachine.deb || apt-get install -f -y && \
+    rm /tmp/nomachine.deb && \
+    rm -rf /var/lib/apt/lists/*
+
+# Configure NoMachine
+RUN mkdir -p /usr/NX/etc && \
+    sed -i 's/#EnableClipboard both/EnableClipboard both/' /usr/NX/etc/server.cfg || true && \
+    sed -i 's/#EnableNetworkBroadcast 1/EnableNetworkBroadcast 0/' /usr/NX/etc/server.cfg || true
+
 # Users can connect via:
-#  - X2Go client (best performance, low bandwidth)
-#  - Guacamole web interface (browser-based, routes to X2Go)
+#  - NoMachine client (best performance, low bandwidth)
+#  - Web browser (HTML5 interface on port 4080)
+#  - SSH tunneling for secure remote access
 
 #==============================================================================
 # DEVELOPMENT TOOLS
@@ -267,12 +282,12 @@ RUN chmod +x /usr/local/bin/setup-user.sh
 #==============================================================================
 
 # Expose all necessary ports
-EXPOSE 22      # SSH (for X2Go and terminal access)
+EXPOSE 22      # SSH (for terminal access and SSH tunneling)
+EXPOSE 4000    # NoMachine server (NX protocol)
+EXPOSE 4080    # NoMachine web client (HTML5)
 EXPOSE 8080    # code-server
 EXPOSE 8888    # Jupyter
 EXPOSE 6006    # TensorBoard
-# Note: X2Go uses SSH (port 22) for both transport and session management
-# Guacamole (separate service) will connect to this container via SSH/X2Go
 
 # Set working directory
 WORKDIR /workspace

@@ -44,27 +44,28 @@ ln -sf /workspace ~/workspace-shared
 ln -sf /shared ~/shared-data
 EOF
 
-# Configure VNC for user
-echo "Configuring VNC server..."
-su - ${USER_NAME} << EOF
-mkdir -p ~/.vnc
-echo "${VNC_PASSWORD}" | vncpasswd -f > ~/.vnc/passwd
-chmod 600 ~/.vnc/passwd
+# Configure NoMachine for user
+echo "Configuring NoMachine server..."
+# NoMachine automatically detects available desktop environments (KDE Plasma)
+# Set user password for NoMachine authentication (same as system password)
+# NoMachine will use the existing user credentials
 
-cat > ~/.vnc/xstartup << 'XSTART'
-#!/bin/bash
-unset SESSION_MANAGER
-unset DBUS_SESSION_BUS_ADDRESS
-export XKL_XMODMAP_DISABLE=1
-export XDG_SESSION_TYPE=x11
-export GDK_BACKEND=x11
-
-# Start KDE Plasma
-startplasma-x11
-XSTART
-
-chmod +x ~/.vnc/xstartup
+# Create NoMachine user configuration directory
+su - ${USER_NAME} << 'EOF'
+mkdir -p ~/.nx
+mkdir -p ~/.nx/config
 EOF
+
+# Configure NoMachine server settings
+cat > /usr/NX/etc/server.cfg << 'NXCFG'
+# NoMachine Server Configuration
+EnableClipboard both
+EnableNetworkBroadcast 0
+AcceptedAuthenticationMethods NX-private-key password
+EnablePasswordDB 1
+EnableWebAccess 1
+WebPlayerPort 4080
+NXCFG
 
 # Configure code-server
 echo "Configuring code-server..."
@@ -178,24 +179,15 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 
-[program:vnc]
-command=/bin/bash -c 'su - ${USER_NAME} -c "vncserver :0 -geometry 1920x1080 -depth 24 -localhost no -fg"'
-autostart=true
-autorestart=true
-user=${USER_NAME}
-stdout_logfile=/dev/stdout
-stdout_logfile_maxbytes=0
-stderr_logfile=/dev/stderr
-stderr_logfile_maxbytes=0
-
-[program:novnc]
-command=/usr/share/novnc/utils/launch.sh --vnc localhost:5900 --listen 6080
+[program:nomachine]
+command=/usr/NX/bin/nxserver --startup
 autostart=true
 autorestart=true
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
+priority=10
 
 [program:code-server]
 command=/bin/bash -c 'su - ${USER_NAME} -c "code-server --bind-addr 0.0.0.0:8080"'
@@ -253,12 +245,12 @@ echo "=== ML Training Workspace Ready ==="
 echo "User: ${USER_NAME}"
 echo ""
 echo "Access Methods:"
-echo "  SSH:        ssh ${USER_NAME}@<server> -p <mapped-port>"
-echo "  VNC:        VNC Viewer -> <server>:<vnc-port>"
-echo "  noVNC:      http://<server>:<novnc-port>"
-echo "  VS Code:    http://<server>:<code-port>"
-echo "  Jupyter:    http://<server>:<jupyter-port>"
-echo "  Desktop:    Via VNC or X2Go"
+echo "  SSH:          ssh ${USER_NAME}@<server> -p <mapped-port>"
+echo "  NoMachine:    <server>:<nx-port> (use NoMachine client)"
+echo "  NoMachine Web: http://<server>:<web-port> (HTML5 browser interface)"
+echo "  VS Code:      http://<server>:<code-port>"
+echo "  Jupyter:      http://<server>:<jupyter-port>"
+echo "  Desktop:      Via NoMachine client or web browser"
 echo ""
 echo "Volumes:"
 echo "  Home:       /home/${USER_NAME}"

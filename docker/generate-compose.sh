@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Generate docker-compose.yml with proper architecture:
-# - Infrastructure services (shared): Traefik, Guacamole, Netdata, Prometheus, Grafana, etc.
-# - Per-user workspace containers (one container per user with full desktop)
+# - Infrastructure services (shared): Traefik, Netdata, Prometheus, Grafana, etc.
+# - Per-user workspace containers (one container per user with full desktop + NoMachine)
 # - Cloudflare Tunnel + Traefik routing
 # - Local network direct access support
 
@@ -30,8 +30,8 @@ USER_ARRAY=(${USERS})
 USER_COUNT=${#USER_ARRAY[@]}
 
 echo "Creating docker-compose.yml with:"
-echo "  - Infrastructure services (Traefik, Guacamole, monitoring)"
-echo "  - ${USER_COUNT} user workspace containers"
+echo "  - Infrastructure services (Traefik, monitoring, storage)"
+echo "  - ${USER_COUNT} user workspace containers (with NoMachine remote desktop)"
 echo ""
 
 ###############################################################################
@@ -54,7 +54,6 @@ networks:
 volumes:
   prometheus-data:
   grafana-data:
-  guacamole-postgres-data:
   portainer-data:
   dozzle-data:
 
@@ -89,47 +88,12 @@ services:
     networks:
       - ml-net
 
-  # Guacamole - Browser-based Remote Desktop
-  guacamole-db:
-    image: postgres:15
-    container_name: guacamole-db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: guacamole_db
-      POSTGRES_USER: guacamole_user
-      POSTGRES_PASSWORD: ${GUACAMOLE_DB_PASSWORD:-changeme}
-    volumes:
-      - guacamole-postgres-data:/var/lib/postgresql/data
-    networks:
-      - ml-net
-
-  guacd:
-    image: guacamole/guacd:latest
-    container_name: guacd
-    restart: unless-stopped
-    networks:
-      - ml-net
-
-  guacamole:
-    image: guacamole/guacamole:latest
-    container_name: guacamole
-    restart: unless-stopped
-    environment:
-      GUACD_HOSTNAME: guacd
-      POSTGRES_HOSTNAME: guacamole-db
-      POSTGRES_DATABASE: guacamole_db
-      POSTGRES_USER: guacamole_user
-      POSTGRES_PASSWORD: ${GUACAMOLE_DB_PASSWORD:-changeme}
-    depends_on:
-      - guacd
-      - guacamole-db
-    networks:
-      - ml-net
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.guacamole.rule=Host(`remote.${DOMAIN:-localhost}`)"
-      - "traefik.http.routers.guacamole.entrypoints=web"
-      - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
+  # NoMachine Remote Desktop
+  # Note: NoMachine servers run inside each user workspace container
+  # Each user can access their desktop via:
+  #  - NoMachine client (download from nomachine.com)
+  #  - Web browser at http://<username>-desktop.${DOMAIN}
+  # No shared infrastructure needed - simpler and better performance than Guacamole
 
   # Netdata - Real-time System Monitoring
   netdata:
@@ -304,7 +268,13 @@ for USERNAME in ${USER_ARRAY[@]}; do
     # SSH port: 2222 + user_index
     SSH_PORT=$((2222 + USER_INDEX))
 
-    echo "Adding user container: ${USERNAME} (UID: ${UID}, SSH: ${SSH_PORT})"
+    # NoMachine port: 4000 + user_index
+    NX_PORT=$((4000 + USER_INDEX))
+
+    # NoMachine web port: 4080 + user_index
+    NX_WEB_PORT=$((4080 + USER_INDEX))
+
+    echo "Adding user container: ${USERNAME} (UID: ${UID}, SSH: ${SSH_PORT}, NX: ${NX_PORT}, NX-Web: ${NX_WEB_PORT})"
 
     cat >> "${OUTPUT_FILE}" << EOF
   # User: ${USERNAME}
@@ -338,7 +308,9 @@ for USERNAME in ${USER_ARRAY[@]}; do
       # Docker socket for Docker-in-Docker
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - "${SSH_PORT}:22"  # SSH (for X2Go and terminal)
+      - "${SSH_PORT}:22"         # SSH (for terminal access)
+      - "${NX_PORT}:4000"        # NoMachine (NX protocol)
+      - "${NX_WEB_PORT}:4080"    # NoMachine Web (HTML5 client)
     deploy:
       resources:
         limits:
@@ -368,6 +340,11 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - "traefik.http.routers.${USERNAME}-tensorboard.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-tensorboard.service=${USERNAME}-tensorboard"
       - "traefik.http.services.${USERNAME}-tensorboard.loadbalancer.server.port=6006"
+      # NoMachine Web Interface
+      - "traefik.http.routers.${USERNAME}-desktop.rule=Host(\`${USERNAME}-desktop.\${DOMAIN:-localhost}\`)"
+      - "traefik.http.routers.${USERNAME}-desktop.entrypoints=web"
+      - "traefik.http.routers.${USERNAME}-desktop.service=${USERNAME}-desktop"
+      - "traefik.http.services.${USERNAME}-desktop.loadbalancer.server.port=4080"
 
 EOF
 
@@ -378,12 +355,11 @@ echo ""
 echo "✅ Generated: ${OUTPUT_FILE}"
 echo ""
 echo "Services created:"
-echo "  - Infrastructure: 12 services (Traefik, Guacamole, Netdata, Prometheus, Grafana, etc.)"
-echo "  - User workspaces: ${USER_COUNT} containers"
+echo "  - Infrastructure: 9 services (Traefik, Netdata, Prometheus, Grafana, etc.)"
+echo "  - User workspaces: ${USER_COUNT} containers (each with NoMachine remote desktop)"
 echo ""
 echo "Access URLs (via Cloudflare Tunnel or local network):"
 echo "  Infrastructure:"
-echo "    - Guacamole (Remote Desktop): http://remote.${DOMAIN}"
 echo "    - Netdata (Health): http://health.${DOMAIN}"
 echo "    - Grafana (Metrics): http://metrics.${DOMAIN}"
 echo "    - TensorBoard (Shared): http://tensorboard.${DOMAIN}"
@@ -395,11 +371,15 @@ echo "  Per-user services:"
 USER_INDEX=0
 for USERNAME in ${USER_ARRAY[@]}; do
     SSH_PORT=$((2222 + USER_INDEX))
+    NX_PORT=$((4000 + USER_INDEX))
+    NX_WEB_PORT=$((4080 + USER_INDEX))
     echo "    ${USERNAME}:"
+    echo "      - Desktop (NoMachine Web): http://${USERNAME}-desktop.${DOMAIN}"
+    echo "      - Desktop (NoMachine Client): SERVER_IP:${NX_PORT}"
     echo "      - VS Code: http://${USERNAME}-code.${DOMAIN}"
     echo "      - Jupyter: http://jupyter-${USERNAME}.${DOMAIN}"
     echo "      - TensorBoard: http://tensorboard-${USERNAME}.${DOMAIN}"
-    echo "      - SSH/X2Go: ssh ${USERNAME}@SERVER_IP -p ${SSH_PORT}"
+    echo "      - SSH: ssh ${USERNAME}@SERVER_IP -p ${SSH_PORT}"
     USER_INDEX=$((USER_INDEX + 1))
 done
 echo ""

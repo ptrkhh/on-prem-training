@@ -130,7 +130,7 @@ set -euo pipefail
 RESTIC_REPOSITORY="rclone:gdrive:backups/ml-train-server"
 RESTIC_PASSWORD_FILE="/root/.restic-password"
 MOUNT_POINT="/mnt/storage"
-ALERT_SCRIPT="/opt/scripts/monitoring/send-slack-alert.sh"
+ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 LOG_FILE="/var/log/restic-backup.log"
 
 export RESTIC_PASSWORD_FILE
@@ -206,7 +206,7 @@ set -euo pipefail
 RESTIC_REPOSITORY="rclone:gdrive:backups/ml-train-server"
 RESTIC_PASSWORD_FILE="/root/.restic-password"
 RESTORE_DIR="/tmp/restore-test"
-ALERT_SCRIPT="/opt/scripts/monitoring/send-slack-alert.sh"
+ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 
 export RESTIC_PASSWORD_FILE
 
