@@ -3,6 +3,11 @@
 # Copy this file to config.sh and customize for your setup:
 #   cp config.sh.example config.sh
 #   nano config.sh
+#
+# After editing, validate with: ./scripts/00-validate-config.sh
+#
+# NOTE: Storage configuration cannot be changed after running 01-setup-storage.sh
+#       without wiping disks! All other settings can be changed and scripts re-run.
 
 #==============================================================================
 # SYSTEM CONFIGURATION
@@ -38,20 +43,31 @@ USER_GROUPS="docker sudo"
 NVME_DEVICE=""
 
 # Size to reserve for OS (in GB), rest used for bcache
+# Example: 50 (smaller OS partition), 200 (larger system partition)
 OS_PARTITION_SIZE_GB=100
 
 # HDD devices for BTRFS (auto-detected if empty)
 # Example: "/dev/sdb /dev/sdc /dev/sdd /dev/sde"
 HDD_DEVICES=""
 
-# BTRFS RAID level
-# Options: raid10 (4+ disks), raid1 (2+ disks), raid0 (2+ disks, no redundancy), single (1+ disk, no redundancy)
+# BTRFS RAID level - Choose based on disk count:
+# - raid10: 4+ disks (best performance + redundancy, ~50% usable space)
+# - raid1:  2+ disks (mirroring, ~50% usable space)
+# - raid0:  2+ disks (fast but NO redundancy, ~100% usable space)
+# - single: 1+ disk  (no redundancy, 100% usable space)
 BTRFS_RAID_LEVEL="raid10"
 
 # Compression: zstd:1-15 (higher=better compression, more CPU), lzo, zlib, none
+# - zstd:1  = light compression (less CPU, less space savings)
+# - zstd:3  = balanced (default)
+# - zstd:15 = maximum compression (more CPU, more space savings)
 BTRFS_COMPRESSION="zstd:3"
 
-# bcache mode: writeback (fast, needs UPS), writethrough (safer), writearound, none (disable)
+# bcache mode:
+# - writeback:    Best performance, requires UPS
+# - writethrough: Safer, slightly slower
+# - writearound:  Write-around (rarely used)
+# - none:         Disable bcache (if no SSD/NVMe)
 BCACHE_MODE="writeback"
 
 #==============================================================================
@@ -120,9 +136,13 @@ DATA_CLEANUP_DAYS=90
 #==============================================================================
 
 # Telegram Bot Configuration (leave empty to skip)
-# 1. Create a bot via @BotFather on Telegram
-# 2. Get your chat ID by messaging @userinfobot or @RawDataBot
-# 3. Add both values below
+# How to set up:
+# 1. Open Telegram and search for @BotFather
+# 2. Send /newbot and follow the prompts to create your bot
+# 3. Copy the bot token (looks like: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz)
+# 4. Start a chat with your new bot (send any message)
+# 5. Message @userinfobot or @RawDataBot to get your chat ID
+# 6. Add both values below
 TELEGRAM_BOT_TOKEN=""
 TELEGRAM_CHAT_ID=""
 

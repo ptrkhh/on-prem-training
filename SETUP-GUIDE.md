@@ -232,17 +232,38 @@ All services run in Docker containers orchestrated by Docker Compose.
 
 ### Services Overview
 
-- **Traefik**: Reverse proxy (port routing)
-- **Guacamole**: Browser-based remote desktop
-- **Netdata**: System monitoring + SMART
-- **Prometheus**: Metrics backend
-- **Grafana**: Metrics visualization
-- **code-server**: VS Code in browser (per user)
-- **Jupyter**: Jupyter Lab (per user)
-- **TensorBoard**: Shared training visualization
-- **FileBrowser**: File management UI
+**Infrastructure Services (Shared):**
+- **Traefik**: Reverse proxy and hostname-based routing
+- **Netdata**: Real-time system monitoring + SMART disk health
+- **Prometheus + Grafana**: Metrics collection and visualization
+- **FileBrowser**: Web-based file management
 - **Dozzle**: Container log viewer
 - **Portainer**: Container management UI
+- **TensorBoard**: Shared training log visualization
+
+**Per-User Workspaces (One Container Each):**
+
+Each user gets ONE comprehensive container (e.g., `workspace-alice`) that functions like a full virtual machine:
+
+- **Full KDE Plasma Desktop** - Complete graphical environment
+- **Remote Access**:
+  - NoMachine server (NX protocol on ports 4000+, web access via Traefik)
+  - SSH server (ports 2222+)
+- **Development Tools**:
+  - VS Code (via code-server, accessed through Traefik)
+  - PyCharm Community Edition
+  - Jupyter Lab (accessed through Traefik)
+  - VSCodium
+- **Complete ML Stack**:
+  - PyTorch, TensorFlow, JAX (all with CUDA 12.4)
+  - NumPy, Pandas, Scikit-learn
+  - Hugging Face Transformers
+- **Multiple Languages**: Python 3.11+, Go, Rust, Julia, R, Node.js
+- **GUI Applications**: Firefox, Chromium, LibreOffice, GIMP, Inkscape
+- **Docker-in-Docker**: Run containers inside your workspace
+- **Persistent Storage**: Home directory mounted from /mnt/storage/homes/
+
+This architecture replaces the old multi-container approach (separate containers for code-server, jupyter, etc.) with a unified VM-like experience where all tools share state and users can run any GUI application.
 
 ### Deploy Services
 
@@ -268,6 +289,40 @@ sudo docker compose logs netdata
 ---
 
 ## Networking and Security
+
+### Network Architecture Overview
+
+The server uses a hybrid architecture providing both secure remote access and fast local access:
+
+```
+Remote Users                    Local Users
+     |                                |
+     | HTTPS                          | HTTP/HTTPS
+     v                                v
+Cloudflare Edge ──────────────> Local DNS/Hosts
+     |                                |
+     | Cloudflare Tunnel              | Direct
+     | (encrypted)                    v
+     v                          [Server IP:80]
+[Server: cloudflared] ───────────────┘
+     |
+     v
+[Traefik :80] ───> Routes by hostname
+     |
+     ├──> alice-code.domain.com  -> Alice's VS Code
+     ├──> jupyter-alice.domain.com -> Alice's Jupyter
+     └──> ... (all other services)
+```
+
+**Benefits:**
+- Remote users: Secure access via Cloudflare Tunnel (zero exposed ports)
+- Local users: Direct connection to server (full LAN speed, no internet roundtrip)
+- Single URL scheme: Same URLs work both remotely and locally
+- Automatic optimization: Local DNS/hosts file routes office users directly
+
+**How it works:**
+1. Remote users → DNS resolves to Cloudflare → Tunnel → Traefik → Services
+2. Local users → Local DNS → Traefik directly → Services (bypasses internet)
 
 ### Cloudflare Tunnel Setup
 
@@ -305,6 +360,33 @@ sudo docker compose logs netdata
    - Enable Google Workspace authentication
    - Enforce 2FA for all users
    - Create access policies for each service
+
+### Local Network Setup (Optional but Recommended)
+
+For users on the same local network, configure direct access to bypass the internet:
+
+**Option A: Local DNS (Best for multiple users)**
+```bash
+# On your router or DNS server, add wildcard A record:
+*.yourdomain.com -> 192.168.1.100  # Replace with your server's IP
+```
+
+**Option B: /etc/hosts File (Per-machine)**
+```bash
+# On each local machine, edit /etc/hosts (Linux/Mac)
+# or C:\Windows\System32\drivers\etc\hosts (Windows)
+192.168.1.100 alice-code.yourdomain.com
+192.168.1.100 jupyter-alice.yourdomain.com
+192.168.1.100 health.yourdomain.com
+192.168.1.100 metrics.yourdomain.com
+# ... add all subdomains you use
+```
+
+After configuration, local users get:
+- Full LAN speed (typically 1 Gbps vs 100-300 Mbps via Cloudflare)
+- Lower latency (< 1ms vs 20-100ms)
+- Works even if internet is down
+- Same URLs as remote users
 
 ### Firewall Configuration
 
@@ -627,6 +709,159 @@ Monitors:
 - [ ] GCS only stores serving/inference data
 - [ ] Training fully on-premise
 - [ ] $3650+/month savings achieved
+
+---
+
+## Scripts Reference
+
+All setup and maintenance scripts are in the `scripts/` directory.
+
+### Setup Scripts (Run in Order)
+
+1. **00-validate-config.sh** - Validate configuration before setup
+   ```bash
+   ./scripts/00-validate-config.sh
+   ```
+   Checks: Required settings, disk existence, RAID level compatibility, numeric values
+
+2. **01-setup-storage.sh** - Configure BTRFS RAID + bcache
+   ```bash
+   sudo ./scripts/01-setup-storage.sh
+   ```
+   Creates: BTRFS RAID10, bcache, directory structure, fstab entries
+   **REBOOT REQUIRED AFTER THIS STEP**
+
+3. **02-setup-users.sh** - Create user accounts
+   ```bash
+   sudo ./scripts/02-setup-users.sh
+   ```
+   Creates: Linux users, home directories, SSH keys, 2FA setup
+
+4. **03-setup-docker.sh** - Install Docker and NVIDIA runtime
+   ```bash
+   sudo ./scripts/03-setup-docker.sh
+   ```
+   Installs: Docker Engine, docker-compose, nvidia-container-toolkit
+
+5. **04-setup-cloudflare-tunnel.sh** - Configure Cloudflare Tunnel
+   ```bash
+   sudo ./scripts/04-setup-cloudflare-tunnel.sh
+   ```
+   Creates: Cloudflare Tunnel, DNS records, systemd service
+
+6. **05-setup-firewall.sh** - Configure firewall and security
+   ```bash
+   sudo ./scripts/05-setup-firewall.sh
+   ```
+   Configures: UFW firewall, fail2ban, automatic updates
+
+7. **06-setup-monitoring.sh** - Set up monitoring and alerts
+   ```bash
+   sudo ./scripts/06-setup-monitoring.sh
+   ```
+   Creates: Monitoring scripts, Telegram alerts, cron jobs
+
+8. **07-setup-backups.sh** - Configure backup system
+   ```bash
+   sudo ./scripts/07-setup-backups.sh
+   ```
+   Configures: Restic, BTRFS snapshots, backup schedules
+
+9. **09-setup-data-pipeline.sh** - Set up data sync pipeline
+   ```bash
+   sudo ./scripts/09-setup-data-pipeline.sh
+   ```
+   Configures: GCS sync, GDrive sync, daily schedules
+
+10. **10-run-tests.sh** - Validate complete system
+    ```bash
+    sudo ./scripts/10-run-tests.sh
+    ```
+    Tests: Storage, GPU, Docker, networking, services
+
+### Maintenance Scripts
+
+Located in `/opt/scripts/` after installation:
+
+**Backup Scripts** (`/opt/scripts/backup/`):
+- `create-snapshot.sh` - Create BTRFS snapshot (hourly/daily/weekly)
+- `restic-backup.sh` - Backup to GDrive via Restic
+- `verify-restore.sh` - Test backup restore (monthly)
+
+**Monitoring Scripts** (`/opt/scripts/monitoring/`):
+- `send-telegram-alert.sh` - Send Telegram notification
+- `check-disk-smart.sh` - Monitor disk health (daily)
+- `check-gpu-temperature.sh` - Monitor GPU temp (every 15 min)
+- `check-btrfs-health.sh` - Check filesystem health (every 6 hours)
+- `check-oom-kills.sh` - Detect OOM kills (every 30 min)
+- `check-user-quotas.sh` - Check disk usage (daily)
+
+**Data Pipeline Scripts** (`/opt/scripts/data/`):
+- `sync-customer-data.sh` - Daily GCS/GDrive sync
+- `manual-sync.sh` - Manual sync (no bandwidth limit)
+- `cleanup-old-data.sh` - Delete old data (90+ days)
+
+### Manual Operations
+
+**Create snapshot:**
+```bash
+sudo /opt/scripts/backup/create-snapshot.sh daily
+```
+
+**Run backup manually:**
+```bash
+sudo /opt/scripts/backup/restic-backup.sh
+```
+
+**List Restic snapshots:**
+```bash
+export RESTIC_PASSWORD_FILE=/root/.restic-password
+restic -r rclone:gdrive:backups/ml-train-server snapshots
+```
+
+**Restore from backup:**
+```bash
+export RESTIC_PASSWORD_FILE=/root/.restic-password
+restic -r rclone:gdrive:backups/ml-train-server restore latest --target /tmp/restore
+```
+
+**Manual data sync:**
+```bash
+sudo /opt/scripts/data/manual-sync.sh
+```
+
+**Send test alert:**
+```bash
+sudo /opt/scripts/monitoring/send-telegram-alert.sh info "Test message"
+```
+
+### Automated Schedules
+
+**BTRFS Snapshots:**
+- Hourly: Every hour (keep 24)
+- Daily: 2 AM (keep 7)
+- Weekly: Sunday 3 AM (keep 4)
+
+**Restic Backups:**
+- Daily: 6 AM
+- Restore verification: 1st of month, 8 AM
+
+**Monitoring Checks:**
+- SMART: Daily 3 AM
+- BTRFS health: Every 6 hours
+- GPU temperature: Every 15 minutes
+- OOM kills: Every 30 minutes
+- User quotas: Daily 6:25 AM
+
+**Data Pipeline:**
+- Customer data sync: Daily 4 AM
+
+### Log Files
+
+- Backup: `/var/log/restic-backup.log`
+- Data sync: `/var/log/customer-data-sync.log`
+- OOM kills: `/var/log/oom-kills.log`
+- System services: `journalctl -u <service-name>`
 
 ---
 
