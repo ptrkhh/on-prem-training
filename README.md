@@ -223,7 +223,7 @@ Remote Users                     Local Users
      ↓                                ↓
 Cloudflare Tunnel                Local DNS
      ↓                                ↓
-Traefik (:80) ←─────────────────────┘
+Traefik (:80) ←───────────────────────┘
      ↓
 Routes by hostname:
 ├── alice-desktop.domain.com → Alice's NoMachine Web
