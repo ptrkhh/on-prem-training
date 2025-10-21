@@ -201,7 +201,6 @@ echo "Users can access the server via:"
 echo "  - SSH: ssh <user>@<server-ip> -p 2222 (or 2223, 2224, etc.)"
 echo "  - NoMachine: Download client from https://nomachine.com/"
 echo "    - Connect to ports 4000 (alice), 4001 (bob), etc."
-echo "    - Or via web browser at https://<user>-desktop.${DOMAIN}"
 echo ""
 
 if [[ "$install_2fa" == "y" ]]; then

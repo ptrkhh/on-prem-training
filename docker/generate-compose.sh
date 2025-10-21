@@ -97,9 +97,7 @@ services:
 
   # NoMachine Remote Desktop
   # Note: NoMachine servers run inside each user workspace container
-  # Each user can access their desktop via:
-  #  - NoMachine client (download from nomachine.com)
-  #  - Web browser at http://<username>-desktop.${DOMAIN}
+  # Each user can access their desktop via NoMachine client (download from nomachine.com)
 
   # Netdata - Real-time System Monitoring
   netdata:
@@ -282,10 +280,7 @@ for USERNAME in ${USER_ARRAY[@]}; do
     # NoMachine port: NOMACHINE_BASE_PORT + user_index
     NX_PORT=$((NOMACHINE_BASE_PORT + USER_INDEX))
 
-    # NoMachine web port: NOMACHINE_WEB_BASE_PORT + user_index
-    NX_WEB_PORT=$((NOMACHINE_WEB_BASE_PORT + USER_INDEX))
-
-    echo "Adding user container: ${USERNAME} (UID: ${UID}, SSH: ${SSH_PORT}, NX: ${NX_PORT}, NX-Web: ${NX_WEB_PORT})"
+    echo "Adding user container: ${USERNAME} (UID: ${UID}, SSH: ${SSH_PORT}, NX: ${NX_PORT})"
 
     cat >> "${OUTPUT_FILE}" << EOF
   # User: ${USERNAME}
@@ -321,7 +316,6 @@ for USERNAME in ${USER_ARRAY[@]}; do
     ports:
       - "${SSH_PORT}:22"         # SSH (for terminal access)
       - "${NX_PORT}:4000"        # NoMachine (NX protocol)
-      - "${NX_WEB_PORT}:4080"    # NoMachine Web (HTML5 client)
     deploy:
       resources:
         limits:
@@ -351,11 +345,6 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - "traefik.http.routers.${USERNAME}-tensorboard.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-tensorboard.service=${USERNAME}-tensorboard"
       - "traefik.http.services.${USERNAME}-tensorboard.loadbalancer.server.port=6006"
-      # NoMachine Web Interface
-      - "traefik.http.routers.${USERNAME}-desktop.rule=Host(\`${USERNAME}-desktop.\${DOMAIN:-localhost}\`)"
-      - "traefik.http.routers.${USERNAME}-desktop.entrypoints=web"
-      - "traefik.http.routers.${USERNAME}-desktop.service=${USERNAME}-desktop"
-      - "traefik.http.services.${USERNAME}-desktop.loadbalancer.server.port=4080"
 
 EOF
 
@@ -384,9 +373,7 @@ USER_INDEX=0
 for USERNAME in ${USER_ARRAY[@]}; do
     SSH_PORT=$((2222 + USER_INDEX))
     NX_PORT=$((4000 + USER_INDEX))
-    NX_WEB_PORT=$((4080 + USER_INDEX))
     echo "    ${USERNAME}:"
-    echo "      - Desktop (NoMachine Web): http://${USERNAME}-desktop.${DOMAIN}"
     echo "      - Desktop (NoMachine Client): SERVER_IP:${NX_PORT}"
     echo "      - VS Code: http://${USERNAME}-code.${DOMAIN}"
     echo "      - Jupyter: http://${USERNAME}-jupyter.${DOMAIN}"

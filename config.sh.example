@@ -170,8 +170,8 @@ PORTAINER_PORT=9000
 FILEBROWSER_PORT=8081
 DOZZLE_PORT=8082
 TENSORBOARD_PORT=6006
-# NoMachine ports: 4000+ (NX protocol), 4080+ (web interface)
-# Ports are assigned per user: alice=4000/4080, bob=4001/4081, etc.
+# NoMachine ports: 4000+ (NX protocol)
+# Ports are assigned per user: alice=4000, bob=4001, etc.
 
 #==============================================================================
 # ADVANCED SETTINGS

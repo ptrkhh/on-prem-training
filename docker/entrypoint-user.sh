@@ -63,8 +63,6 @@ EnableClipboard both
 EnableNetworkBroadcast 0
 AcceptedAuthenticationMethods NX-private-key password
 EnablePasswordDB 1
-EnableWebAccess 1
-WebPlayerPort 4080
 NXCFG
 
 # Configure code-server
@@ -247,10 +245,9 @@ echo ""
 echo "Access Methods:"
 echo "  SSH:          ssh ${USER_NAME}@<server> -p <mapped-port>"
 echo "  NoMachine:    <server>:<nx-port> (use NoMachine client)"
-echo "  NoMachine Web: http://<server>:<web-port> (HTML5 browser interface)"
 echo "  VS Code:      http://<server>:<code-port>"
 echo "  Jupyter:      http://<server>:<jupyter-port>"
-echo "  Desktop:      Via NoMachine client or web browser"
+echo "  Desktop:      Via NoMachine client"
 echo ""
 echo "Volumes:"
 echo "  Home:       /home/${USER_NAME}"

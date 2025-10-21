@@ -36,7 +36,7 @@ Container Runtime: Docker + nvidia-container-toolkit
 ## Core Services
 
 Traefik: Reverse proxy + routing (no rate limiting - handled by Cloudflare)
-NoMachine: Per-user remote desktop access (NX protocol + web browser access)
+NoMachine: Per-user remote desktop access (NX protocol)
 Netdata: health.mydomain.com (includes disk SMART monitoring)
 Prometheus: prometheus.mydomain.com (scrapes nvidia-smi exporter, node exporter)
 Grafana: grafana.mydomain.com (dashboards for GPU, disk, network, container resources)

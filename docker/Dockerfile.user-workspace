@@ -83,7 +83,6 @@ RUN mkdir -p /usr/NX/etc && \
 
 # Users can connect via:
 #  - NoMachine client (best performance, low bandwidth)
-#  - Web browser (HTML5 interface on port 4080)
 #  - SSH tunneling for secure remote access
 
 #==============================================================================
@@ -280,7 +279,6 @@ RUN chmod +x /usr/local/bin/setup-user.sh
 # Expose all necessary ports
 EXPOSE 22      # SSH (for terminal access and SSH tunneling)
 EXPOSE 4000    # NoMachine server (NX protocol)
-EXPOSE 4080    # NoMachine web client (HTML5)
 EXPOSE 8080    # code-server
 EXPOSE 8888    # Jupyter
 EXPOSE 6006    # TensorBoard
