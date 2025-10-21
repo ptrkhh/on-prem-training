@@ -150,9 +150,6 @@ fi
 # Check if total user quota exceeds expected storage
 TOTAL_USER_QUOTA_GB=$((USER_QUOTA_GB * $(get_user_count)))
 
-# Estimate total BTRFS capacity (conservative: assume 40TB for typical 4x20TB RAID10 setup)
-ESTIMATED_CAPACITY_GB=40000
-
 # Check if user data + snapshots (50% overhead) exceeds safe limit (80% of disk)
 TOTAL_WITH_SNAPSHOTS=$(awk "BEGIN {printf \"%.0f\", ${TOTAL_USER_QUOTA_GB} * 1.5}")  # User data + 50% snapshots
 SAFE_LIMIT_GB=$((ESTIMATED_CAPACITY_GB * 80 / 100))  # 80% of 40TB in GB

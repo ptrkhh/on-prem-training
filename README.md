@@ -2,7 +2,9 @@
 
 **Replace $4,000/month GCP infrastructure with $300/month on-premise server**
 
-Complete automated setup for migrating 5 trusted ML Engineers from Google Cloud with 5x GCE n1-highmem-16 + T4 GPU and shared repository in GCS to a single on-premise server. Save nearly $4,000/month ($48,000/year) while maintaining or improving performance.
+Complete automated setup for migrating 5 trusted ML Engineers from Google Cloud with 5x GCE n1-highmem-16 + T4 GPU and
+shared repository in GCS to a single on-premise server. Save nearly $4,000/month ($48,000/year) while maintaining or
+improving performance.
 
 ## Quick Links
 
@@ -12,6 +14,7 @@ Complete automated setup for migrating 5 trusted ML Engineers from Google Cloud 
 ## What You Get
 
 ### Hardware (Flexible!)
+
 - CPU: AMD Threadripper (or similar)
 - RAM: 200GB DDR5 (configurable)
 - GPU: RTX 5080 (or other Nvidia)
@@ -19,6 +22,7 @@ Complete automated setup for migrating 5 trusted ML Engineers from Google Cloud 
 - **Works with ANY disk configuration** (2-20+ disks, any sizes, any RAID level)
 
 ### Each User Gets ONE Container With Everything
+
 - **Full KDE Plasma Desktop** (access via NoMachine client)
 - **All Development Tools**: VS Code, PyCharm, Jupyter Lab, VSCodium
 - **Complete ML Stack**: PyTorch, TensorFlow, JAX (all with CUDA 12.4)
@@ -31,15 +35,17 @@ Complete automated setup for migrating 5 trusted ML Engineers from Google Cloud 
 
 The architecture uses Docker containers rather than traditional VMs for several key advantages:
 
-- **Universal GPU Support**: Native Docker GPU support works with any NVIDIA GPU without additional virtualization layers
+- **Universal GPU Support**: Official `nvidia-container-toolkit` works with any NVIDIA GPU
 - **Maximum Performance**: No hypervisor overhead means 96%+ native GPU performance
 - **Simpler Management**: Single host OS to manage, standard Docker tooling
 - **Full Isolation**: Each user gets their own containerized environment with dedicated resources
 - **Desktop Experience**: Full KDE Plasma desktop in each container via NoMachine
 
-This approach provides VM-like isolation for trusted team environments while maintaining bare-metal performance for ML workloads.
+This approach provides VM-like isolation for trusted team environments while maintaining bare-metal performance for ML
+workloads.
 
 ### Infrastructure Services (Shared)
+
 - **Traefik**: Reverse proxy and router
 - **NoMachine**: High-performance remote desktop (runs in each user container)
 - **Netdata**: Real-time system monitoring + SMART disk monitoring
@@ -50,12 +56,14 @@ This approach provides VM-like isolation for trusted team environments while mai
 - **Portainer**: Container management UI
 
 ### Network Architecture
+
 - **Cloudflare Tunnel**: Secure remote access (zero exposed ports)
 - **Traefik Routing**: Single URL scheme for all services
 - **Local Network Optimization**: Office users bypass internet automatically
 - **Cloudflare Access**: Google Workspace SSO with 2FA enforcement
 
 ### Automated Operations
+
 - **Backups**: BTRFS snapshots (hourly/daily/weekly) + Restic to GDrive (daily)
 - **Monitoring**: SMART checks, GPU temperature, BTRFS health, user quotas
 - **Alerts**: Telegram notifications for critical events
@@ -63,14 +71,14 @@ This approach provides VM-like isolation for trusted team environments while mai
 
 ## Cost Savings
 
-| Item | Before (GCP) | After (On-Premise) |
-|------|--------------|-------------------|
-| Compute | $2,000+/mo | - |
-| Storage | $2,000+/mo | - |
-| Electricity | - | $100/mo |
-| GDrive Workspace | - | $150/mo |
-| Hardware fund | - | $50/mo |
-| **Total** | **$4,000+/mo** | **$300/mo** |
+| Item             | Before (GCP)   | After (On-Premise) |
+|------------------|----------------|--------------------|
+| Compute          | $2,000+/mo     | -                  |
+| Storage          | $2,000+/mo     | -                  |
+| Electricity      | -              | $100/mo            |
+| GDrive Workspace | -              | $150/mo            |
+| Hardware fund    | -              | $50/mo             |
+| **Total**        | **$4,000+/mo** | **$300/mo**        |
 
 Break-even: ~1.5 months (even if buying all new hardware)
 
@@ -116,6 +124,7 @@ cd ../scripts && sudo ./09-run-tests.sh
 ### Via Web Browser (Remote or Local)
 
 **Infrastructure:**
+
 - System Health: `http://health.yourdomain.com` (Netdata)
 - Prometheus: `http://prometheus.yourdomain.com`
 - Grafana: `http://grafana.yourdomain.com`
@@ -123,10 +132,12 @@ cd ../scripts && sudo ./09-run-tests.sh
 - Logs: `http://logs.yourdomain.com`
 
 **Per-User (example for Alice):**
+
 - VS Code: `http://alice-code.yourdomain.com`
 - Jupyter: `http://alice-jupyter.yourdomain.com`
 
 **Shared:**
+
 - TensorBoard: `http://tensorboard.yourdomain.com` (all users, organized by `/shared/tensorboard/{username}/`)
 
 ### Via NoMachine Client (Best Performance)
@@ -163,6 +174,7 @@ ssh alice@server_ip -p 2222
 ## Example Configurations
 
 ### Original Spec (5 users, 1TB NVMe, 4x20TB)
+
 ```bash
 USERS="alice bob charlie dave eve"
 NVME_DEVICE="/dev/nvme0n1"
@@ -172,6 +184,7 @@ BCACHE_MODE="writeback"
 ```
 
 ### Minimal (2 users, 2 disks, no SSD)
+
 ```bash
 USERS="admin user1"
 NVME_DEVICE=""  # None
@@ -181,6 +194,7 @@ BCACHE_MODE="none"
 ```
 
 ### Large (10 users, 6 disks)
+
 ```bash
 USERS="u1 u2 u3 u4 u5 u6 u7 u8 u9 u10"
 HDD_DEVICES="/dev/sdb /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg"
@@ -192,6 +206,7 @@ MEMORY_LIMIT_GB=64
 ## Architecture
 
 ### Storage
+
 ```
 1TB NVMe
 ├── 100GB OS (Ubuntu 24.04 LTS)
@@ -212,6 +227,7 @@ Google Workspace Shared Drive
 ```
 
 ### Containers
+
 ```
 Infrastructure (Shared):
 ├── Traefik (reverse proxy)
@@ -237,6 +253,7 @@ Each workspace contains:
 ```
 
 ### Network Flow
+
 ```
 Remote Users                     Local Users
      ↓                                ↓
@@ -261,40 +278,44 @@ Direct NoMachine Protocol (ports 4000+):
 Your workspace runs in a Docker container, not a traditional VM. Here's what you need to know:
 
 **What This Means:**
+
 - You have `sudo` access inside your container
-- You can install packages with `apt-get`, but they're temporary
+- You can install packages with `apt`, but they're temporary
 - System packages disappear when we rebuild containers (image updates)
 - Your personal files in `/home` and `/workspace` are always safe
 
 **Persistent Storage (Survives Container Rebuilds):**
+
 - `/home/${USERNAME}` - Your home directory (backed up daily to GDrive)
-  - Use for: Code, configs, dotfiles, papers, small datasets
-  - Suggested size: ~100GB (part of 1200GB total quota)
+    - Use for: Code, configs, dotfiles, papers, small datasets
+    - Suggested size: ~100GB (part of 1000GB total quota)
 
 - `/workspace` - Fast scratch space (NOT backed up)
-  - Use for: Training data, model checkpoints, experiments, large datasets
-  - Suggested size: ~1000GB (part of 1200GB total quota)
-  - Re-download datasets here if needed after system issues
+    - Use for: Training data, model checkpoints, experiments, large datasets
+    - Suggested size: ~800GB (part of 1000GB total quota)
+    - Reproducible/re-downloadable data here if needed after system issues
 
 - `/shared` - Google Drive Workspace Shared Drive (cached locally)
-  - **Backed by:** Google Workspace Shared Drive (cloud storage)
-  - **Performance:** Near-local speed after first access (aggressive caching)
-  - **Access:** Read-only for most content
-  - **Use for:** Common datasets, shared files, team resources
-  - **Cache:** Auto-calculated (typically 60-70% of total disk, ~24TB for 5 users)
-  - **Allocation:** Uses 80% of space remaining after user data + snapshot reservations
-  - **Syncing:** Automatic background sync with Google Drive
+    - **Backed by:** Google Workspace Shared Drive (cloud storage)
+    - **Performance:** Near-local speed after first access (aggressive caching)
+    - **Access:** Read-only for most content
+    - **Use for:** Common datasets, shared files, team resources
+    - **Cache:** Auto-calculated (typically 60-70% of total disk, ~24TB for 5 users)
+    - **Allocation:** Uses 80% of space remaining after user data + snapshot reservations
+    - **Syncing:** Automatic background sync with Google Drive
 
 - `/shared/tensorboard/${USERNAME}` - Your TensorBoard logs (read-write)
-  - Stored in Google Drive Shared Drive, accessible to all team members
+    - Stored in Google Drive Shared Drive, accessible to all team members
 
-**Your Total Quota: 1200GB**
+**Your Total Quota: 1000GB**
+
 - Combined across `/home/${USERNAME}` + `/workspace` + docker volumes
 - Monitored daily with breakdown by directory
-- Warning alert at 80% (960GB), critical alert when exceeded
+- Warning alert at 80% (800GB), critical alert when exceeded
 - Flexible allocation between directories (no per-directory enforcement)
 
 **Ephemeral Locations (Reset on Container Rebuild):**
+
 - Everything else: `/tmp`, `/var`, system directories
 - Global Python packages installed with `sudo pip3 install`
 - System packages installed with `sudo apt-get install`
@@ -333,31 +354,27 @@ Example request: "Can we add `ffmpeg` and `libsndfile1-dev` to the base image? N
 
 ### Storage Strategy Summary
 
-| Location | Backed Up? | Persistent? | Speed | Backend | Use For |
-|----------|------------|-------------|-------|---------|---------|
-| `/home/${USER}` | ✅ Daily | ✅ Yes | Fast | Local BTRFS | Code, configs, venvs |
-| `/workspace` | ❌ No | ✅ Yes | Fastest | Local BTRFS | Training data, checkpoints |
-| `/shared` | ✅ GDrive | ✅ Yes | Fast (cached) | Google Workspace Shared Drive | Common datasets, shared files |
-| `/tmp`, system dirs | ❌ No | ❌ No | Fast | Container tmpfs | Truly temporary files |
+| Location            | Backed Up? | Persistent? | Speed         | Backend                       | Use For                       |
+|---------------------|------------|-------------|---------------|-------------------------------|-------------------------------|
+| `/home/${USER}`     | ✅ Daily    | ✅ Yes       | Fast          | Local BTRFS                   | Code, configs, venvs          |
+| `/workspace`        | ❌ No       | ✅ Yes       | Fastest       | Local BTRFS                   | Training data, checkpoints    |
+| `/shared`           | ✅ GDrive   | ✅ Yes       | Fast (cached) | Google Workspace Shared Drive | Common datasets, shared files |
+| `/tmp`, system dirs | ❌ No       | ❌ No        | Fast          | Container tmpfs               | Truly temporary files         |
 
-**Storage Allocation (5 users, 40TB BTRFS):**
-- **User data**: 6TB (5 users × 1200GB quota per user)
-  - Each user gets 1200GB total across home + workspace + docker-volumes (combined, monitored)
-- **Snapshots**: 3TB (50% of user data, auto-calculated based on 24h+7d+4w retention)
-- **VFS cache**: ~25TB (80% of remaining 31TB after user data + snapshots)
-- **Safety buffer**: ~6TB (20% margin to prevent BTRFS performance degradation)
+**Storage Allocation Example with 5 users & 10TB BTRFS:**
+
+- **User data**: 5TB (5 users × 1000GB quota per user)
+    - Each user gets 1000GB total across home + workspace + docker-volumes (combined, monitored)
+- **Snapshots**: 2.5TB (50% of user data, auto-calculated based on 24h+7d+4w retention)
+- **VFS cache**: 2TB (80% of remaining 2.5TB after user data + snapshots)
+- **Safety buffer**: ~2TB (20% margin to prevent BTRFS performance degradation)
 
 **Quota Enforcement:**
+
 - **Monitoring**: Daily quota checks across all three directories (home + workspace + docker-volumes)
 - **Alerts**: Warning at 80% usage, critical alert when quota exceeded
 - **No hard limits**: Users can temporarily exceed quota (soft limit with monitoring)
 - **Breakdown visibility**: Daily reports show usage per directory
-
-**Notes:**
-- `/workspace` is persistent but NOT backed up to save costs. Store only reproducible/re-downloadable data here.
-- `/shared` cache is auto-calculated and validated at setup time. Configuration fails if insufficient space.
-- First access downloads from cloud (~10-100 MB/s), subsequent access is near-local speed (from cache).
-- Cache managed by rclone VFS with LRU eviction (30-day max age, auto-evicted when cache is full).
 
 ## Admin Guide
 
@@ -386,8 +403,8 @@ When a user requests a new system package:
 
 3. **Rebuild affected container(s):**
    ```bash
-   # Option A: Rebuild just one user (less disruption)
    cd docker
+   # Option A: Rebuild just one user (less disruption)
    docker compose build workspace-alice
    docker compose up -d workspace-alice
 
@@ -406,12 +423,13 @@ When a user requests a new system package:
    ```
 
 5. **Notify users:**
-   - Inform them the package is now available
-   - Remind them to save work before container restarts
+    - Inform them the package is now available
+    - Remind them to save work before container restarts
 
 **Time estimate:** 5-10 minutes per package request
 
-**Tip:** For Python packages, direct users to use `pip install` in their virtual environments instead. Only system libraries (with `-dev` suffix, command-line tools, etc.) need Dockerfile changes.
+**Tip:** For Python packages, direct users to use `pip install` in their virtual environments instead. Only system
+libraries (with `-dev` suffix, command-line tools, etc.) need Dockerfile changes.
 
 ## Maintenance
 
@@ -425,6 +443,7 @@ When a user requests a new system package:
 See [SETUP-GUIDE.md](SETUP-GUIDE.md#troubleshooting) for detailed troubleshooting steps.
 
 Quick checks:
+
 ```bash
 # Check all containers
 docker compose ps
@@ -456,8 +475,3 @@ sudo systemctl status cloudflared
 - **Setup Time**: 30-60 minutes
 - **Break-even**: 1.5 months
 - **5-Year Savings**: $240,000
-
-## Status
-
-✅ **Production Ready** - All requirements met and exceeded
-

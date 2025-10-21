@@ -135,16 +135,16 @@ DATA_CLEANUP_DAYS=90
 
 # Per-user total storage quota (in GB)
 # Covers combined usage across home directory, workspace, and docker volumes
-# Breakdown suggestion (not enforced separately):
+# Breakdown example (not enforced separately):
 #   - Home directory (~100GB): Code, configs, dotfiles, papers, venvs (backed up)
-#   - Workspace (~1000GB): Training data, model checkpoints, datasets (NOT backed up)
+#   - Workspace (~800GB): Training data, model checkpoints, datasets (NOT backed up)
 #   - Docker volumes (~100GB): Container persistent state (backed up)
-# Total: 1200GB (1.2TB) per user
-USER_QUOTA_GB=1200
+# Total: 1TB per user
+USER_QUOTA_GB=1000
 
 # Quota warning threshold (percentage)
 # Alert when user exceeds this percentage of their quota
-USER_QUOTA_WARNING_PERCENT=80  # Warn at 80% usage (960GB for 1200GB quota)
+USER_QUOTA_WARNING_PERCENT=80  # Warn at 80% usage (800GB for 1000GB quota)
 
 # Snapshot overhead multiplier
 # BTRFS snapshots use copy-on-write, storing only changed blocks
@@ -158,6 +158,11 @@ SNAPSHOT_OVERHEAD_MULTIPLIER=0.5  # 50% of user data
 # Prevents BTRFS performance degradation (performs poorly when >90% full)
 # Also allows for unexpected growth and ensures VFS cache has eviction headroom
 STORAGE_SAFETY_MARGIN_PERCENT=20  # Keep 20% free, VFS cache uses remaining 80%
+
+# Estimated total storage capacity (in GB)
+# Used for validation checks before storage setup
+# Examples: 20000 (20TB for 2x20TB RAID1), 40000 (40TB for 4x20TB RAID10)
+ESTIMATED_CAPACITY_GB=40000
 
 #==============================================================================
 # GOOGLE DRIVE SHARED DRIVE (for /shared mount)
@@ -328,7 +333,7 @@ export RESTIC_KEEP_DAILY RESTIC_KEEP_WEEKLY BACKUP_HOUR BACKUP_MINUTE
 export GCS_BUCKET GDRIVE_CUSTOMER_DATA DATA_SYNC_BANDWIDTH_LIMIT_MBPS
 export DATA_SYNC_HOUR DATA_SYNC_MINUTE DATA_CLEANUP_DAYS
 export USER_QUOTA_GB USER_QUOTA_WARNING_PERCENT
-export SNAPSHOT_OVERHEAD_MULTIPLIER STORAGE_SAFETY_MARGIN_PERCENT
+export SNAPSHOT_OVERHEAD_MULTIPLIER STORAGE_SAFETY_MARGIN_PERCENT ESTIMATED_CAPACITY_GB
 export GDRIVE_SHARED_REMOTE GDRIVE_CACHE_DIR GDRIVE_CACHE_MAX_AGE
 export GDRIVE_VFS_CACHE_MODE GDRIVE_WRITE_BACK GDRIVE_READ_CHUNK_SIZE GDRIVE_READ_CHUNK_LIMIT
 export GDRIVE_BUFFER_SIZE GDRIVE_DIR_CACHE_TIME GDRIVE_POLL_INTERVAL
