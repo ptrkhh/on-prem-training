@@ -1,6 +1,6 @@
 # ML Training Server
 
-**Replace $4,000/month GCP infrastructure with $350/month on-premise server**
+**Replace $4,000/month GCP infrastructure with $300/month on-premise server**
 
 Complete automated setup for migrating 5 trusted ML Engineers from Google Cloud with 5x GCE n1-highmem-16 + T4 GPU and shared repository in GCS to a single on-premise server. Save nearly $4,000/month ($48,000/year) while maintaining or improving performance.
 
