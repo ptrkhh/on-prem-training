@@ -112,7 +112,6 @@ cd ../scripts && sudo ./09-run-tests.sh
 - Logs: `http://logs.yourdomain.com`
 
 **Per-User (example for Alice):**
-- Desktop (NoMachine Web): `http://alice-desktop.yourdomain.com`
 - VS Code: `http://alice-code.yourdomain.com`
 - Jupyter: `http://alice-jupyter.yourdomain.com`
 
@@ -226,7 +225,6 @@ Cloudflare Tunnel                Local DNS
 Traefik (:80) ←───────────────────────┘
      ↓
 Routes by hostname:
-├── alice-desktop.domain.com → Alice's NoMachine Web
 ├── alice-code.domain.com → Alice's VS Code
 ├── alice-jupyter.domain.com → Alice's Jupyter
 ├── alice-tensorboard.domain.com → Alice's TensorBoard
