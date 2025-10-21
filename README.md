@@ -2,7 +2,7 @@
 
 **Replace $4,000/month GCP infrastructure with $350/month on-premise server**
 
-Complete automated setup for migrating 5 trusted ML users from Google Cloud (GCE n1-highmem-16 + T4 GPU + 50TB GCS) to a single on-premise server. Save $3,650/month ($43,800/year) while maintaining or improving performance.
+Complete automated setup for migrating 5 trusted ML Engineers from Google Cloud with 5x GCE n1-highmem-16 + T4 GPU and shared repository in GCS to a single on-premise server. Save nearly $4,000/month ($48,000/year) while maintaining or improving performance.
 
 ## Quick Links
 
@@ -14,12 +14,12 @@ Complete automated setup for migrating 5 trusted ML users from Google Cloud (GCE
 ### Hardware (Flexible!)
 - CPU: AMD Threadripper (or similar)
 - RAM: 200GB DDR5 (configurable)
-- GPU: RTX 5080 (replaces T4, much faster)
+- GPU: RTX 5080 (or other Nvidia)
 - Storage: 1TB NVMe + 4x 20TB HDD in BTRFS RAID10
 - **Works with ANY disk configuration** (2-20+ disks, any sizes, any RAID level)
 
 ### Each User Gets ONE Container With Everything
-- **Full KDE Plasma Desktop** (access via NoMachine client or web browser)
+- **Full KDE Plasma Desktop** (access via NoMachine client)
 - **All Development Tools**: VS Code, PyCharm, Jupyter Lab, VSCodium
 - **Complete ML Stack**: PyTorch, TensorFlow, JAX (all with CUDA 12.4)
 - **Multiple Languages**: Python 3.11+, Go, Rust, Julia, R, Node.js
@@ -62,7 +62,7 @@ Complete automated setup for migrating 5 trusted ML users from Google Cloud (GCE
 
 **Savings: $3,650/month ($43,800/year)**
 
-Break-even: ~1.5 months (even if buying all new hardware at $5,000)
+Break-even: ~1.5 months (even if buying all new hardware)
 
 ## Quick Start (30-60 minutes)
 
@@ -89,7 +89,7 @@ sudo ./scripts/04-setup-cloudflare-tunnel.sh
 sudo ./scripts/05-setup-firewall.sh
 sudo ./scripts/06-setup-monitoring.sh
 sudo ./scripts/07-setup-backups.sh
-sudo ./scripts/09-setup-data-pipeline.sh
+sudo ./scripts/08-setup-data-pipeline.sh
 
 # 6. Build and start containers
 cd docker
@@ -97,7 +97,7 @@ docker compose build
 docker compose up -d
 
 # 7. Run tests
-cd ../scripts && sudo ./10-run-tests.sh
+cd ../scripts && sudo ./09-run-tests.sh
 ```
 
 ## Access Your Services
