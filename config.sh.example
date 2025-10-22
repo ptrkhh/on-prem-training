@@ -74,16 +74,27 @@ BCACHE_MODE="writeback"
 # RESOURCE LIMITS (PER USER)
 #==============================================================================
 
+# Minimum RAM guaranteed to each user container (Docker memory reservation)
 MEMORY_GUARANTEE_GB=32
+
+# Maximum RAM each user container can use (Docker memory limit)
+# Container will be OOM-killed if it exceeds this
 MEMORY_LIMIT_GB=100
+
+# Swap space per user (helps prevent OOM kills during memory spikes)
 SWAP_SIZE_GB=50
 
 #==============================================================================
 # DOCKER CONFIGURATION
 #==============================================================================
 
+# Docker storage driver (btrfs for BTRFS filesystem, overlay2 for ext4/xfs)
 DOCKER_STORAGE_DRIVER="btrfs"
+
+# Maximum size of each container log file before rotation
 DOCKER_LOG_MAX_SIZE="10m"
+
+# Number of rotated log files to keep per container
 DOCKER_LOG_MAX_FILES="3"
 
 #==============================================================================
@@ -105,28 +116,47 @@ LOCAL_NETWORK_CIDR=""
 # BACKUP CONFIGURATION
 #==============================================================================
 
+# Restic backup destination (rclone remote:path format)
+# Example: "gdrive:backups/ml-train-server" or "s3:my-bucket/backups"
+# Run 'rclone config' to create remotes first
 BACKUP_REMOTE="gdrive:backups/ml-train-server"
+
+# Upload bandwidth limit for backups
 BACKUP_BANDWIDTH_LIMIT_MBPS=100
 
-SNAPSHOT_HOURLY_KEEP=24
-SNAPSHOT_DAILY_KEEP=7
-SNAPSHOT_WEEKLY_KEEP=4
+# BTRFS snapshot retention policy
+# Set to 0 to disable that tier (e.g., SNAPSHOT_DAILY_KEEP=0 for no daily snapshots)
+SNAPSHOT_KEEP_HOURLY=24
+SNAPSHOT_KEEP_DAILY=7
+SNAPSHOT_KEEP_WEEKLY=4
 
+# Restic backup retention policy (how many backups to keep)
 RESTIC_KEEP_DAILY=7
 RESTIC_KEEP_WEEKLY=52
 
+# Daily backup schedule (24-hour format)
 BACKUP_HOUR=6
 BACKUP_MINUTE=0
 
 #==============================================================================
-# DATA PIPELINE
+# DATA PIPELINE (Optional - for GCS to GDrive migration)
 #==============================================================================
 
+# Source: Google Cloud Storage bucket (rclone remote:bucket format)
+# Leave empty to skip GCS→GDrive sync. Run 'rclone config' to create remotes.
 GCS_BUCKET="gcs:customer-daily-bucket"
+
+# Destination: Google Drive folder (rclone remote:path format)
 GDRIVE_CUSTOMER_DATA="gdrive:customer-daily"
+
+# Download/upload bandwidth limit for data sync
 DATA_SYNC_BANDWIDTH_LIMIT_MBPS=100
+
+# Daily sync schedule (24-hour format)
 DATA_SYNC_HOUR=4
 DATA_SYNC_MINUTE=0
+
+# Delete files from GCS after this many days (0 = never delete)
 DATA_CLEANUP_DAYS=90
 
 #==============================================================================
@@ -146,13 +176,6 @@ USER_QUOTA_GB=1000
 # Alert when user exceeds this percentage of their quota
 USER_QUOTA_WARNING_PERCENT=80  # Warn at 80% usage (800GB for 1000GB quota)
 
-# Snapshot overhead multiplier
-# BTRFS snapshots use copy-on-write, storing only changed blocks
-# With retention policy of 24 hourly + 7 daily + 4 weekly snapshots,
-# snapshots typically hold 30-50% of changed data over time
-# Formula: snapshot_overhead = total_user_data × SNAPSHOT_OVERHEAD_MULTIPLIER
-SNAPSHOT_OVERHEAD_MULTIPLIER=0.5  # 50% of user data
-
 # Storage safety margin (percentage)
 # This percentage of free space (after user data + snapshots) is kept as buffer
 # Prevents BTRFS performance degradation (performs poorly when >90% full)
@@ -169,7 +192,8 @@ ESTIMATED_CAPACITY_GB=40000
 #==============================================================================
 
 # Remote name for Google Workspace Shared Drive
-# This will be created during setup with: rclone config
+# Mounted at /shared with read-write access for all users to share files
+# Create this remote during setup with: rclone config
 GDRIVE_SHARED_REMOTE="gdrive-shared"
 
 # Local cache directory for Google Drive files
@@ -233,14 +257,16 @@ GDRIVE_LOG_LEVEL="INFO"  # DEBUG, INFO, NOTICE, ERROR
 TELEGRAM_BOT_TOKEN=""
 TELEGRAM_CHAT_ID=""
 
-# healthchecks.io URLs (leave empty to skip)
+# healthchecks.io URLs for dead man's switch monitoring (leave empty to skip)
+# Create checks at https://healthchecks.io and paste URLs here
 HEALTHCHECK_BACKUP_URL=""
 HEALTHCHECK_DATA_SYNC_URL=""
 
-GPU_TEMP_THRESHOLD=80
-DISK_TEMP_THRESHOLD=50
-FS_USAGE_THRESHOLD=90
-SMART_MONITORING=true
+# Alert thresholds
+GPU_TEMP_THRESHOLD=80          # GPU temperature in Celsius
+DISK_TEMP_THRESHOLD=50         # HDD temperature in Celsius
+FS_USAGE_THRESHOLD=90          # Filesystem usage percentage
+SMART_MONITORING=true          # Enable SMART disk health monitoring
 
 #==============================================================================
 # SERVICE PORTS
@@ -264,11 +290,19 @@ TENSORBOARD_PORT=6006
 # ADVANCED SETTINGS
 #==============================================================================
 
+# Enable auditd for security logging (logs all system calls)
 ENABLE_AUDITD=false
+
+# Enable UPS monitoring via apcupsd or nut (requires UPS hardware)
 ENABLE_UPS_MONITORING=false
+
+# Enable NVIDIA GPU timeslicing (share single GPU across multiple containers)
 ENABLE_GPU_TIMESLICING=false
+
+# Enable automatic security updates (unattended-upgrades)
 ENABLE_AUTO_UPDATES=true
 
+# Docker Compose project name (prefix for all containers)
 COMPOSE_PROJECT_NAME="ml-train-server"
 
 #==============================================================================
@@ -328,12 +362,12 @@ export MEMORY_GUARANTEE_GB MEMORY_LIMIT_GB SWAP_SIZE_GB
 export DOCKER_STORAGE_DRIVER DOCKER_LOG_MAX_SIZE DOCKER_LOG_MAX_FILES
 export DOMAIN CODE_SERVER_PREFIX JUPYTER_PREFIX LOCAL_NETWORK_CIDR
 export BACKUP_REMOTE BACKUP_BANDWIDTH_LIMIT_MBPS
-export SNAPSHOT_HOURLY_KEEP SNAPSHOT_DAILY_KEEP SNAPSHOT_WEEKLY_KEEP
+export SNAPSHOT_KEEP_HOURLY SNAPSHOT_KEEP_DAILY SNAPSHOT_KEEP_WEEKLY
 export RESTIC_KEEP_DAILY RESTIC_KEEP_WEEKLY BACKUP_HOUR BACKUP_MINUTE
 export GCS_BUCKET GDRIVE_CUSTOMER_DATA DATA_SYNC_BANDWIDTH_LIMIT_MBPS
 export DATA_SYNC_HOUR DATA_SYNC_MINUTE DATA_CLEANUP_DAYS
 export USER_QUOTA_GB USER_QUOTA_WARNING_PERCENT
-export SNAPSHOT_OVERHEAD_MULTIPLIER STORAGE_SAFETY_MARGIN_PERCENT ESTIMATED_CAPACITY_GB
+export STORAGE_SAFETY_MARGIN_PERCENT ESTIMATED_CAPACITY_GB
 export GDRIVE_SHARED_REMOTE GDRIVE_CACHE_DIR GDRIVE_CACHE_MAX_AGE
 export GDRIVE_VFS_CACHE_MODE GDRIVE_WRITE_BACK GDRIVE_READ_CHUNK_SIZE GDRIVE_READ_CHUNK_LIMIT
 export GDRIVE_BUFFER_SIZE GDRIVE_DIR_CACHE_TIME GDRIVE_POLL_INTERVAL

@@ -306,9 +306,8 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - \${MOUNT_POINT:-/mnt/storage}/homes/${USERNAME}:/home/${USERNAME}:rw
       # Ephemeral workspace (fast scratch space)
       - \${MOUNT_POINT:-/mnt/storage}/workspaces/${USERNAME}:/workspace:rw
-      # Shared data (read-only for datasets, read-write for tensorboard)
-      - \${MOUNT_POINT:-/mnt/storage}/shared:/shared:ro
-      - \${MOUNT_POINT:-/mnt/storage}/shared/tensorboard/${USERNAME}:/shared/tensorboard/${USERNAME}:rw
+      # Shared data (read-write for all users to share files)
+      - \${MOUNT_POINT:-/mnt/storage}/shared:/shared:rw
       # Container state
       - \${MOUNT_POINT:-/mnt/storage}/docker-volumes/${USERNAME}-state:/var/lib/state:rw
       # Docker socket for Docker-in-Docker

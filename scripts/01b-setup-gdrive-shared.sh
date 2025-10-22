@@ -105,8 +105,8 @@ TOTAL_BTRFS_GB=$(df -BG "${MOUNT_POINT}" | tail -n1 | awk '{print $2}' | sed 's/
 USER_COUNT=$(echo ${USERS} | wc -w)
 TOTAL_USER_DATA_GB=$((USER_COUNT * USER_QUOTA_GB))
 
-# Auto-calculate snapshot overhead (50% of user data by default)
-SNAPSHOT_OVERHEAD_GB=$(awk "BEGIN {printf \"%.0f\", ${TOTAL_USER_DATA_GB} * ${SNAPSHOT_OVERHEAD_MULTIPLIER}}")
+# Auto-calculate snapshot overhead (50% of user data)
+SNAPSHOT_OVERHEAD_GB=$(awk "BEGIN {printf \"%.0f\", ${TOTAL_USER_DATA_GB} * 0.5}")
 
 # Total reserved space for user data and snapshots
 RESERVED_GB=$((TOTAL_USER_DATA_GB + SNAPSHOT_OVERHEAD_GB))
@@ -119,7 +119,7 @@ echo "  Total BTRFS storage: ${TOTAL_BTRFS_GB}GB"
 echo "  Number of users: ${USER_COUNT}"
 echo "  Per-user quota: ${USER_QUOTA_GB}GB (home + workspace + docker-volumes combined)"
 echo "  Total user data: ${TOTAL_USER_DATA_GB}GB"
-echo "  Snapshot overhead: ${SNAPSHOT_OVERHEAD_GB}GB (${SNAPSHOT_OVERHEAD_MULTIPLIER}× user data)"
+echo "  Snapshot overhead: ${SNAPSHOT_OVERHEAD_GB}GB (0.5× user data)"
 echo "  Total reserved: ${RESERVED_GB}GB"
 echo "  Safe limit (${STORAGE_SAFETY_MARGIN_PERCENT}% margin): ${SAFE_LIMIT_GB}GB"
 echo ""
@@ -427,9 +427,9 @@ Local cache: /mnt/storage/cache/gdrive
 
 ## User Access
 
-Users access the Shared Drive as `/shared` (read-only) in their containers:
-- `/shared` - Read-only access to all Shared Drive files
-- `/shared/tensorboard/${USERNAME}` - Read-write access to personal TensorBoard logs
+Users access the Shared Drive as `/shared` (read-write) in their containers:
+- `/shared` - Read-write access to all Shared Drive files for team collaboration
+- `/shared/tensorboard/${USERNAME}` - Personal TensorBoard logs directory
 
 ## Management Commands
 

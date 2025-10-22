@@ -298,14 +298,12 @@ Your workspace runs in a Docker container, not a traditional VM. Here's what you
 - `/shared` - Google Drive Workspace Shared Drive (cached locally)
     - **Backed by:** Google Workspace Shared Drive (cloud storage)
     - **Performance:** Near-local speed after first access (aggressive caching)
-    - **Access:** Read-only for most content
-    - **Use for:** Common datasets, shared files, team resources
+    - **Access:** Read-write for all users (share files with team)
+    - **Use for:** Common datasets, shared files, team resources, collaboration
     - **Cache:** Auto-calculated (typically 60-70% of total disk, ~24TB for 5 users)
     - **Allocation:** Uses 80% of space remaining after user data + snapshot reservations
     - **Syncing:** Automatic background sync with Google Drive
-
-- `/shared/tensorboard/${USERNAME}` - Your TensorBoard logs (read-write)
-    - Stored in Google Drive Shared Drive, accessible to all team members
+    - **TensorBoard:** Each user has `/shared/tensorboard/${USERNAME}` for training logs
 
 **Your Total Quota: 1000GB**
 
