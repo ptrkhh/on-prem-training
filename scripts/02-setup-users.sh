@@ -37,6 +37,16 @@ fi
 echo "Creating ${USER_COUNT} user accounts..."
 echo ""
 
+# Check for automated password generation
+if [[ -n "${AUTO_GENERATE_PASSWORDS:-}" ]]; then
+    echo "⚠️  AUTO_GENERATE_PASSWORDS is set - passwords will be generated automatically"
+    echo "   Passwords will be saved to /root/user-passwords.txt"
+    echo ""
+    # Create/clear the password file
+    > /root/user-passwords.txt
+    chmod 600 /root/user-passwords.txt
+fi
+
 USER_INDEX=0
 for USERNAME in ${USER_ARRAY[@]}; do
     UID=$((FIRST_UID + USER_INDEX))
@@ -52,10 +62,19 @@ for USERNAME in ${USER_ARRAY[@]}; do
         echo "  Created user ${USERNAME}"
     fi
 
-
-    # Set initial password (prompt)
-    echo "  Setting password for ${USERNAME}:"
-    passwd ${USERNAME}
+    # Set initial password
+    # Check if automated password is set in environment
+    if [[ -n "${AUTO_GENERATE_PASSWORDS:-}" ]]; then
+        # Generate random password
+        RANDOM_PASS=$(openssl rand -base64 12)
+        echo "${USERNAME}:${RANDOM_PASS}" | chpasswd
+        echo "  Password set automatically (saved to /root/user-passwords.txt)"
+        echo "${USERNAME}: ${RANDOM_PASS}" >> /root/user-passwords.txt
+    else
+        # Interactive password prompt
+        echo "  Setting password for ${USERNAME}:"
+        passwd ${USERNAME}
+    fi
 
     # Create home directory on BTRFS storage
     mkdir -p ${MOUNT_POINT}/homes/${USERNAME}
@@ -72,7 +91,13 @@ for USERNAME in ${USER_ARRAY[@]}; do
     chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/docker-volumes/${USERNAME}-state
     chmod 755 ${MOUNT_POINT}/docker-volumes/${USERNAME}-state
 
-    # Create tensorboard directory
+    # Create tensorboard directory (check if /shared is available)
+    if [[ ! -d "${MOUNT_POINT}/shared" ]]; then
+        echo "  ERROR: ${MOUNT_POINT}/shared does not exist!"
+        echo "  Please run 01-setup-storage.sh first, or 01b-setup-gdrive-shared.sh if using Google Drive."
+        exit 1
+    fi
+
     mkdir -p ${MOUNT_POINT}/shared/tensorboard/${USERNAME}
     chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/shared/tensorboard/${USERNAME}
     chmod 755 ${MOUNT_POINT}/shared/tensorboard/${USERNAME}
@@ -99,11 +124,11 @@ echo "Configuring SSH..."
 # Backup sshd_config
 cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)
 
-# Update sshd_config for security
+# Update sshd_config for security (keep password auth enabled until SSH keys are added)
 cat > /etc/ssh/sshd_config.d/ml-train-server.conf <<EOF
 # ML Training Server SSH Configuration
 PermitRootLogin no
-PasswordAuthentication no
+PasswordAuthentication yes
 PubkeyAuthentication yes
 UsePAM yes
 X11Forwarding yes
@@ -112,7 +137,56 @@ AcceptEnv LANG LC_*
 Subsystem sftp /usr/lib/openssh/sftp-server
 EOF
 
-echo "SSH configured for key-based authentication only"
+echo "SSH configured (password authentication enabled until SSH keys are added)"
+
+# Create script to disable password authentication after SSH keys are verified
+cat > /root/disable-ssh-password-auth.sh <<'EOFSCRIPT'
+#!/bin/bash
+# Disable password authentication after verifying SSH keys are set up
+
+echo "=== Disable SSH Password Authentication ==="
+echo ""
+echo "This will disable password authentication and require SSH keys."
+echo ""
+
+# Check if all users have SSH keys
+for user_home in /mnt/storage/homes/*; do
+    if [[ -d "${user_home}" ]]; then
+        USERNAME=$(basename ${user_home})
+        KEY_FILE="${user_home}/.ssh/authorized_keys"
+
+        if [[ ! -s "${KEY_FILE}" ]]; then
+            echo "⚠️  WARNING: User ${USERNAME} has no SSH keys in ${KEY_FILE}"
+            echo "   Add SSH keys before proceeding to avoid lockout!"
+            echo ""
+            read -p "Continue anyway? (yes/no): " confirm
+            if [[ "$confirm" != "yes" ]]; then
+                echo "Aborted."
+                exit 1
+            fi
+        else
+            echo "✓ User ${USERNAME} has SSH keys configured"
+        fi
+    fi
+done
+
+echo ""
+echo "Disabling password authentication..."
+
+# Update SSH config
+sed -i 's/^PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config.d/ml-train-server.conf
+
+# Restart SSH
+systemctl restart sshd
+
+echo "✓ Password authentication disabled"
+echo "✓ SSH now requires key-based authentication only"
+EOFSCRIPT
+
+chmod +x /root/disable-ssh-password-auth.sh
+
+echo "Created script: /root/disable-ssh-password-auth.sh"
+echo "Run this script after adding SSH keys to disable password authentication"
 
 # Restart SSH
 systemctl restart sshd
@@ -124,7 +198,7 @@ echo "Setting up disk quota monitoring..."
 
 mkdir -p /opt/scripts/monitoring
 
-cat > /opt/scripts/monitoring/check-user-quotas.sh <<'EOF'
+cat > /opt/scripts/monitoring/check-user-quotas.sh <<EOF
 #!/bin/bash
 # Check user disk usage across home, workspace, and docker-volumes
 # Sends alerts when users exceed quota thresholds
@@ -233,6 +307,11 @@ for USERNAME in ${USER_ARRAY[@]}; do
     echo "  ${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys"
 done
 echo ""
+if [[ -n "${AUTO_GENERATE_PASSWORDS:-}" ]]; then
+    echo "⚠️  AUTO-GENERATED PASSWORDS saved to: /root/user-passwords.txt"
+    echo "   Share these securely with users and ask them to change on first login"
+    echo ""
+fi
 echo "Users can access the server via:"
 echo "  - SSH: ssh <user>@<server-ip> -p 2222 (or 2223, 2224, etc.)"
 echo "  - NoMachine: Download client from https://nomachine.com/"
@@ -242,4 +321,7 @@ echo "Next steps:"
 echo "  1. Add SSH keys for each user"
 echo "  2. Test SSH login: ssh alice@localhost"
 echo "  3. Run 03-setup-docker.sh to install Docker"
+echo ""
+echo "To enable automated password generation in future runs:"
+echo "  export AUTO_GENERATE_PASSWORDS=1 before running this script"
 echo ""

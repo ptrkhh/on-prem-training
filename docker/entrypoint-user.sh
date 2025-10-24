@@ -67,7 +67,7 @@ NXCFG
 
 # Configure code-server
 echo "Configuring code-server..."
-su - ${USER_NAME} << 'EOF'
+su - ${USER_NAME} << EOF
 mkdir -p ~/.config/code-server
 cat > ~/.config/code-server/config.yaml << CODECONF
 bind-addr: 0.0.0.0:8080
@@ -79,10 +79,10 @@ EOF
 
 # Configure Jupyter
 echo "Configuring Jupyter..."
-su - ${USER_NAME} << 'EOF'
+su - ${USER_NAME} << EOF
 mkdir -p ~/.jupyter
 
-cat > ~/.jupyter/jupyter_lab_config.py << JUPCONF
+cat > ~/.jupyter/jupyter_lab_config.py << 'JUPCONF'
 c.ServerApp.ip = '0.0.0.0'
 c.ServerApp.port = 8888
 c.ServerApp.open_browser = False
@@ -101,15 +101,11 @@ c.ServerApp.jpserver_extensions = {
     'jupyterlab_git': True,
 }
 JUPCONF
-
-# Install JupyterLab extensions
-jupyter labextension install @jupyter-widgets/jupyterlab-manager --no-build
-jupyter lab build --dev-build=False --minimize=True
 EOF
 
 # Setup shell environment
 echo "Configuring shell environment..."
-su - ${USER_NAME} << 'EOF'
+su - ${USER_NAME} << EOF
 # Bash configuration
 cat >> ~/.bashrc << 'BASHRC'
 
@@ -121,29 +117,29 @@ export DATA=~/data
 
 # CUDA
 export CUDA_HOME=/usr/local/cuda
-export PATH=$CUDA_HOME/bin:$PATH
-export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
+export PATH=\$CUDA_HOME/bin:\$PATH
+export LD_LIBRARY_PATH=\$CUDA_HOME/lib64:\$LD_LIBRARY_PATH
 
 # Go
 export GOPATH=~/go
-export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin
+export PATH=\$PATH:/usr/local/go/bin:\$GOPATH/bin
 
 # Rust
-export PATH="$HOME/.cargo/bin:$PATH"
+export PATH="\$HOME/.cargo/bin:\$PATH"
 
 # Python
-export PYTHONPATH=$WORKSPACE:$PYTHONPATH
+export PYTHONPATH=\$WORKSPACE:\$PYTHONPATH
 
 # Helpful aliases
 alias jlab='jupyter lab --no-browser --ip=0.0.0.0'
 alias jnb='jupyter notebook --no-browser --ip=0.0.0.0'
-alias tb='tensorboard --logdir=/shared/tensorboard/${USER} --bind_all'
+alias tb='tensorboard --logdir=/shared/tensorboard/${USER_NAME} --bind_all'
 alias gpu='watch -n 1 nvidia-smi'
 alias ws='cd /workspace'
 
 # Git config
-git config --global user.email "${USER}@ml-train-server"
-git config --global user.name "${USER}"
+git config --global user.email "${USER_NAME}@ml-train-server"
+git config --global user.name "${USER_NAME}"
 
 # Prompt
 export PS1='\[\033[01;32m\]\u@ml-workspace\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
@@ -172,62 +168,80 @@ user=root
 command=/usr/sbin/sshd -D
 autostart=true
 autorestart=true
+startsecs=5
+startretries=3
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
+exitcodes=0
 
 [program:nomachine]
 command=/usr/NX/bin/nxserver --startup
 autostart=true
 autorestart=true
+startsecs=10
+startretries=3
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=10
+exitcodes=0
 
 [program:code-server]
 command=/bin/bash -c 'su - ${USER_NAME} -c "code-server --bind-addr 0.0.0.0:8080"'
 autostart=true
 autorestart=true
+startsecs=10
+startretries=3
 user=${USER_NAME}
 directory=/home/${USER_NAME}
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
+exitcodes=0
 
 [program:jupyter]
 command=/bin/bash -c 'su - ${USER_NAME} -c "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root"'
 autostart=true
 autorestart=true
+startsecs=10
+startretries=3
 user=${USER_NAME}
 directory=/home/${USER_NAME}/notebooks
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
+exitcodes=0
 
 [program:pulseaudio]
 command=/bin/bash -c 'su - ${USER_NAME} -c "pulseaudio --exit-idle-time=-1"'
 autostart=true
 autorestart=true
+startsecs=5
+startretries=3
 user=${USER_NAME}
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
+exitcodes=0
 
 [program:docker]
 command=/usr/bin/dockerd
 autostart=true
 autorestart=true
+startsecs=10
+startretries=3
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=1
+exitcodes=0
 SUPCONF
 
 # Fix permissions

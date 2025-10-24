@@ -4,6 +4,7 @@ Test GPU training with PyTorch
 Verifies CUDA is available and GPU can run a simple training loop
 """
 
+import sys
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -20,7 +21,7 @@ print("CUDA available:", torch.cuda.is_available())
 
 if not torch.cuda.is_available():
     print("ERROR: CUDA is not available!")
-    exit(1)
+    sys.exit(1)
 
 print("CUDA version:", torch.version.cuda)
 print("GPU count:", torch.cuda.device_count())

@@ -18,6 +18,13 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Validate required configuration
+if [[ -z "${DOMAIN}" ]]; then
+    echo "ERROR: DOMAIN is not set in config.sh"
+    echo "Please set DOMAIN to your domain name (e.g., example.com)"
+    exit 1
+fi
+
 OUTPUT_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
 echo "=== Generating docker-compose.yml ==="
@@ -122,7 +129,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.netdata.rule=Host(`health.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.netdata.rule=Host(`health.${DOMAIN}`)"
       - "traefik.http.routers.netdata.entrypoints=web"
       - "traefik.http.services.netdata.loadbalancer.server.port=19999"
 
@@ -141,7 +148,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.prometheus.rule=Host(`prometheus.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.${DOMAIN}`)"
       - "traefik.http.routers.prometheus.entrypoints=web"
       - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
 
@@ -159,7 +166,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
       - "traefik.http.routers.grafana.entrypoints=web"
       - "traefik.http.services.grafana.loadbalancer.server.port=3000"
 
@@ -205,7 +212,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.tensorboard.rule=Host(`tensorboard.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.tensorboard.rule=Host(`tensorboard.${DOMAIN}`)"
       - "traefik.http.routers.tensorboard.entrypoints=web"
       - "traefik.http.services.tensorboard.loadbalancer.server.port=6006"
 
@@ -220,7 +227,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.filebrowser.rule=Host(`files.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.filebrowser.rule=Host(`files.${DOMAIN}`)"
       - "traefik.http.routers.filebrowser.entrypoints=web"
       - "traefik.http.services.filebrowser.loadbalancer.server.port=80"
 
@@ -240,7 +247,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.dozzle.rule=Host(`logs.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.dozzle.rule=Host(`logs.${DOMAIN}`)"
       - "traefik.http.routers.dozzle.entrypoints=web"
       - "traefik.http.services.dozzle.loadbalancer.server.port=8080"
 
@@ -256,7 +263,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.portainer.rule=Host(`portainer.${DOMAIN:-localhost}`)"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.${DOMAIN}`)"
       - "traefik.http.routers.portainer.entrypoints=web"
       - "traefik.http.services.portainer.loadbalancer.server.port=9000"
 
@@ -286,8 +293,8 @@ for USERNAME in ${USER_ARRAY[@]}; do
   # User: ${USERNAME}
   workspace-${USERNAME}:
     build:
-      context: .
-      dockerfile: Dockerfile.user-workspace
+      context: ..
+      dockerfile: docker/Dockerfile.user-workspace
     image: ml-workspace:latest
     container_name: workspace-${USERNAME}
     hostname: ${USERNAME}-workspace
@@ -298,6 +305,7 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - USER_UID=${UID}
       - USER_GID=${UID}
       - USER_PASSWORD=\${USER_${USERNAME^^}_PASSWORD:-changeme}
+      - CODE_SERVER_PASSWORD=\${USER_${USERNAME^^}_PASSWORD:-changeme}
       - DISPLAY=:0
       - WORKSPACE=/workspace
       - SHARED=/shared
@@ -310,8 +318,6 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - \${MOUNT_POINT:-/mnt/storage}/shared:/shared:rw
       # Container state
       - \${MOUNT_POINT:-/mnt/storage}/docker-volumes/${USERNAME}-state:/var/lib/state:rw
-      # Docker socket for Docker-in-Docker
-      - /var/run/docker.sock:/var/run/docker.sock
       # Shared caches (for all users to benefit from cached downloads)
       - \${MOUNT_POINT:-/mnt/storage}/cache/ml-models:/cache/ml-models:rw
       - \${MOUNT_POINT:-/mnt/storage}/cache/pip:/cache/pip:rw
@@ -344,17 +350,17 @@ for USERNAME in ${USER_ARRAY[@]}; do
     labels:
       - "traefik.enable=true"
       # Code-server (VS Code in browser)
-      - "traefik.http.routers.${USERNAME}-code.rule=Host(\`${USERNAME}-code.\${DOMAIN:-localhost}\`)"
+      - "traefik.http.routers.${USERNAME}-code.rule=Host(\`${USERNAME}-code.\${DOMAIN}\`)"
       - "traefik.http.routers.${USERNAME}-code.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-code.service=${USERNAME}-code"
       - "traefik.http.services.${USERNAME}-code.loadbalancer.server.port=8080"
       # Jupyter Lab
-      - "traefik.http.routers.${USERNAME}-jupyter.rule=Host(\`${USERNAME}-jupyter.\${DOMAIN:-localhost}\`)"
+      - "traefik.http.routers.${USERNAME}-jupyter.rule=Host(\`${USERNAME}-jupyter.\${DOMAIN}\`)"
       - "traefik.http.routers.${USERNAME}-jupyter.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-jupyter.service=${USERNAME}-jupyter"
       - "traefik.http.services.${USERNAME}-jupyter.loadbalancer.server.port=8888"
       # Per-user TensorBoard
-      - "traefik.http.routers.${USERNAME}-tensorboard.rule=Host(\`${USERNAME}-tensorboard.\${DOMAIN:-localhost}\`)"
+      - "traefik.http.routers.${USERNAME}-tensorboard.rule=Host(\`${USERNAME}-tensorboard.\${DOMAIN}\`)"
       - "traefik.http.routers.${USERNAME}-tensorboard.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-tensorboard.service=${USERNAME}-tensorboard"
       - "traefik.http.services.${USERNAME}-tensorboard.loadbalancer.server.port=6006"
@@ -384,8 +390,8 @@ echo ""
 echo "  Per-user services:"
 USER_INDEX=0
 for USERNAME in ${USER_ARRAY[@]}; do
-    SSH_PORT=$((2222 + USER_INDEX))
-    NX_PORT=$((4000 + USER_INDEX))
+    SSH_PORT=$((SSH_BASE_PORT + USER_INDEX))
+    NX_PORT=$((NOMACHINE_BASE_PORT + USER_INDEX))
     echo "    ${USERNAME}:"
     echo "      - Desktop (NoMachine Client): SERVER_IP:${NX_PORT}"
     echo "      - VS Code: http://${USERNAME}-code.${DOMAIN}"
@@ -398,7 +404,8 @@ echo ""
 echo "Local network access:"
 echo "  - Point *.${DOMAIN} to server IP in /etc/hosts or local DNS"
 echo "  - All services accessible via http://hostname.${DOMAIN}"
-echo "  - SSH directly to ports 2222, 2223, 2224, etc."
+echo "  - SSH directly to ports ${SSH_BASE_PORT}, $((SSH_BASE_PORT+1)), $((SSH_BASE_PORT+2)), etc."
+echo "  - NoMachine to ports ${NOMACHINE_BASE_PORT}, $((NOMACHINE_BASE_PORT+1)), $((NOMACHINE_BASE_PORT+2)), etc."
 echo ""
 echo "Cloudflare Tunnel (internet access):"
 echo "  - Routes *.${DOMAIN} through Cloudflare to Traefik on port 80"

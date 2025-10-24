@@ -160,7 +160,17 @@ if [[ ${TOTAL_WITH_SNAPSHOTS} -gt ${SAFE_LIMIT_GB} ]]; then
     echo "    Safe limit: $(awk "BEGIN {printf \"%.0f\", ${SAFE_LIMIT_GB} / 1024}")TB (80% of estimated ${ESTIMATED_CAPACITY_GB}GB)"
     ((WARNINGS++))
 else
-    echo "  ✓ Total user quota: ${TOTAL_USER_QUOTA_GB}GB (${TOTAL_USER_QUOTA_GB}GB) - reasonable for ${ESTIMATED_CAPACITY_GB}GB storage"
+    echo "  ✓ Total user quota: ${TOTAL_USER_QUOTA_GB}GB - reasonable for ${ESTIMATED_CAPACITY_GB}GB storage"
+fi
+
+# Check UID range
+MAX_UID=$((FIRST_UID + $(get_user_count) - 1))
+if [[ ${MAX_UID} -gt 60000 ]]; then
+    echo "  ✗ ERROR: UID range will exceed 60000 (FIRST_UID: ${FIRST_UID}, users: $(get_user_count), max UID: ${MAX_UID})"
+    echo "    Reduce FIRST_UID or number of users"
+    ((ERRORS++))
+else
+    echo "  ✓ UID range: ${FIRST_UID}-${MAX_UID}"
 fi
 
 # Check port ranges

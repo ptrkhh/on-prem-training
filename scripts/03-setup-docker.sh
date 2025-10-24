@@ -109,11 +109,11 @@ mkdir -p ${MOUNT_POINT}/docker
 cat > /etc/docker/daemon.json <<EOF
 {
   "data-root": "${MOUNT_POINT}/docker",
-  "storage-driver": "btrfs",
+  "storage-driver": "${DOCKER_STORAGE_DRIVER}",
   "log-driver": "json-file",
   "log-opts": {
-    "max-size": "10m",
-    "max-file": "3"
+    "max-size": "${DOCKER_LOG_MAX_SIZE}",
+    "max-file": "${DOCKER_LOG_MAX_FILES}"
   },
   "default-runtime": "nvidia",
   "runtimes": {
@@ -149,7 +149,7 @@ docker run --rm hello-world
 # Test NVIDIA runtime
 echo ""
 echo "Testing NVIDIA runtime..."
-docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+docker run --rm --gpus all nvidia/cuda:latest nvidia-smi
 
 # Step 6: Configure GPU time-slicing (optional)
 echo ""
@@ -188,10 +188,10 @@ echo "NVIDIA Driver:"
 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
 echo ""
 echo "Test GPU in container:"
-docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+docker run --rm --gpus all nvidia/cuda:latest nvidia-smi
 echo ""
 echo "Next steps:"
 echo "  1. Verify Docker is working: docker run hello-world"
-echo "  2. Verify GPU access: docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi"
+echo "  2. Verify GPU access: docker run --rm --gpus all nvidia/cuda:latest nvidia-smi"
 echo "  3. Deploy services: cd docker && docker compose up -d"
 echo ""

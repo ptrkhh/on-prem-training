@@ -153,7 +153,9 @@ RUN pip3 install \
 RUN pip3 install \
     jupyterlab-vim \
     jupyterlab-code-formatter \
-    jupyterlab-spreadsheet-editor
+    jupyterlab-spreadsheet-editor && \
+    jupyter labextension install @jupyter-widgets/jupyterlab-manager --no-build && \
+    jupyter lab build --dev-build=False --minimize=True
 
 #==============================================================================
 # IDE & EDITORS
@@ -264,22 +266,13 @@ RUN mkdir /var/run/sshd && \
 RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 # Create startup script
-COPY docker/entrypoint-user.sh /usr/local/bin/entrypoint.sh
+COPY entrypoint-user.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Configure systemd-like services using supervisord
+# Note: supervisord.conf is generated dynamically in entrypoint.sh
 RUN apt-get update && apt-get install -y supervisor && \
     rm -rf /var/lib/apt/lists/*
-
-COPY docker/supervisord.conf /etc/supervisor/conf.d/user-services.conf
-
-#==============================================================================
-# USER SETUP SCRIPT
-#==============================================================================
-
-# This will be run at container startup to setup the actual user
-COPY docker/setup-user.sh /usr/local/bin/setup-user.sh
-RUN chmod +x /usr/local/bin/setup-user.sh
 
 #==============================================================================
 # ENVIRONMENT VARIABLES FOR SHARED CACHES

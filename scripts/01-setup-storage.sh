@@ -17,30 +17,6 @@ fi
 
 source "${CONFIG_FILE}"
 
-# Function to detect NVMe/SSD device
-detect_nvme_device() {
-    # Look for NVMe first
-    local nvme_device=$(lsblk -ndo NAME,ROTA | grep '0$' | grep 'nvme' | head -n1 | awk '{print "/dev/"$1}')
-    if [[ -n "$nvme_device" ]]; then
-        echo "$nvme_device"
-        return
-    fi
-
-    # Fall back to first SSD (non-rotational)
-    local ssd_device=$(lsblk -ndo NAME,ROTA,TYPE | grep '0 disk$' | head -n1 | awk '{print "/dev/"$1}')
-    if [[ -n "$ssd_device" ]]; then
-        echo "$ssd_device"
-        return
-    fi
-
-    echo ""
-}
-
-# Function to detect HDD devices (rotational)
-detect_hdd_devices() {
-    local hdds=$(lsblk -ndo NAME,ROTA,TYPE | grep '1 disk$' | awk '{print "/dev/"$1}' | tr '\n' ' ')
-    echo "$hdds"
-}
 
 echo "=== ML Training Server Storage Setup ==="
 echo ""
@@ -167,7 +143,14 @@ apt update
 apt install -y btrfs-progs parted gdisk smartmontools
 
 if [[ "${BCACHE_MODE}" != "none" ]]; then
-    apt install -y bcache-tools
+    echo "Installing bcache-tools for bcache support..."
+    if ! apt install -y bcache-tools; then
+        echo "ERROR: Failed to install bcache-tools!"
+        echo "bcache mode is set to '${BCACHE_MODE}' but bcache-tools cannot be installed."
+        echo "Please check your package repositories or set BCACHE_MODE=none in config.sh"
+        exit 1
+    fi
+    echo "bcache-tools installed successfully"
 fi
 
 # Check devices exist

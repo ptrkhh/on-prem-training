@@ -124,14 +124,12 @@ chmod 777 "${CACHE_ROOT}/browser"
 chmod 777 "${CACHE_ROOT}/browser/firefox"
 chmod 777 "${CACHE_ROOT}/browser/chromium"
 
-# 9. Keep existing Google Drive cache (already created by 01b script)
-if [[ ! -d "${CACHE_ROOT}/gdrive" ]]; then
-    echo "9. Google Drive VFS cache..."
-    mkdir -p "${CACHE_ROOT}/gdrive"
-    chmod 755 "${CACHE_ROOT}/gdrive"
-else
-    echo "9. Google Drive VFS cache already exists (skip)"
-fi
+# 9. Google Drive VFS cache directory
+# Note: This is created and managed by 01b-setup-gdrive-shared.sh
+# We ensure it exists here for consistency, but don't recreate if already present
+echo "9. Google Drive VFS cache..."
+mkdir -p "${CACHE_ROOT}/gdrive"
+chmod 755 "${CACHE_ROOT}/gdrive"
 
 # 10. JetBrains IDE caches (PyCharm, IntelliJ, etc.)
 echo "10. JetBrains IDE caches..."

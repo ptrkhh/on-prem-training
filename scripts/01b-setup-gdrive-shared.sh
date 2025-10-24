@@ -94,6 +94,25 @@ else
     exit 1
 fi
 
+# Verify it's actually a Shared Drive (not personal Drive)
+echo ""
+echo "Verifying Shared Drive configuration..."
+DRIVE_INFO=$(rclone about "${GDRIVE_SHARED_REMOTE}:" --json 2>/dev/null || echo "{}")
+if echo "${DRIVE_INFO}" | grep -q '"team"'; then
+    echo "✅ Confirmed: This is a Google Workspace Shared Drive"
+else
+    echo "⚠️  WARNING: This may be a personal Google Drive, not a Shared Drive"
+    echo "   Shared Drives (Team Drives) are recommended for multi-user access"
+    echo "   Personal Drives have different quota and sharing limitations"
+    echo ""
+    read -p "Continue anyway? (yes/no): " confirm
+    if [[ "$confirm" != "yes" ]]; then
+        echo "Aborted. Please reconfigure with a Shared Drive."
+        echo "To create a Shared Drive: Google Drive → Shared drives → New"
+        exit 1
+    fi
+fi
+
 # Step 3: Calculate storage allocation and validate
 echo ""
 echo "=== Step 3: Storage Allocation Calculation ==="
@@ -218,23 +237,23 @@ echo "=== Step 5: Creating monitoring script ==="
 
 mkdir -p /opt/scripts/monitoring
 
-cat > /opt/scripts/monitoring/check-gdrive-mount.sh <<'EOF'
+cat > /opt/scripts/monitoring/check-gdrive-mount.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
 # Check if Google Drive Shared Drive is mounted and healthy
 
-MOUNT_POINT="${MOUNT_POINT:-/mnt/storage}"
-SHARED_DIR="${MOUNT_POINT}/shared"
+MOUNT_POINT="${MOUNT_POINT}"
+SHARED_DIR="\${MOUNT_POINT}/shared"
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 
 # Check if mounted
-if ! mountpoint -q "${SHARED_DIR}"; then
-    echo "ERROR: ${SHARED_DIR} is not mounted!"
+if ! mountpoint -q "\${SHARED_DIR}"; then
+    echo "ERROR: \${SHARED_DIR} is not mounted!"
 
     # Send alert
-    if [[ -x "${ALERT_SCRIPT}" ]]; then
-        ${ALERT_SCRIPT} "critical" "Google Drive Shared Drive is not mounted at ${SHARED_DIR}! Attempting to restart service..."
+    if [[ -x "\${ALERT_SCRIPT}" ]]; then
+        \${ALERT_SCRIPT} "critical" "Google Drive Shared Drive is not mounted at \${SHARED_DIR}! Attempting to restart service..."
     fi
 
     # Attempt to restart
@@ -242,24 +261,24 @@ if ! mountpoint -q "${SHARED_DIR}"; then
     sleep 10
 
     # Check again
-    if ! mountpoint -q "${SHARED_DIR}"; then
-        if [[ -x "${ALERT_SCRIPT}" ]]; then
-            ${ALERT_SCRIPT} "critical" "Failed to remount Google Drive Shared Drive at ${SHARED_DIR}!"
+    if ! mountpoint -q "\${SHARED_DIR}"; then
+        if [[ -x "\${ALERT_SCRIPT}" ]]; then
+            \${ALERT_SCRIPT} "critical" "Failed to remount Google Drive Shared Drive at \${SHARED_DIR}!"
         fi
         exit 1
     else
-        if [[ -x "${ALERT_SCRIPT}" ]]; then
-            ${ALERT_SCRIPT} "info" "Google Drive Shared Drive successfully remounted at ${SHARED_DIR}"
+        if [[ -x "\${ALERT_SCRIPT}" ]]; then
+            \${ALERT_SCRIPT} "info" "Google Drive Shared Drive successfully remounted at \${SHARED_DIR}"
         fi
     fi
 fi
 
 # Check if readable (ls should succeed)
-if ! timeout 30 ls "${SHARED_DIR}" > /dev/null 2>&1; then
-    echo "ERROR: ${SHARED_DIR} is mounted but not readable!"
+if ! timeout 30 ls "\${SHARED_DIR}" > /dev/null 2>&1; then
+    echo "ERROR: \${SHARED_DIR} is mounted but not readable!"
 
-    if [[ -x "${ALERT_SCRIPT}" ]]; then
-        ${ALERT_SCRIPT} "warning" "Google Drive Shared Drive mount is unresponsive. Restarting..."
+    if [[ -x "\${ALERT_SCRIPT}" ]]; then
+        \${ALERT_SCRIPT} "warning" "Google Drive Shared Drive mount is unresponsive. Restarting..."
     fi
 
     systemctl restart gdrive-shared.service
@@ -282,32 +301,32 @@ EOF
 echo ""
 echo "=== Step 6: Creating cache management script ==="
 
-cat > /opt/scripts/monitoring/gdrive-cache-stats.sh <<'EOF'
+cat > /opt/scripts/monitoring/gdrive-cache-stats.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
 # Display Google Drive cache statistics
 
-CACHE_DIR="${GDRIVE_CACHE_DIR:-/mnt/storage/cache/gdrive}"
+CACHE_DIR="${GDRIVE_CACHE_DIR}"
 
 echo "=== Google Drive Cache Statistics ==="
 echo ""
 
 # Cache directory size
-if [[ -d "${CACHE_DIR}" ]]; then
-    echo "Cache directory: ${CACHE_DIR}"
-    CACHE_SIZE=$(du -sh "${CACHE_DIR}" | awk '{print $1}')
-    echo "Current size: ${CACHE_SIZE}"
+if [[ -d "\${CACHE_DIR}" ]]; then
+    echo "Cache directory: \${CACHE_DIR}"
+    CACHE_SIZE=\$(du -sh "\${CACHE_DIR}" | awk '{print \$1}')
+    echo "Current size: \${CACHE_SIZE}"
 
     # File count
-    FILE_COUNT=$(find "${CACHE_DIR}" -type f 2>/dev/null | wc -l)
-    echo "Cached files: ${FILE_COUNT}"
+    FILE_COUNT=\$(find "\${CACHE_DIR}" -type f 2>/dev/null | wc -l)
+    echo "Cached files: \${FILE_COUNT}"
 
     # Disk usage
     echo ""
-    df -h "${CACHE_DIR}" | tail -n1
+    df -h "\${CACHE_DIR}" | tail -n1
 else
-    echo "Cache directory not found: ${CACHE_DIR}"
+    echo "Cache directory not found: \${CACHE_DIR}"
 fi
 
 echo ""
@@ -504,7 +523,7 @@ rclone config reconnect ${GDRIVE_SHARED_REMOTE}:
 ## Cache Management
 
 The cache is automatically managed by rclone:
-- **Max size**: ${CACHE_SIZE_GB}GB (${GDRIVE_CACHE_PERCENT}% of storage)
+- **Max size**: ${CACHE_SIZE_GB}GB
 - **Max age**: ${GDRIVE_CACHE_MAX_AGE}
 - **Eviction**: LRU (least recently used)
 

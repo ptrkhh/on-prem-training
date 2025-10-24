@@ -62,19 +62,22 @@ else
     fail "BTRFS filesystem is NOT mounted at ${MOUNT_POINT}"
 fi
 
-if btrfs filesystem show ${MOUNT_POINT} | grep -q "raid10"; then
-    pass "BTRFS is using RAID10"
+if btrfs filesystem show ${MOUNT_POINT} | grep -qi "${BTRFS_RAID_LEVEL}"; then
+    pass "BTRFS is using ${BTRFS_RAID_LEVEL}"
 else
-    fail "BTRFS is NOT using RAID10"
+    fail "BTRFS is NOT using ${BTRFS_RAID_LEVEL}"
 fi
 
 # Check bcache
-if ls /sys/block/bcache* &>/dev/null; then
-    BCACHE_MODE=$(cat /sys/block/bcache0/bcache/cache_mode 2>/dev/null || echo "unknown")
+BCACHE_DEVICES=($(ls -d /sys/block/bcache* 2>/dev/null || true))
+if [[ ${#BCACHE_DEVICES[@]} -gt 0 ]]; then
+    # Get first bcache device name
+    FIRST_BCACHE=$(basename "${BCACHE_DEVICES[0]}")
+    BCACHE_MODE=$(cat /sys/block/${FIRST_BCACHE}/bcache/cache_mode 2>/dev/null || echo "unknown")
     if [[ "${BCACHE_MODE}" == *"writeback"* ]]; then
-        pass "bcache is in writeback mode"
+        pass "bcache is in writeback mode (${FIRST_BCACHE})"
     else
-        warn "bcache mode: ${BCACHE_MODE} (expected: writeback)"
+        warn "bcache mode: ${BCACHE_MODE} on ${FIRST_BCACHE} (expected: writeback)"
     fi
 else
     warn "bcache devices not found"
@@ -124,7 +127,7 @@ else
 fi
 
 # Test NVIDIA runtime
-if docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi &>/dev/null; then
+if docker run --rm --gpus all nvidia/cuda:latest nvidia-smi &>/dev/null; then
     pass "Docker NVIDIA runtime is working"
 else
     fail "Docker NVIDIA runtime is NOT working"
@@ -199,8 +202,8 @@ if [[ -f /root/.restic-password ]]; then
     pass "Restic password file exists"
 
     export RESTIC_PASSWORD_FILE=/root/.restic-password
-    if restic -r rclone:gdrive:backups/ml-train-server snapshots &>/dev/null; then
-        RESTIC_COUNT=$(restic -r rclone:gdrive:backups/ml-train-server snapshots --json 2>/dev/null | jq '. | length')
+    if restic -r "rclone:${BACKUP_REMOTE}" snapshots &>/dev/null; then
+        RESTIC_COUNT=$(restic -r "rclone:${BACKUP_REMOTE}" snapshots --json 2>/dev/null | jq '. | length')
         pass "Restic repository is accessible (${RESTIC_COUNT} snapshots)"
     else
         warn "Cannot access Restic repository"
