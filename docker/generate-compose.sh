@@ -312,6 +312,20 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - \${MOUNT_POINT:-/mnt/storage}/docker-volumes/${USERNAME}-state:/var/lib/state:rw
       # Docker socket for Docker-in-Docker
       - /var/run/docker.sock:/var/run/docker.sock
+      # Shared caches (for all users to benefit from cached downloads)
+      - \${MOUNT_POINT:-/mnt/storage}/cache/ml-models:/cache/ml-models:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/pip:/cache/pip:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/conda:/cache/conda:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/apt:/var/cache/apt:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/git-lfs:/cache/git-lfs:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/go:/cache/go:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/npm:/cache/npm:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/cargo:/cache/cargo:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/julia:/cache/julia:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/R:/cache/R:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/buildkit:/cache/buildkit:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/browser:/cache/browser:rw
+      - \${MOUNT_POINT:-/mnt/storage}/cache/jetbrains:/cache/jetbrains:rw
     ports:
       - "${SSH_PORT}:22"         # SSH (for terminal access)
       - "${NX_PORT}:4000"        # NoMachine (NX protocol)
@@ -390,6 +404,21 @@ echo "Cloudflare Tunnel (internet access):"
 echo "  - Routes *.${DOMAIN} through Cloudflare to Traefik on port 80"
 echo "  - Local users automatically bypass internet (same network)"
 echo "  - Run: ./04-setup-cloudflare-tunnel.sh to configure"
+echo ""
+echo "Cache directories mounted (shared across all users):"
+echo "  - ML Models: /cache/ml-models (HuggingFace, PyTorch Hub, TensorFlow Hub)"
+echo "  - Python pip: /cache/pip"
+echo "  - Conda packages: /cache/conda"
+echo "  - APT packages: /var/cache/apt"
+echo "  - Language caches: Go, npm, Rust cargo, Julia, R"
+echo "  - JetBrains IDEs: /cache/jetbrains"
+echo "  - Docker layers: /cache/docker-layers"
+echo ""
+echo "Benefits:"
+echo "  - First user downloads packages/models → cached for all users"
+echo "  - Faster pip installs (10-50x for cached wheels)"
+echo "  - Faster Docker builds (shared build cache)"
+echo "  - Reduced bandwidth (no redundant downloads)"
 echo ""
 echo "Next steps:"
 echo "  1. Create .env file with passwords"

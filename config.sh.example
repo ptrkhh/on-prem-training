@@ -287,6 +287,36 @@ TENSORBOARD_PORT=6006
 # Ports are assigned per user: alice=4000, bob=4001, etc.
 
 #==============================================================================
+# SHARED CACHE SETTINGS
+#==============================================================================
+
+# Shared cache directories are automatically created and mounted in all user containers
+# This allows users to benefit from cached downloads (first user downloads, others reuse)
+#
+# Cached items include:
+#   - ML model weights (HuggingFace, PyTorch Hub, TensorFlow Hub)
+#   - Python pip packages (wheels cached locally)
+#   - Conda packages
+#   - APT system packages (.deb files)
+#   - Language-specific caches (Go, npm, Rust, Julia, R)
+#   - Git LFS objects
+#   - JetBrains IDE plugins and indices
+#   - Docker build layers
+#   - Browser profiles and extensions
+#
+# Benefits:
+#   - 10-50x faster pip installs for cached packages
+#   - Instant model loading after first download (e.g., BERT: 500MB → cached)
+#   - Reduced bandwidth consumption
+#   - Faster container rebuilds
+#
+# Cache location: ${MOUNT_POINT}/cache/
+# View cache usage: /opt/scripts/cache/show-cache-info.sh
+
+# Enable shared caches (recommended: true)
+ENABLE_SHARED_CACHES=true
+
+#==============================================================================
 # ADVANCED SETTINGS
 #==============================================================================
 
@@ -374,5 +404,6 @@ export GDRIVE_BUFFER_SIZE GDRIVE_DIR_CACHE_TIME GDRIVE_POLL_INTERVAL
 export GDRIVE_CHUNK_SIZE GDRIVE_UPLOAD_CUTOFF GDRIVE_TRANSFERS GDRIVE_CHECKERS GDRIVE_LOG_LEVEL
 export TELEGRAM_BOT_TOKEN TELEGRAM_CHAT_ID HEALTHCHECK_BACKUP_URL HEALTHCHECK_DATA_SYNC_URL
 export GPU_TEMP_THRESHOLD DISK_TEMP_THRESHOLD FS_USAGE_THRESHOLD SMART_MONITORING
+export ENABLE_SHARED_CACHES
 export ENABLE_AUDITD ENABLE_UPS_MONITORING ENABLE_GPU_TIMESLICING ENABLE_AUTO_UPDATES
 export COMPOSE_PROJECT_NAME

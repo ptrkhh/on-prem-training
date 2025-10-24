@@ -12,6 +12,14 @@ RUN apt-get update && apt-get install -y locales && \
 ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
 
 #==============================================================================
+# SHARED CACHE CONFIGURATION
+#==============================================================================
+# Configure APT to use shared cache directory (mounted at runtime)
+# This allows all users to benefit from cached .deb packages
+RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
+    echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+
+#==============================================================================
 # SYSTEM PACKAGES
 #==============================================================================
 
@@ -108,7 +116,8 @@ RUN apt-get update && apt-get install -y \
 #==============================================================================
 
 # Install Python ML libraries
-RUN pip3 install --no-cache-dir \
+# Note: pip cache will be persisted to /cache/pip (mounted at runtime)
+RUN pip3 install \
     # Deep Learning
     torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 \
     tensorflow[and-cuda] \
@@ -141,7 +150,7 @@ RUN pip3 install --no-cache-dir \
     python-lsp-server
 
 # Install JupyterLab extensions
-RUN pip3 install --no-cache-dir \
+RUN pip3 install \
     jupyterlab-vim \
     jupyterlab-code-formatter \
     jupyterlab-spreadsheet-editor
@@ -233,7 +242,7 @@ RUN apt-get update && apt-get install -y \
 # VERSION CONTROL & COLLABORATION
 #==============================================================================
 
-RUN pip3 install --no-cache-dir \
+RUN pip3 install \
     # Git tools
     git-review gitpython \
     # Collaboration
@@ -271,6 +280,43 @@ COPY docker/supervisord.conf /etc/supervisor/conf.d/user-services.conf
 # This will be run at container startup to setup the actual user
 COPY docker/setup-user.sh /usr/local/bin/setup-user.sh
 RUN chmod +x /usr/local/bin/setup-user.sh
+
+#==============================================================================
+# ENVIRONMENT VARIABLES FOR SHARED CACHES
+#==============================================================================
+# These environment variables point to shared cache directories
+# mounted at runtime. This allows all users to benefit from cached downloads.
+
+# ML Models & Datasets
+ENV HF_HOME=/cache/ml-models/huggingface \
+    TRANSFORMERS_CACHE=/cache/ml-models/huggingface \
+    HF_DATASETS_CACHE=/cache/ml-models/datasets \
+    TORCH_HOME=/cache/ml-models/torch \
+    TFHUB_CACHE_DIR=/cache/ml-models/tensorflow-hub
+
+# Python packages
+ENV PIP_CACHE_DIR=/cache/pip
+
+# Conda packages
+ENV CONDA_PKGS_DIRS=/cache/conda/pkgs
+
+# Git LFS
+ENV GIT_LFS_CACHE_DIR=/cache/git-lfs
+
+# Language-specific caches
+ENV GOMODCACHE=/cache/go/pkg/mod \
+    npm_config_cache=/cache/npm \
+    CARGO_HOME=/cache/cargo \
+    JULIA_DEPOT_PATH=/cache/julia \
+    R_LIBS_USER=/cache/R/packages
+
+# Container build cache
+ENV BUILDKIT_CACHE=/cache/buildkit
+
+# JetBrains IDEs
+ENV PYCHARM_CONFIG_PATH=/cache/jetbrains/config \
+    PYCHARM_PLUGINS_PATH=/cache/jetbrains/plugins \
+    PYCHARM_SYSTEM_PATH=/cache/jetbrains/system
 
 #==============================================================================
 # CONTAINER METADATA
