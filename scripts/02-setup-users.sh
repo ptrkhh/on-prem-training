@@ -34,6 +34,20 @@ if ! mountpoint -q ${MOUNT_POINT}; then
     exit 1
 fi
 
+# Validate all required directories exist before creating users
+echo "Validating required directories..."
+if [[ ! -d "${MOUNT_POINT}/shared" ]]; then
+    echo "ERROR: ${MOUNT_POINT}/shared does not exist!"
+    echo "Please run 01-setup-storage.sh first, or 01b-setup-gdrive-shared.sh if using Google Drive."
+    exit 1
+fi
+
+if [[ ! -d "${MOUNT_POINT}/cache" ]]; then
+    echo "ERROR: ${MOUNT_POINT}/cache does not exist!"
+    echo "Please run 01c-setup-shared-caches.sh first."
+    exit 1
+fi
+
 echo "Creating ${USER_COUNT} user accounts..."
 echo ""
 
@@ -91,12 +105,7 @@ for USERNAME in ${USER_ARRAY[@]}; do
     chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/docker-volumes/${USERNAME}-state
     chmod 755 ${MOUNT_POINT}/docker-volumes/${USERNAME}-state
 
-    # Create tensorboard directory (check if /shared is available)
-    if [[ ! -d "${MOUNT_POINT}/shared" ]]; then
-        echo "  ERROR: ${MOUNT_POINT}/shared does not exist!"
-        echo "  Please run 01-setup-storage.sh first, or 01b-setup-gdrive-shared.sh if using Google Drive."
-        exit 1
-    fi
+    # Create tensorboard directory
 
     mkdir -p ${MOUNT_POINT}/shared/tensorboard/${USERNAME}
     chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/shared/tensorboard/${USERNAME}

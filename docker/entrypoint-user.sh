@@ -1,5 +1,5 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # ML Training Server - User Container Entrypoint
 # Makes container behave like a full VM

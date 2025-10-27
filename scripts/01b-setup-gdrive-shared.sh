@@ -97,18 +97,31 @@ fi
 # Verify it's actually a Shared Drive (not personal Drive)
 echo ""
 echo "Verifying Shared Drive configuration..."
-DRIVE_INFO=$(rclone about "${GDRIVE_SHARED_REMOTE}:" --json 2>/dev/null || echo "{}")
-if echo "${DRIVE_INFO}" | grep -q '"team"'; then
+# Use rclone config show to check drive type more reliably
+CONFIG_SHOW=$(rclone config show "${GDRIVE_SHARED_REMOTE}" 2>/dev/null || echo "")
+if echo "${CONFIG_SHOW}" | grep -q "team_drive"; then
     echo "✅ Confirmed: This is a Google Workspace Shared Drive"
+elif echo "${CONFIG_SHOW}" | grep -q "drive"; then
+    # Fallback to rclone about if config doesn't explicitly show team_drive
+    DRIVE_INFO=$(rclone about "${GDRIVE_SHARED_REMOTE}:" --json 2>/dev/null || echo "{}")
+    if echo "${DRIVE_INFO}" | grep -q '"team"'; then
+        echo "✅ Confirmed: This is a Google Workspace Shared Drive"
+    else
+        echo "⚠️  WARNING: This may be a personal Google Drive, not a Shared Drive"
+        echo "   Shared Drives (Team Drives) are recommended for multi-user access"
+        echo "   Personal Drives have different quota and sharing limitations"
+        echo ""
+        read -p "Continue anyway? (yes/no): " confirm
+        if [[ "$confirm" != "yes" ]]; then
+            echo "Aborted. Please reconfigure with a Shared Drive."
+            echo "To create a Shared Drive: Google Drive → Shared drives → New"
+            exit 1
+        fi
+    fi
 else
-    echo "⚠️  WARNING: This may be a personal Google Drive, not a Shared Drive"
-    echo "   Shared Drives (Team Drives) are recommended for multi-user access"
-    echo "   Personal Drives have different quota and sharing limitations"
-    echo ""
+    echo "⚠️  WARNING: Could not verify drive type"
     read -p "Continue anyway? (yes/no): " confirm
     if [[ "$confirm" != "yes" ]]; then
-        echo "Aborted. Please reconfigure with a Shared Drive."
-        echo "To create a Shared Drive: Google Drive → Shared drives → New"
         exit 1
     fi
 fi
@@ -223,9 +236,8 @@ ExecStart=/usr/bin/rclone mount ${GDRIVE_SHARED_REMOTE}: ${MOUNT_POINT}/shared \
 Restart=on-failure
 RestartSec=10s
 
-# Health monitoring
-ExecStartPost=/bin/sleep 5
-ExecStartPost=/bin/bash -c 'ls ${MOUNT_POINT}/shared > /dev/null'
+# Health monitoring with retry logic
+ExecStartPost=/bin/bash -c 'for i in {1..30}; do if ls ${MOUNT_POINT}/shared > /dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1'
 
 [Install]
 WantedBy=multi-user.target

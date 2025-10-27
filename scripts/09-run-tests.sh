@@ -201,12 +201,17 @@ fi
 if [[ -f /root/.restic-password ]]; then
     pass "Restic password file exists"
 
-    export RESTIC_PASSWORD_FILE=/root/.restic-password
-    if restic -r "rclone:${BACKUP_REMOTE}" snapshots &>/dev/null; then
-        RESTIC_COUNT=$(restic -r "rclone:${BACKUP_REMOTE}" snapshots --json 2>/dev/null | jq '. | length')
-        pass "Restic repository is accessible (${RESTIC_COUNT} snapshots)"
+    # Check if BACKUP_REMOTE variable is set
+    if [[ -z "${BACKUP_REMOTE:-}" ]]; then
+        warn "BACKUP_REMOTE variable not set in config"
     else
-        warn "Cannot access Restic repository"
+        export RESTIC_PASSWORD_FILE=/root/.restic-password
+        if restic -r "rclone:${BACKUP_REMOTE}" snapshots &>/dev/null; then
+            RESTIC_COUNT=$(restic -r "rclone:${BACKUP_REMOTE}" snapshots --json 2>/dev/null | jq '. | length')
+            pass "Restic repository is accessible (${RESTIC_COUNT} snapshots)"
+        else
+            warn "Cannot access Restic repository"
+        fi
     fi
 else
     warn "Restic not configured"

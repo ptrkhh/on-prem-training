@@ -22,6 +22,25 @@ apt install -y ufw
 echo ""
 echo "=== Step 2: Configuring UFW ==="
 
+# Backup existing UFW rules before reset
+echo "⚠️  WARNING: This will reset UFW firewall to defaults!"
+echo "   All existing rules will be removed."
+if ufw status &>/dev/null; then
+    BACKUP_DIR="/root/ufw-backup-$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "${BACKUP_DIR}"
+    if [[ -d /etc/ufw ]]; then
+        cp -r /etc/ufw "${BACKUP_DIR}/"
+        echo "✓ Existing UFW rules backed up to ${BACKUP_DIR}"
+        echo "  To restore: cp -r ${BACKUP_DIR}/ufw/* /etc/ufw/ && ufw reload"
+    fi
+fi
+echo ""
+read -p "Continue with UFW reset? (yes/no): " confirm_reset
+if [[ "$confirm_reset" != "yes" ]]; then
+    echo "Aborted."
+    exit 1
+fi
+
 # Reset UFW to defaults
 ufw --force reset
 

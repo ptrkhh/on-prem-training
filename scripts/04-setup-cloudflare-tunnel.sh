@@ -79,9 +79,15 @@ echo "Domain: ${DOMAIN}"
 echo "Users: ${USERS}"
 echo ""
 
-# Generate Cloudflare Tunnel configuration dynamically
-cat > /root/.cloudflared/config.yml <<EOFCONFIG
-tunnel: ${TUNNEL_ID}
+# Generate Cloudflare Tunnel configuration (idempotent - regenerate entire file)
+# Backup existing config if present
+if [[ -f /root/.cloudflared/config.yml ]]; then
+    echo "Backing up existing configuration..."
+    cp /root/.cloudflared/config.yml /root/.cloudflared/config.yml.backup.$(date +%Y%m%d_%H%M%S)
+fi
+
+# Build the configuration file completely
+CONFIG_CONTENT="tunnel: ${TUNNEL_ID}
 credentials-file: /root/.cloudflared/${TUNNEL_ID}.json
 
 ingress:
@@ -116,13 +122,11 @@ ingress:
 
   - hostname: kasm.${DOMAIN}
     service: http://localhost:80
-EOFCONFIG
+"
 
 # Add per-user services dynamically
-USER_INDEX=0
 for USERNAME in ${USER_ARRAY[@]}; do
-    cat >> /root/.cloudflared/config.yml <<EOFUSER
-
+    CONFIG_CONTENT="${CONFIG_CONTENT}
   # ${USERNAME} services
   - hostname: ${USERNAME}-desktop.${DOMAIN}
     service: http://localhost:80
@@ -138,17 +142,17 @@ for USERNAME in ${USER_ARRAY[@]}; do
 
   - hostname: ${USERNAME}-tensorboard.${DOMAIN}
     service: http://localhost:80
-EOFUSER
-
-    USER_INDEX=$((USER_INDEX + 1))
+"
 done
 
 # Add catch-all rule
-cat >> /root/.cloudflared/config.yml <<EOFCATCH
-
+CONFIG_CONTENT="${CONFIG_CONTENT}
   # Catch-all rule
   - service: http_status:404
-EOFCATCH
+"
+
+# Write the complete configuration atomically
+echo "${CONFIG_CONTENT}" > /root/.cloudflared/config.yml
 
 echo "Tunnel configuration created"
 
@@ -156,9 +160,14 @@ echo "Tunnel configuration created"
 echo ""
 echo "=== Step 4: Routing DNS ==="
 
-cloudflared tunnel route dns ${TUNNEL_NAME} "*.${DOMAIN}"
-
-echo "DNS routed for *.${DOMAIN}"
+# Check if route already exists (idempotent)
+EXISTING_ROUTE=$(cloudflared tunnel route dns list 2>/dev/null | grep "*.${DOMAIN}" || echo "")
+if [[ -n "${EXISTING_ROUTE}" ]]; then
+    echo "DNS route for *.${DOMAIN} already exists, skipping..."
+else
+    cloudflared tunnel route dns ${TUNNEL_NAME} "*.${DOMAIN}"
+    echo "DNS routed for *.${DOMAIN}"
+fi
 
 # Step 5: Install as service
 echo ""

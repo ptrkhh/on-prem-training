@@ -7,12 +7,36 @@ set -euo pipefail
 
 echo "=== GCS to GDrive Migration ==="
 
-# Configuration
-GCS_BUCKET="gs://your-bucket-name"
-GDRIVE_REMOTE="gdrive:backups/gcs-migration"
-BANDWIDTH_LIMIT="100M"  # 100 Mbps
+# Try to load configuration from config.sh if available
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/../../config.sh"
+
+if [[ -f "${CONFIG_FILE}" ]]; then
+    echo "Loading configuration from ${CONFIG_FILE}..."
+    source "${CONFIG_FILE}"
+    # Use config variables with defaults
+    GCS_BUCKET="${GCS_BUCKET:-gs://your-bucket-name}"
+    GDRIVE_REMOTE="${GDRIVE_DEST:-gdrive:backups/gcs-migration}"
+else
+    echo "Config file not found, using defaults (you can override with parameters)"
+    # Default configuration - can be overridden by parameters
+    GCS_BUCKET="${1:-gs://your-bucket-name}"
+    GDRIVE_REMOTE="${2:-gdrive:backups/gcs-migration}"
+fi
+
+BANDWIDTH_LIMIT="${3:-100M}"  # 100 Mbps
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 LOG_FILE="/var/log/gcs-gdrive-migration.log"
+
+# Show usage if bucket is not set
+if [[ "${GCS_BUCKET}" == "gs://your-bucket-name" ]]; then
+    echo ""
+    echo "Usage: $0 [GCS_BUCKET] [GDRIVE_REMOTE] [BANDWIDTH_LIMIT]"
+    echo "Example: $0 gs://my-bucket gdrive:my-folder 100M"
+    echo ""
+    echo "Or set GCS_BUCKET and GDRIVE_DEST in config.sh"
+    exit 1
+fi
 
 # Redirect output to log file
 exec > >(tee -a ${LOG_FILE}) 2>&1

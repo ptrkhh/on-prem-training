@@ -12,7 +12,23 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Load configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+    echo "ERROR: Configuration file not found: ${CONFIG_FILE}"
+    echo "Please create config.sh from config.sh.example"
+    exit 1
+fi
+
+source "${CONFIG_FILE}"
+
 SCRIPTS_DIR="/opt/scripts/data"
+
+# Use config variables with defaults
+GCS_BUCKET="${GCS_BUCKET:-gcs:customer-daily-bucket}"
+GDRIVE_DEST="${GDRIVE_DEST:-gdrive:customer-daily}"
 
 # Install rclone if not already installed
 if ! command -v rclone &> /dev/null; then
@@ -62,14 +78,14 @@ echo "=== Step 2: Creating data sync scripts ==="
 
 mkdir -p ${SCRIPTS_DIR}
 
-# Daily customer data sync script
-cat > ${SCRIPTS_DIR}/sync-customer-data.sh <<'EOF'
+# Daily customer data sync script (use config values)
+cat > ${SCRIPTS_DIR}/sync-customer-data.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
 # Daily customer data sync from GCS to GDrive
-GCS_BUCKET="gcs:customer-daily-bucket"
-GDRIVE_DEST="gdrive:customer-daily"
+GCS_BUCKET="${GCS_BUCKET}"
+GDRIVE_DEST="${GDRIVE_DEST}"
 BANDWIDTH_LIMIT="100M"  # 100 Mbps (12.5 MB/s)
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 LOG_FILE="/var/log/customer-data-sync.log"

@@ -215,8 +215,21 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
 
     echo "bcache cache device created: ${BCACHE_CACHE_DEV}"
 
+    # Wait for cache device to be fully ready
+    echo "Waiting for bcache cache device to be ready..."
+    for i in {1..30}; do
+        if [[ -e "/sys/fs/bcache" ]] && bcache-super-show ${BCACHE_CACHE_DEV} &>/dev/null; then
+            echo "Cache device ready after ${i} seconds"
+            break
+        fi
+        if [[ $i -eq 30 ]]; then
+            echo "ERROR: Timeout waiting for bcache cache device"
+            exit 1
+        fi
+        sleep 1
+    done
+
     # Get cache set UUID
-    sleep 2
     CACHE_SET_UUID=$(bcache-super-show ${BCACHE_CACHE_DEV} | grep 'cset.uuid' | awk '{print $2}')
     echo "Cache set UUID: ${CACHE_SET_UUID}"
 else
@@ -244,11 +257,29 @@ for hdd in "${HDD_ARRAY[@]}"; do
         # Create bcache backing device
         make-bcache -B ${hdd} --wipe-bcache
 
-        # Find the bcache device that was created
-        sleep 2
-        BCACHE_DEV=$(lsblk -nlo NAME ${hdd} | grep bcache | head -n1)
+        # Find the bcache device using sysfs (more reliable than lsblk)
+        echo "  Waiting for bcache device to appear..."
+        BCACHE_DEV=""
+        for i in {1..30}; do
+            # Check /sys/block/bcache*/slaves/ for the source device
+            for bcache_block in /sys/block/bcache*; do
+                if [[ -d "${bcache_block}/slaves" ]]; then
+                    HDD_BASENAME=$(basename ${hdd})
+                    if [[ -e "${bcache_block}/slaves/${HDD_BASENAME}" ]]; then
+                        BCACHE_DEV="/dev/$(basename ${bcache_block})"
+                        echo "  Found bcache device: ${BCACHE_DEV} (after ${i} seconds)"
+                        break 2
+                    fi
+                fi
+            done
+            if [[ $i -eq 30 ]]; then
+                echo "  ERROR: Timeout waiting for bcache device for ${hdd}"
+                exit 1
+            fi
+            sleep 1
+        done
+
         if [[ -n "${BCACHE_DEV}" ]]; then
-            BCACHE_DEV="/dev/${BCACHE_DEV}"
             echo "  Created bcache device: ${BCACHE_DEV}"
 
             # Attach cache

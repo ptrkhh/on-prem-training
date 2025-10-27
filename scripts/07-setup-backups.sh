@@ -33,28 +33,33 @@ apt install -y restic rclone bc mailutils
 
 # Step 1: Setup rclone for GDrive
 echo ""
-echo "=== Step 1: Configuring rclone for Google Drive ==="
+echo "=== Step 1: Validating rclone configuration for Google Drive ==="
 echo ""
-echo "Run 'rclone config' to set up Google Drive remote named 'gdrive'"
-echo "After setup, you should be able to run: rclone lsd gdrive:"
-echo ""
-read -p "Have you already configured rclone? (y/n): " rclone_configured
 
-if [[ "$rclone_configured" != "y" ]]; then
+# Actually validate rclone config exists
+if ! rclone config show gdrive &>/dev/null; then
+    echo "ERROR: rclone remote 'gdrive' is not configured"
     echo "Please run: rclone config"
     echo "Create a new remote named 'gdrive' with Google Drive backend"
     echo "Then run this script again."
     exit 1
 fi
 
-# Verify rclone config
-if ! rclone lsd gdrive: &>/dev/null; then
+echo "✓ rclone remote 'gdrive' configuration found"
+
+# Verify rclone config works by testing connectivity
+echo "Testing Google Drive connectivity..."
+if ! rclone lsd gdrive: --max-depth 1 &>/dev/null; then
     echo "ERROR: Cannot access Google Drive via rclone"
-    echo "Please run: rclone config"
+    echo "The remote is configured but connectivity test failed."
+    echo "Possible issues:"
+    echo "  - OAuth token expired (run: rclone config reconnect gdrive:)"
+    echo "  - Network connectivity issues"
+    echo "  - Insufficient permissions"
     exit 1
 fi
 
-echo "rclone configured successfully"
+echo "✓ rclone configured and working successfully"
 
 # Step 2: Create backup scripts directory
 echo ""
@@ -150,10 +155,11 @@ exec > >(tee -a ${LOG_FILE}) 2>&1
 
 echo "=== Restic Backup Started: $(date) ==="
 
-# Pause Docker containers to ensure consistency
-echo "Pausing Docker containers..."
-PAUSED_CONTAINERS=$(docker ps --format '{{.Names}}' | grep -E 'jupyter|code-server')
+# Pause all workspace containers to ensure consistency
+echo "Pausing all workspace containers..."
+PAUSED_CONTAINERS=$(docker ps --format '{{.Names}}' | grep -E 'workspace')
 for container in ${PAUSED_CONTAINERS}; do
+    echo "  Pausing ${container}..."
     docker pause ${container} || true
 done
 

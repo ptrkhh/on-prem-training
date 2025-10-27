@@ -60,7 +60,12 @@ if [[ -z "${NVME}" ]]; then
 else
     echo "  ✓ SSD/NVMe: ${NVME}"
     if [[ -b "${NVME}" ]]; then
-        SIZE=$(blockdev --getsize64 ${NVME} 2>/dev/null | awk '{print int($1/1024/1024/1024)"GB"}' || echo "unknown")
+        # Try to get size, but make it non-fatal if not running as root
+        if [[ $EUID -eq 0 ]]; then
+            SIZE=$(blockdev --getsize64 ${NVME} 2>/dev/null | awk '{print int($1/1024/1024/1024)"GB"}' || echo "unknown")
+        else
+            SIZE=$(lsblk -ndo SIZE ${NVME} 2>/dev/null || echo "unknown")
+        fi
         echo "    Size: ${SIZE}"
     fi
 fi
