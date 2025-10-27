@@ -11,7 +11,7 @@ improving performance.
 - **[SETUP-GUIDE.md](SETUP-GUIDE.md)** - Complete step-by-step setup instructions
 - **[config.sh.example](config.sh.example)** - Configuration template (customize users, hardware, and all settings)
 
-## What You Get
+## System Overview
 
 ### Hardware (Flexible!)
 
@@ -20,6 +20,41 @@ improving performance.
 - GPU: RTX 5080 (or other Nvidia)
 - Storage: 1TB NVMe + 4x 20TB HDD in BTRFS RAID10
 - **Works with ANY disk configuration** (2-20+ disks, any sizes, any RAID level)
+
+### Remote Desktop Access
+
+**Per-User URLs**
+- Direct browser access: `http://alice.yourdomain.com` or `http://alice-desktop.yourdomain.com`
+- Zero configuration, no login required
+- HTML5 noVNC client with full KDE Plasma desktop
+
+**Gateway Options:**
+- **Apache Guacamole**: Multi-protocol gateway (VNC/RDP/SSH) at `http://guacamole.yourdomain.com`
+- **Kasm Workspaces**: Container streaming platform at `http://kasm.yourdomain.com`
+
+**Direct Clients:**
+- VNC: Ports 5900+ (TigerVNC server)
+- RDP: Ports 3389+ (XRDP server)
+- HTML5 noVNC: Ports 6080+
+
+### Shared Cache System
+
+All users benefit from shared package/model caches - when one user downloads, all users can access instantly:
+
+**Cache Types:**
+- ML Models: HuggingFace Hub, PyTorch Hub, TensorFlow Hub (~50-100GB)
+- Packages: pip wheels, conda, APT packages (~20-40GB)
+- Languages: Go modules, npm, cargo, Julia, R (~10-20GB)
+- Build: Docker layers, BuildKit cache (~10-30GB)
+
+**Impact:** First user downloads 500MB model in 30-60s → other users load instantly from cache. Saves 80% bandwidth and 10-100x time for repeated installs.
+
+**Monitoring:** Run `/opt/scripts/cache/show-cache-info.sh` to view cache statistics
+
+**Cleanup:** Caches grow indefinitely (except Google Drive VFS auto-evicts via LRU). Clean old caches manually:
+```bash
+find /mnt/storage/cache/{pip,conda,apt} -type f -mtime +90 -delete
+```
 
 ### Each User Gets ONE Container With Everything
 
@@ -47,8 +82,8 @@ workloads.
 ### Infrastructure Services (Shared)
 
 - **Traefik**: Reverse proxy and router
-- **Apache Guacamole**: Browser-based remote desktop gateway (primary access method)
-- **Kasm Workspaces**: Container streaming platform (alternative access method)
+- **Apache Guacamole**: Browser-based remote desktop gateway
+- **Kasm Workspaces**: Container streaming platform
 - **Netdata**: Real-time system monitoring + SMART disk monitoring
 - **Prometheus + Grafana**: Metrics collection and visualization
 - **Shared TensorBoard**: View all training logs
@@ -103,6 +138,7 @@ cd docker && ./generate-compose.sh && cd ..
 # 5. Run setup scripts (in order)
 sudo ./scripts/01-setup-storage.sh  # REBOOT after this!
 sudo ./scripts/01b-setup-gdrive-shared.sh  # Mount Google Drive Shared Drive to /shared
+sudo ./scripts/01c-setup-shared-caches.sh
 sudo ./scripts/02-setup-users.sh
 sudo ./scripts/03-setup-docker.sh
 sudo ./scripts/04-setup-cloudflare-tunnel.sh
@@ -122,10 +158,9 @@ cd ../scripts && sudo ./09-run-tests.sh
 
 ## Access Your Services
 
-### Via Web Browser (Remote or Local)
+### Service URLs
 
 **Infrastructure:**
-
 - System Health: `http://health.yourdomain.com` (Netdata)
 - Prometheus: `http://prometheus.yourdomain.com`
 - Grafana: `http://grafana.yourdomain.com`
@@ -133,85 +168,35 @@ cd ../scripts && sudo ./09-run-tests.sh
 - Logs: `http://logs.yourdomain.com`
 
 **Per-User (example for Alice):**
-
-- **Desktop**: `http://alice-desktop.yourdomain.com` or `http://alice.yourdomain.com` ⭐
+- **Desktop**: `http://alice.yourdomain.com` or `http://alice-desktop.yourdomain.com`
 - VS Code: `http://alice-code.yourdomain.com`
 - Jupyter: `http://alice-jupyter.yourdomain.com`
 - TensorBoard: `http://alice-tensorboard.yourdomain.com`
 
 **Shared:**
-
-- TensorBoard: `http://tensorboard.yourdomain.com` (all users, organized by `/shared/tensorboard/{username}/`)
-
-### Via Per-User Desktop URLs (Simplest, Recommended) ⭐
-
-```bash
-# Each user gets their own desktop URL - just navigate in browser
-Alice:   http://alice-desktop.yourdomain.com  OR  http://alice.yourdomain.com
-Bob:     http://bob-desktop.yourdomain.com    OR  http://bob.yourdomain.com
-Charlie: http://charlie-desktop.yourdomain.com OR http://charlie.yourdomain.com
-
-# No login needed, direct to desktop via noVNC HTML5
-# Works in any browser, no installation required
-# Full KDE Plasma desktop environment
-```
-
-### Via Apache Guacamole (Multi-Protocol Gateway)
-
-```bash
-# Access via web browser (no client installation needed)
-URL: http://guacamole.yourdomain.com or http://remote.yourdomain.com
-
-# Login with your username and password
-# Select your desktop connection from the list
-# Supports VNC, RDP, SSH protocols in one interface
-
-# Default credentials (first time):
-Username: guacadmin
-Password: guacadmin
-(Change immediately after first login)
-```
-
-### Via Kasm Workspaces (Advanced Streaming)
-
-```bash
-# Access via web browser
-URL: http://kasm.yourdomain.com
-
-# Login and launch your workspace from dashboard
-# Full container streaming with recording capabilities
-# Advanced features for session management
-```
-
-### Via Direct VNC/RDP Clients (Advanced)
-
-```bash
-# VNC Direct (TigerVNC, RealVNC, etc.)
-Server: server_ip
-Port: 5900 (alice), 5901 (bob), 5902 (charlie), etc.
-
-# RDP Direct (Windows Remote Desktop, Remmina, etc.)
-Server: server_ip
-Port: 3389 (alice), 3390 (bob), 3391 (charlie), etc.
-
-# noVNC (HTML5 in browser, no gateway)
-URL: http://server_ip:6080 (alice), 6081 (bob), 6082 (charlie), etc.
-```
+- TensorBoard: `http://tensorboard.yourdomain.com` (all users)
+- Guacamole Gateway: `http://guacamole.yourdomain.com` (default: guacadmin/guacadmin)
+- Kasm Workspaces: `http://kasm.yourdomain.com`
 
 ## Key Features
 
 ✅ **Universal Hardware Support**: Auto-detects disks, works with 1-100 users, any RAID level
+
 ✅ **VM-Like Experience**: Full desktop + all tools in one container per user
+
 ✅ **Hybrid Network**: Fast local access + secure remote access via Cloudflare
+
 ✅ **Production Ready**: Automated backups, monitoring, alerts, health checks
+
 ✅ **Fully Customizable**: Single config file controls everything
+
 ✅ **Cost Effective**: 91% cost reduction vs GCP
 
 ## Documentation
 
-- **[SETUP-GUIDE.md](SETUP-GUIDE.md)** - Comprehensive 600+ line manual with detailed instructions
-- **[GRAND-PLAN.md](GRAND-PLAN.md)** - Original architecture and design decisions
-- **[config.sh.example](config.sh.example)** - Complete configuration reference (100+ parameters)
+- **[SETUP-GUIDE.md](SETUP-GUIDE.md)** - Complete setup instructions and troubleshooting
+- **[GRAND-PLAN.md](GRAND-PLAN.md)** - Architecture and design decisions
+- **[config.sh.example](config.sh.example)** - Configuration reference (100+ parameters)
 
 ## Example Configurations
 
@@ -481,10 +466,10 @@ libraries (with `-dev` suffix, command-line tools, etc.) need Dockerfile changes
 
 ## Maintenance
 
-**Daily**: Check Telegram alerts, review dashboards
-**Weekly**: Review logs, check disk usage
-**Monthly**: Verify backup restore (automated), BTRFS scrub
-**Quarterly**: Update Docker images, test failover
+* **Daily**: Check Telegram alerts, review dashboards
+* **Weekly**: Review logs, check disk usage
+* **Monthly**: Verify backup restore (automated), BTRFS scrub
+* **Quarterly**: Update Docker images, test failover
 
 ## Troubleshooting
 
