@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Generate docker-compose.yml with proper architecture:
 # - Infrastructure services (shared): Traefik, Netdata, Prometheus, Grafana, etc.
-# - Per-user workspace containers (one container per user with full desktop + NoMachine)
+# - Per-user workspace containers (one container per user with full desktop + VNC/RDP)
 # - Cloudflare Tunnel + Traefik routing
 # - Local network direct access support
 
@@ -38,7 +38,7 @@ USER_COUNT=${#USER_ARRAY[@]}
 
 echo "Creating docker-compose.yml with:"
 echo "  - Infrastructure services (Traefik, monitoring, storage)"
-echo "  - ${USER_COUNT} user workspace containers (with NoMachine remote desktop)"
+echo "  - ${USER_COUNT} user workspace containers (with VNC/RDP remote desktop)"
 echo ""
 
 # Warn about default passwords
@@ -70,6 +70,8 @@ volumes:
   grafana-data:
   portainer-data:
   dozzle-data:
+  guacamole-db-data:
+  kasm-data:
 
 services:
   #============================================================================
@@ -102,9 +104,69 @@ services:
     networks:
       - ml-net
 
-  # NoMachine Remote Desktop
-  # Note: NoMachine servers run inside each user workspace container
-  # Each user can access their desktop via NoMachine client (download from nomachine.com)
+  # Apache Guacamole - Clientless Remote Desktop Gateway
+  guacd:
+    image: guacamole/guacd:latest
+    container_name: guacd
+    restart: unless-stopped
+    networks:
+      - ml-net
+
+  guacamole-db:
+    image: postgres:15
+    container_name: guacamole-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=guacamole_db
+      - POSTGRES_USER=guacamole_user
+      - POSTGRES_PASSWORD=\${GUACAMOLE_DB_PASSWORD:-guacamole_password}
+    volumes:
+      - guacamole-db-data:/var/lib/postgresql/data
+    networks:
+      - ml-net
+
+  guacamole:
+    image: guacamole/guacamole:latest
+    container_name: guacamole
+    restart: unless-stopped
+    environment:
+      - GUACD_HOSTNAME=guacd
+      - POSTGRES_HOSTNAME=guacamole-db
+      - POSTGRES_DATABASE=guacamole_db
+      - POSTGRES_USER=guacamole_user
+      - POSTGRES_PASSWORD=\${GUACAMOLE_DB_PASSWORD:-guacamole_password}
+    depends_on:
+      - guacd
+      - guacamole-db
+    networks:
+      - ml-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.guacamole.rule=Host(\`guacamole.\${DOMAIN}\`) || Host(\`remote.\${DOMAIN}\`)"
+      - "traefik.http.routers.guacamole.entrypoints=web"
+      - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.guacamole-prefix.stripprefix.prefixes=/guacamole"
+      - "traefik.http.routers.guacamole.middlewares=guacamole-prefix"
+
+  # Kasm Workspaces - Container Streaming Platform
+  kasm:
+    image: kasmweb/workspaces:latest
+    container_name: kasm
+    restart: unless-stopped
+    privileged: true
+    environment:
+      - KASM_PORT=443
+    volumes:
+      - kasm-data:/opt/kasm/current
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - ml-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kasm.rule=Host(\`kasm.\${DOMAIN}\`)"
+      - "traefik.http.routers.kasm.entrypoints=web"
+      - "traefik.http.services.kasm.loadbalancer.server.port=443"
+      - "traefik.http.services.kasm.loadbalancer.server.scheme=https"
 
   # Netdata - Real-time System Monitoring
   netdata:
@@ -284,10 +346,16 @@ for USERNAME in ${USER_ARRAY[@]}; do
     # SSH port: SSH_BASE_PORT + user_index
     SSH_PORT=$((SSH_BASE_PORT + USER_INDEX))
 
-    # NoMachine port: NOMACHINE_BASE_PORT + user_index
-    NX_PORT=$((NOMACHINE_BASE_PORT + USER_INDEX))
+    # VNC port: VNC_BASE_PORT + user_index
+    VNC_PORT=$((VNC_BASE_PORT + USER_INDEX))
 
-    echo "Adding user container: ${USERNAME} (UID: ${UID}, SSH: ${SSH_PORT}, NX: ${NX_PORT})"
+    # RDP port: RDP_BASE_PORT + user_index
+    RDP_PORT=$((RDP_BASE_PORT + USER_INDEX))
+
+    # noVNC port: NOVNC_BASE_PORT + user_index
+    NOVNC_PORT=$((NOVNC_BASE_PORT + USER_INDEX))
+
+    echo "Adding user container: ${USERNAME} (UID: ${UID}, SSH: ${SSH_PORT}, VNC: ${VNC_PORT}, RDP: ${RDP_PORT}, noVNC: ${NOVNC_PORT})"
 
     cat >> "${OUTPUT_FILE}" << EOF
   # User: ${USERNAME}
@@ -334,7 +402,9 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - \${MOUNT_POINT:-/mnt/storage}/cache/jetbrains:/cache/jetbrains:rw
     ports:
       - "${SSH_PORT}:22"         # SSH (for terminal access)
-      - "${NX_PORT}:4000"        # NoMachine (NX protocol)
+      - "${VNC_PORT}:5900"       # VNC (for Guacamole/direct VNC clients)
+      - "${RDP_PORT}:3389"       # XRDP (for Guacamole/direct RDP clients)
+      - "${NOVNC_PORT}:6080"     # noVNC (HTML5 VNC client)
     deploy:
       resources:
         limits:
@@ -349,6 +419,11 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - ml-net
     labels:
       - "traefik.enable=true"
+      # Desktop (noVNC HTML5)
+      - "traefik.http.routers.${USERNAME}-desktop.rule=Host(\`${USERNAME}-desktop.\${DOMAIN}\`) || Host(\`${USERNAME}.\${DOMAIN}\`)"
+      - "traefik.http.routers.${USERNAME}-desktop.entrypoints=web"
+      - "traefik.http.routers.${USERNAME}-desktop.service=${USERNAME}-desktop"
+      - "traefik.http.services.${USERNAME}-desktop.loadbalancer.server.port=6080"
       # Code-server (VS Code in browser)
       - "traefik.http.routers.${USERNAME}-code.rule=Host(\`${USERNAME}-code.\${DOMAIN}\`)"
       - "traefik.http.routers.${USERNAME}-code.entrypoints=web"
@@ -375,7 +450,7 @@ echo "✅ Generated: ${OUTPUT_FILE}"
 echo ""
 echo "Services created:"
 echo "  - Infrastructure: 9 services (Traefik, Netdata, Prometheus, Grafana, etc.)"
-echo "  - User workspaces: ${USER_COUNT} containers (each with NoMachine remote desktop)"
+echo "  - User workspaces: ${USER_COUNT} containers (with VNC/RDP via Guacamole/Kasm)"
 echo ""
 echo "Access URLs (via Cloudflare Tunnel or local network):"
 echo "  Infrastructure:"
@@ -387,13 +462,23 @@ echo "    - FileBrowser: http://files.${DOMAIN}"
 echo "    - Dozzle (Logs): http://logs.${DOMAIN}"
 echo "    - Portainer: http://portainer.${DOMAIN}"
 echo ""
+echo "  Remote Desktop Gateways:"
+echo "    - Guacamole: http://guacamole.${DOMAIN} (primary web gateway)"
+echo "    - Kasm Workspaces: http://kasm.${DOMAIN} (alternative streaming platform)"
+echo ""
 echo "  Per-user services:"
 USER_INDEX=0
 for USERNAME in ${USER_ARRAY[@]}; do
     SSH_PORT=$((SSH_BASE_PORT + USER_INDEX))
-    NX_PORT=$((NOMACHINE_BASE_PORT + USER_INDEX))
+    VNC_PORT=$((VNC_BASE_PORT + USER_INDEX))
+    RDP_PORT=$((RDP_BASE_PORT + USER_INDEX))
+    NOVNC_PORT=$((NOVNC_BASE_PORT + USER_INDEX))
     echo "    ${USERNAME}:"
-    echo "      - Desktop (NoMachine Client): SERVER_IP:${NX_PORT}"
+    echo "      - Desktop (Web): http://${USERNAME}-desktop.${DOMAIN} or http://${USERNAME}.${DOMAIN}"
+    echo "      - Desktop (Guacamole): http://guacamole.${DOMAIN} → Select ${USERNAME}-desktop"
+    echo "      - Desktop (Kasm): http://kasm.${DOMAIN} → Launch ${USERNAME} workspace"
+    echo "      - Desktop (VNC Direct): SERVER_IP:${VNC_PORT}"
+    echo "      - Desktop (RDP Direct): SERVER_IP:${RDP_PORT}"
     echo "      - VS Code: http://${USERNAME}-code.${DOMAIN}"
     echo "      - Jupyter: http://${USERNAME}-jupyter.${DOMAIN}"
     echo "      - TensorBoard: http://${USERNAME}-tensorboard.${DOMAIN}"
@@ -405,7 +490,9 @@ echo "Local network access:"
 echo "  - Point *.${DOMAIN} to server IP in /etc/hosts or local DNS"
 echo "  - All services accessible via http://hostname.${DOMAIN}"
 echo "  - SSH directly to ports ${SSH_BASE_PORT}, $((SSH_BASE_PORT+1)), $((SSH_BASE_PORT+2)), etc."
-echo "  - NoMachine to ports ${NOMACHINE_BASE_PORT}, $((NOMACHINE_BASE_PORT+1)), $((NOMACHINE_BASE_PORT+2)), etc."
+echo "  - VNC directly to ports ${VNC_BASE_PORT}, $((VNC_BASE_PORT+1)), $((VNC_BASE_PORT+2)), etc."
+echo "  - RDP directly to ports ${RDP_BASE_PORT}, $((RDP_BASE_PORT+1)), $((RDP_BASE_PORT+2)), etc."
+echo "  - noVNC (HTML5) to ports ${NOVNC_BASE_PORT}, $((NOVNC_BASE_PORT+1)), $((NOVNC_BASE_PORT+2)), etc."
 echo ""
 echo "Cloudflare Tunnel (internet access):"
 echo "  - Routes *.${DOMAIN} through Cloudflare to Traefik on port 80"

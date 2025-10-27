@@ -106,6 +106,16 @@ ingress:
 
   - hostname: portainer.${DOMAIN}
     service: http://localhost:80
+
+  # Remote Desktop Gateways
+  - hostname: guacamole.${DOMAIN}
+    service: http://localhost:80
+
+  - hostname: remote.${DOMAIN}
+    service: http://localhost:80
+
+  - hostname: kasm.${DOMAIN}
+    service: http://localhost:80
 EOFCONFIG
 
 # Add per-user services dynamically
@@ -117,10 +127,16 @@ for USERNAME in ${USER_ARRAY[@]}; do
   - hostname: ${USERNAME}-desktop.${DOMAIN}
     service: http://localhost:80
 
+  - hostname: ${USERNAME}.${DOMAIN}
+    service: http://localhost:80
+
   - hostname: ${USERNAME}-code.${DOMAIN}
     service: http://localhost:80
 
   - hostname: ${USERNAME}-jupyter.${DOMAIN}
+    service: http://localhost:80
+
+  - hostname: ${USERNAME}-tensorboard.${DOMAIN}
     service: http://localhost:80
 EOFUSER
 
@@ -169,24 +185,40 @@ echo "Configured services:"
 echo "  https://health.${DOMAIN} → Netdata"
 echo "  https://prometheus.${DOMAIN} → Prometheus"
 echo "  https://grafana.${DOMAIN} → Grafana"
-echo "  https://tensorboard.${DOMAIN} → TensorBoard"
+echo "  https://tensorboard.${DOMAIN} → Shared TensorBoard"
 echo "  https://files.${DOMAIN} → FileBrowser"
 echo "  https://logs.${DOMAIN} → Dozzle"
 echo "  https://portainer.${DOMAIN} → Portainer"
 echo ""
+echo "Remote Desktop Gateways:"
+echo "  https://guacamole.${DOMAIN} → Apache Guacamole (primary)"
+echo "  https://remote.${DOMAIN} → Apache Guacamole (alias)"
+echo "  https://kasm.${DOMAIN} → Kasm Workspaces (alternative)"
+echo ""
 echo "Per-user services (${USER_COUNT} users):"
 for USERNAME in ${USER_ARRAY[@]}; do
     echo "  ${USERNAME}:"
-    echo "    https://${USERNAME}-desktop.${DOMAIN} → NoMachine Web Desktop"
+    echo "    https://${USERNAME}-desktop.${DOMAIN} → Desktop (noVNC)"
+    echo "    https://${USERNAME}.${DOMAIN} → Desktop (short URL)"
     echo "    https://${USERNAME}-code.${DOMAIN} → VS Code"
     echo "    https://${USERNAME}-jupyter.${DOMAIN} → Jupyter"
+    echo "    https://${USERNAME}-tensorboard.${DOMAIN} → Per-user TensorBoard"
 done
 echo ""
-echo "Note: All users share TensorBoard at https://tensorboard.${DOMAIN}"
-echo "      Each user has their own directory: /shared/tensorboard/\${username}/"
+echo "Desktop Access:"
+echo "  Primary: Apache Guacamole (https://guacamole.${DOMAIN})"
+echo "    - Browser-based, no client needed"
+echo "    - Select user desktop connection from list"
+echo "    - Supports VNC and RDP protocols"
 echo ""
-echo "NoMachine client connections:"
-echo "  Use NoMachine client to connect directly to ports 4000+ (best performance)"
+echo "  Alternative: Kasm Workspaces (https://kasm.${DOMAIN})"
+echo "    - Container streaming platform"
+echo "    - Launch user workspace from dashboard"
+echo ""
+echo "  Direct connections (local network or via SSH tunnel):"
+echo "    - VNC: ports ${VNC_BASE_PORT}+"
+echo "    - RDP: ports ${RDP_BASE_PORT}+"
+echo "    - noVNC (HTML5): ports ${NOVNC_BASE_PORT}+"
 echo ""
 echo "Next steps:"
 echo "  1. Configure Cloudflare Access at: https://one.dash.cloudflare.com/"

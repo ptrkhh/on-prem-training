@@ -67,31 +67,48 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 #==============================================================================
-# REMOTE ACCESS SERVICES - NoMachine
+# REMOTE ACCESS SERVICES - VNC + XRDP
 #==============================================================================
 
-# Install NoMachine server
+# Install TigerVNC server and XRDP
 # Features:
-#  - Hardware-accelerated desktop streaming
-#  - Multi-platform client (Windows, Mac, Linux, iOS, Android)
-#  - Web-based HTML5 client (no installation needed)
-#  - Better compression and lower bandwidth usage
-#  - Native audio streaming
-#  - File transfer and printing support
+#  - TigerVNC: High-performance VNC server for Guacamole integration
+#  - XRDP: RDP protocol support for Windows-native remote desktop
+#  - Both accessible through Apache Guacamole web interface
+#  - Hardware-accelerated via VirtualGL for GPU applications
+#  - Audio support via PulseAudio
+#  - Clipboard sharing
+#  - File transfer via Guacamole
 
-RUN wget -q https://download.nomachine.com/download/8.14/Linux/nomachine_8.14.2_1_amd64.deb -O /tmp/nomachine.deb && \
-    dpkg -i /tmp/nomachine.deb || apt-get install -f -y && \
-    rm /tmp/nomachine.deb && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    tigervnc-standalone-server tigervnc-common \
+    xrdp \
+    dbus-x11 \
+    x11vnc \
+    novnc websockify \
+    && rm -rf /var/lib/apt/lists/*
 
-# Configure NoMachine
-RUN mkdir -p /usr/NX/etc && \
-    sed -i 's/#EnableClipboard both/EnableClipboard both/' /usr/NX/etc/server.cfg || true && \
-    sed -i 's/#EnableNetworkBroadcast 1/EnableNetworkBroadcast 0/' /usr/NX/etc/server.cfg || true
+# Configure VNC server
+RUN mkdir -p /etc/vnc && \
+    echo "session=plasma" > /etc/vnc/xstartup && \
+    echo "unset SESSION_MANAGER" >> /etc/vnc/xstartup && \
+    echo "unset DBUS_SESSION_BUS_ADDRESS" >> /etc/vnc/xstartup && \
+    echo "exec startplasma-x11" >> /etc/vnc/xstartup && \
+    chmod +x /etc/vnc/xstartup
+
+# Configure XRDP
+RUN echo "startplasma-x11" > /etc/xrdp/startwm.sh && \
+    chmod +x /etc/xrdp/startwm.sh && \
+    sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini && \
+    sed -i 's/#tcp_send_buffer_bytes=32768/tcp_send_buffer_bytes=4194304/' /etc/xrdp/xrdp.ini && \
+    sed -i 's/#tcp_recv_buffer_bytes=32768/tcp_recv_buffer_bytes=6291456/' /etc/xrdp/xrdp.ini
 
 # Users can connect via:
-#  - NoMachine client (best performance, low bandwidth)
-#  - SSH tunneling for secure remote access
+#  - Apache Guacamole web interface (primary method, browser-based)
+#  - Kasm Workspaces (alternative, containerized streaming)
+#  - Direct VNC client (port 5900+)
+#  - Direct RDP client (port 3389)
+#  - noVNC HTML5 client (port 6080+)
 
 #==============================================================================
 # DEVELOPMENT TOOLS
@@ -208,7 +225,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 #==============================================================================
-# CONTAINERIZATION TOOLS (Docker-in-Docker support)
+# CONTAINERIZATION TOOLS (Docker-in-Docker)
 #==============================================================================
 
 RUN apt-get update && apt-get install -y \
@@ -317,7 +334,9 @@ ENV PYCHARM_CONFIG_PATH=/cache/jetbrains/config \
 
 # Expose all necessary ports
 EXPOSE 22      # SSH (for terminal access and SSH tunneling)
-EXPOSE 4000    # NoMachine server (NX protocol)
+EXPOSE 5900    # VNC server (for Guacamole)
+EXPOSE 3389    # XRDP server (RDP protocol)
+EXPOSE 6080    # noVNC HTML5 client (websockify)
 EXPOSE 8080    # code-server
 EXPOSE 8888    # Jupyter
 EXPOSE 6006    # TensorBoard

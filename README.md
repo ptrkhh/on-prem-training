@@ -23,7 +23,7 @@ improving performance.
 
 ### Each User Gets ONE Container With Everything
 
-- **Full KDE Plasma Desktop** (access via NoMachine client)
+- **Full KDE Plasma Desktop** (access via Guacamole/Kasm web interface or VNC/RDP)
 - **All Development Tools**: VS Code, PyCharm, Jupyter Lab, VSCodium
 - **Complete ML Stack**: PyTorch, TensorFlow, JAX (all with CUDA 12.4)
 - **Multiple Languages**: Python 3.11+, Go, Rust, Julia, R, Node.js
@@ -39,7 +39,7 @@ The architecture uses Docker containers rather than traditional VMs for several 
 - **Maximum Performance**: No hypervisor overhead means 96%+ native GPU performance
 - **Simpler Management**: Single host OS to manage, standard Docker tooling
 - **Full Isolation**: Each user gets their own containerized environment with dedicated resources
-- **Desktop Experience**: Full KDE Plasma desktop in each container via NoMachine
+- **Desktop Experience**: Full KDE Plasma desktop in each container via Guacamole/Kasm web gateway
 
 This approach provides VM-like isolation for trusted team environments while maintaining bare-metal performance for ML
 workloads.
@@ -47,7 +47,8 @@ workloads.
 ### Infrastructure Services (Shared)
 
 - **Traefik**: Reverse proxy and router
-- **NoMachine**: High-performance remote desktop (runs in each user container)
+- **Apache Guacamole**: Browser-based remote desktop gateway (primary access method)
+- **Kasm Workspaces**: Container streaming platform (alternative access method)
 - **Netdata**: Real-time system monitoring + SMART disk monitoring
 - **Prometheus + Grafana**: Metrics collection and visualization
 - **Shared TensorBoard**: View all training logs
@@ -133,27 +134,68 @@ cd ../scripts && sudo ./09-run-tests.sh
 
 **Per-User (example for Alice):**
 
+- **Desktop**: `http://alice-desktop.yourdomain.com` or `http://alice.yourdomain.com` ⭐
 - VS Code: `http://alice-code.yourdomain.com`
 - Jupyter: `http://alice-jupyter.yourdomain.com`
+- TensorBoard: `http://alice-tensorboard.yourdomain.com`
 
 **Shared:**
 
 - TensorBoard: `http://tensorboard.yourdomain.com` (all users, organized by `/shared/tensorboard/{username}/`)
 
-### Via NoMachine Client (Best Performance)
+### Via Per-User Desktop URLs (Simplest, Recommended) ⭐
 
 ```bash
-# Download NoMachine client from: https://nomachine.com/download
+# Each user gets their own desktop URL - just navigate in browser
+Alice:   http://alice-desktop.yourdomain.com  OR  http://alice.yourdomain.com
+Bob:     http://bob-desktop.yourdomain.com    OR  http://bob.yourdomain.com
+Charlie: http://charlie-desktop.yourdomain.com OR http://charlie.yourdomain.com
 
-# Connect to Alice's desktop
+# No login needed, direct to desktop via noVNC HTML5
+# Works in any browser, no installation required
+# Full KDE Plasma desktop environment
+```
+
+### Via Apache Guacamole (Multi-Protocol Gateway)
+
+```bash
+# Access via web browser (no client installation needed)
+URL: http://guacamole.yourdomain.com or http://remote.yourdomain.com
+
+# Login with your username and password
+# Select your desktop connection from the list
+# Supports VNC, RDP, SSH protocols in one interface
+
+# Default credentials (first time):
+Username: guacadmin
+Password: guacadmin
+(Change immediately after first login)
+```
+
+### Via Kasm Workspaces (Advanced Streaming)
+
+```bash
+# Access via web browser
+URL: http://kasm.yourdomain.com
+
+# Login and launch your workspace from dashboard
+# Full container streaming with recording capabilities
+# Advanced features for session management
+```
+
+### Via Direct VNC/RDP Clients (Advanced)
+
+```bash
+# VNC Direct (TigerVNC, RealVNC, etc.)
 Server: server_ip
-Port: 4000 (alice), 4001 (bob), 4002 (charlie), etc.
-Protocol: NX
-Username: alice
-Password: <user_password>
+Port: 5900 (alice), 5901 (bob), 5902 (charlie), etc.
 
-# SSH terminal access
-ssh alice@server_ip -p 2222
+# RDP Direct (Windows Remote Desktop, Remmina, etc.)
+Server: server_ip
+Port: 3389 (alice), 3390 (bob), 3391 (charlie), etc.
+
+# noVNC (HTML5 in browser, no gateway)
+URL: http://server_ip:6080 (alice), 6081 (bob), 6082 (charlie), etc.
 ```
 
 ## Key Features
@@ -231,6 +273,8 @@ Google Workspace Shared Drive
 ```
 Infrastructure (Shared):
 ├── Traefik (reverse proxy)
+├── Apache Guacamole + guacd (remote desktop gateway)
+├── Kasm Workspaces (container streaming)
 ├── Netdata (monitoring)
 ├── Prometheus + Grafana (metrics)
 └── FileBrowser, Dozzle, Portainer, TensorBoard
@@ -244,7 +288,9 @@ Per-User Workspaces (One container each):
 
 Each workspace contains:
 ├── Full KDE Plasma desktop
-├── NoMachine server (for remote desktop - client & web access)
+├── TigerVNC server (for Guacamole/VNC clients)
+├── XRDP server (for RDP clients)
+├── noVNC websockify (HTML5 VNC in browser)
 ├── SSH server (for terminal access)
 ├── VS Code + PyCharm + Jupyter
 ├── PyTorch + TensorFlow + JAX
@@ -262,13 +308,17 @@ Cloudflare Tunnel                Local DNS
 Traefik (:80) ←───────────────────────┘
      ↓
 Routes by hostname:
+├── guacamole.domain.com → Guacamole Gateway
+├── kasm.domain.com → Kasm Workspaces
 ├── alice-code.domain.com → Alice's VS Code
 ├── alice-jupyter.domain.com → Alice's Jupyter
 ├── alice-tensorboard.domain.com → Alice's TensorBoard
 └── ...
 
-Direct NoMachine Protocol (ports 4000+):
-└── Best performance, bypasses HTTP
+Direct Protocol Access (via ports):
+├── VNC (5900+): For Guacamole backend or direct VNC clients
+├── RDP (3389+): For direct RDP clients (Windows Remote Desktop)
+└── noVNC (6080+): HTML5 VNC in browser (no gateway needed)
 ```
 
 ## User Guide

@@ -44,26 +44,45 @@ ln -sf /workspace ~/workspace-shared
 ln -sf /shared ~/shared-data
 EOF
 
-# Configure NoMachine for user
-echo "Configuring NoMachine server..."
-# NoMachine automatically detects available desktop environments (KDE Plasma)
-# Set user password for NoMachine authentication (same as system password)
-# NoMachine will use the existing user credentials
+# Configure VNC server for user
+echo "Configuring VNC server..."
+su - ${USER_NAME} << EOF
+mkdir -p ~/.vnc
 
-# Create NoMachine user configuration directory
-su - ${USER_NAME} << 'EOF'
-mkdir -p ~/.nx
-mkdir -p ~/.nx/config
+# Create VNC password file
+echo "${VNC_PASSWORD}" | vncpasswd -f > ~/.vnc/passwd
+chmod 600 ~/.vnc/passwd
+
+# Create VNC startup script
+cat > ~/.vnc/xstartup << 'VNCSTART'
+#!/bin/bash
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export XKL_XMODMAP_DISABLE=1
+exec startplasma-x11
+VNCSTART
+chmod +x ~/.vnc/xstartup
+
+# VNC config
+cat > ~/.vnc/config << 'VNCCONF'
+geometry=1920x1080
+depth=24
+dpi=96
+VNCCONF
 EOF
 
-# Configure NoMachine server settings
-cat > /usr/NX/etc/server.cfg << 'NXCFG'
-# NoMachine Server Configuration
-EnableClipboard both
-EnableNetworkBroadcast 0
-AcceptedAuthenticationMethods password
-EnablePasswordDB 1
-NXCFG
+# Configure XRDP for user
+echo "Configuring XRDP server..."
+# XRDP uses PAM authentication (system passwords)
+# Configure session
+cat > /etc/xrdp/startwm.sh << 'XRDPSTART'
+#!/bin/bash
+unset SESSION_MANAGER
+unset DBUS_SESSION_BUS_ADDRESS
+export XKL_XMODMAP_DISABLE=1
+exec startplasma-x11
+XRDPSTART
+chmod +x /etc/xrdp/startwm.sh
 
 # Configure code-server
 echo "Configuring code-server..."
@@ -176,8 +195,22 @@ stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 exitcodes=0
 
-[program:nomachine]
-command=/usr/NX/bin/nxserver --startup
+[program:vncserver]
+command=/bin/bash -c 'su - ${USER_NAME} -c "vncserver :0 -fg -localhost no -SecurityTypes None"'
+autostart=true
+autorestart=true
+startsecs=10
+startretries=3
+user=${USER_NAME}
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+priority=10
+exitcodes=0
+
+[program:xrdp]
+command=/usr/sbin/xrdp --nodaemon
 autostart=true
 autorestart=true
 startsecs=10
@@ -187,6 +220,31 @@ stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 priority=10
+exitcodes=0
+
+[program:xrdp-sesman]
+command=/usr/sbin/xrdp-sesman --nodaemon
+autostart=true
+autorestart=true
+startsecs=10
+startretries=3
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
+priority=9
+exitcodes=0
+
+[program:novnc]
+command=/bin/bash -c 'websockify --web /usr/share/novnc 6080 localhost:5900'
+autostart=true
+autorestart=true
+startsecs=5
+startretries=3
+stdout_logfile=/dev/stdout
+stdout_logfile_maxbytes=0
+stderr_logfile=/dev/stderr
+stderr_logfile_maxbytes=0
 exitcodes=0
 
 [program:code-server]
@@ -258,10 +316,14 @@ echo "User: ${USER_NAME}"
 echo ""
 echo "Access Methods:"
 echo "  SSH:          ssh ${USER_NAME}@<server> -p <mapped-port>"
-echo "  NoMachine:    <server>:<nx-port> (use NoMachine client)"
+echo "  Guacamole:    http://<server>/guacamole (browser-based, primary)"
+echo "  Kasm:         http://<server>/kasm (alternative browser access)"
+echo "  VNC Direct:   <server>:<vnc-port> (use VNC client)"
+echo "  RDP Direct:   <server>:<rdp-port> (use RDP client)"
+echo "  noVNC:        http://<server>:<novnc-port> (HTML5 VNC)"
 echo "  VS Code:      http://<server>:<code-port>"
 echo "  Jupyter:      http://<server>:<jupyter-port>"
-echo "  Desktop:      Via NoMachine client"
+echo "  Desktop:      Via Guacamole/Kasm web interface (recommended)"
 echo ""
 echo "Volumes:"
 echo "  Home:       /home/${USER_NAME}"

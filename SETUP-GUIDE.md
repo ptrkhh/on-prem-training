@@ -335,7 +335,11 @@ Each user gets ONE comprehensive container (e.g., `workspace-alice`) that functi
 
 - **Full KDE Plasma Desktop** - Complete graphical environment
 - **Remote Access**:
-  - NoMachine server (NX protocol on ports 4000+, web access via Traefik)
+  - Apache Guacamole gateway (browser-based, primary method)
+  - Kasm Workspaces (container streaming, alternative)
+  - TigerVNC server (ports 5900+, for Guacamole backend and direct VNC)
+  - XRDP server (ports 3389+, for direct RDP access)
+  - noVNC HTML5 (ports 6080+, browser VNC without gateway)
   - SSH server (ports 2222+)
 - **Development Tools**:
   - VS Code (via code-server, accessed through Traefik)
