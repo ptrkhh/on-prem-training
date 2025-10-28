@@ -115,42 +115,43 @@ EOF
 chmod +x ${SCRIPTS_DIR}/send-telegram-alert.sh
 
 # SMART Monitoring Script
-cat > ${SCRIPTS_DIR}/check-disk-smart.sh <<'EOF'
+cat > ${SCRIPTS_DIR}/check-disk-smart.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 DEVICES=("/dev/sda" "/dev/sdb" "/dev/sdc" "/dev/sdd" "/dev/nvme0n1")
+DISK_TEMP_THRESHOLD=${DISK_TEMP_THRESHOLD}
 
-for device in "${DEVICES[@]}"; do
-    if [[ ! -b "${device}" ]]; then
+for device in "\${DEVICES[@]}"; do
+    if [[ ! -b "\${device}" ]]; then
         continue
     fi
 
     # Run SMART test
-    if smartctl -H ${device} | grep -q "PASSED"; then
-        echo "${device}: SMART status PASSED"
+    if smartctl -H \${device} | grep -q "PASSED"; then
+        echo "\${device}: SMART status PASSED"
     else
-        MESSAGE="CRITICAL: SMART test failed for ${device}!"
-        echo "${MESSAGE}"
-        [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "critical" "${MESSAGE}"
+        MESSAGE="CRITICAL: SMART test failed for \${device}!"
+        echo "\${MESSAGE}"
+        [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "critical" "\${MESSAGE}"
     fi
 
     # Check for reallocated sectors
-    REALLOCATED=$(smartctl -A ${device} | grep "Reallocated_Sector_Ct" | awk '{print $10}' || echo "0")
-    if [[ "${REALLOCATED}" -gt 0 ]]; then
-        MESSAGE="WARNING: ${device} has ${REALLOCATED} reallocated sectors"
-        echo "${MESSAGE}"
-        [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "warning" "${MESSAGE}"
+    REALLOCATED=\$(smartctl -A \${device} | grep "Reallocated_Sector_Ct" | awk '{print \$10}' || echo "0")
+    if [[ "\${REALLOCATED}" -gt 0 ]]; then
+        MESSAGE="WARNING: \${device} has \${REALLOCATED} reallocated sectors"
+        echo "\${MESSAGE}"
+        [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
     fi
 
     # Check temperature (HDDs)
-    if [[ "${device}" != "/dev/nvme"* ]]; then
-        TEMP=$(smartctl -A ${device} | grep "Temperature_Celsius" | awk '{print $10}' || echo "0")
-        if [[ "${TEMP}" -gt 50 ]]; then
-            MESSAGE="WARNING: ${device} temperature is ${TEMP}°C"
-            echo "${MESSAGE}"
-            [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "warning" "${MESSAGE}"
+    if [[ "\${device}" != "/dev/nvme"* ]]; then
+        TEMP=\$(smartctl -A \${device} | grep "Temperature_Celsius" | awk '{print \$10}' || echo "0")
+        if [[ "\${TEMP}" -gt \${DISK_TEMP_THRESHOLD} ]]; then
+            MESSAGE="WARNING: \${device} temperature is \${TEMP}°C"
+            echo "\${MESSAGE}"
+            [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
         fi
     fi
 done
@@ -159,12 +160,12 @@ EOF
 chmod +x ${SCRIPTS_DIR}/check-disk-smart.sh
 
 # GPU Temperature Monitoring Script
-cat > ${SCRIPTS_DIR}/check-gpu-temperature.sh <<'EOF'
+cat > ${SCRIPTS_DIR}/check-gpu-temperature.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
-TEMP_THRESHOLD=80
+TEMP_THRESHOLD=${GPU_TEMP_THRESHOLD}
 
 if ! command -v nvidia-smi &> /dev/null; then
     echo "nvidia-smi not found"
@@ -277,6 +278,69 @@ EOF
 
 chmod +x ${SCRIPTS_DIR}/check-gpu-usage.sh
 
+# GPU Metrics Export Script (for Prometheus node-exporter)
+cat > ${SCRIPTS_DIR}/export-gpu-metrics.sh <<'EOF'
+#!/bin/bash
+set -euo pipefail
+
+# Export GPU metrics to Prometheus node-exporter textfile collector
+TEXTFILE_DIR="/var/lib/node_exporter/textfile_collector"
+PROM_FILE="${TEXTFILE_DIR}/gpu_metrics.prom"
+TEMP_FILE="${PROM_FILE}.$$"
+
+# Create directory if it doesn't exist
+mkdir -p "${TEXTFILE_DIR}"
+
+if ! command -v nvidia-smi &> /dev/null; then
+    # No GPU, export empty metrics
+    echo "# No NVIDIA GPU detected" > "${TEMP_FILE}"
+    mv "${TEMP_FILE}" "${PROM_FILE}"
+    exit 0
+fi
+
+# Get GPU count
+GPU_COUNT=$(nvidia-smi --list-gpus | wc -l)
+
+# Start metrics file
+cat > "${TEMP_FILE}" << 'PROM'
+# HELP nvidia_gpu_temperature_celsius GPU temperature in Celsius
+# TYPE nvidia_gpu_temperature_celsius gauge
+# HELP nvidia_gpu_utilization_percent GPU utilization percentage
+# TYPE nvidia_gpu_utilization_percent gauge
+# HELP nvidia_gpu_memory_used_bytes GPU memory used in bytes
+# TYPE nvidia_gpu_memory_used_bytes gauge
+# HELP nvidia_gpu_memory_total_bytes GPU memory total in bytes
+# TYPE nvidia_gpu_memory_total_bytes gauge
+# HELP nvidia_gpu_power_draw_watts GPU power draw in watts
+# TYPE nvidia_gpu_power_draw_watts gauge
+# HELP nvidia_gpu_fan_speed_percent GPU fan speed percentage
+# TYPE nvidia_gpu_fan_speed_percent gauge
+PROM
+
+# Query all GPUs at once
+nvidia-smi --query-gpu=index,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,fan.speed,name \
+    --format=csv,noheader,nounits | \
+while IFS=', ' read -r idx temp util mem_used mem_total power fan name; do
+    # Convert MiB to bytes
+    mem_used_bytes=$((${mem_used} * 1024 * 1024))
+    mem_total_bytes=$((${mem_total} * 1024 * 1024))
+
+    cat >> "${TEMP_FILE}" << METRICS
+nvidia_gpu_temperature_celsius{gpu="${idx}",name="${name}"} ${temp}
+nvidia_gpu_utilization_percent{gpu="${idx}",name="${name}"} ${util}
+nvidia_gpu_memory_used_bytes{gpu="${idx}",name="${name}"} ${mem_used_bytes}
+nvidia_gpu_memory_total_bytes{gpu="${idx}",name="${name}"} ${mem_total_bytes}
+nvidia_gpu_power_draw_watts{gpu="${idx}",name="${name}"} ${power}
+nvidia_gpu_fan_speed_percent{gpu="${idx}",name="${name}"} ${fan}
+METRICS
+done
+
+# Atomically replace the metrics file
+mv "${TEMP_FILE}" "${PROM_FILE}"
+EOF
+
+chmod +x ${SCRIPTS_DIR}/export-gpu-metrics.sh
+
 # Step 2: Configure Telegram Bot
 echo ""
 echo "=== Step 2: Configuring Telegram Bot ==="
@@ -325,7 +389,8 @@ else
         export TELEGRAM_CHAT_ID="${telegram_chat_id}"
         ${SCRIPTS_DIR}/send-telegram-alert.sh "success" "Monitoring setup complete on ML Training Server"
     else
-    echo "Skipping Telegram configuration"
+        echo "Skipping Telegram configuration"
+    fi
 fi
 
 # Step 3: Enable SMART monitoring
@@ -362,6 +427,9 @@ cat > /etc/cron.d/ml-monitoring <<EOF
 
 # GPU usage check (every hour)
 0 * * * * root ${SCRIPTS_DIR}/check-gpu-usage.sh
+
+# GPU metrics export for Prometheus (every minute)
+* * * * * root ${SCRIPTS_DIR}/export-gpu-metrics.sh
 EOF
 
 echo "Monitoring cron jobs configured"

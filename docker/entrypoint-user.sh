@@ -101,7 +101,7 @@ echo "Configuring Jupyter..."
 su - ${USER_NAME} << EOF
 mkdir -p ~/.jupyter
 
-cat > ~/.jupyter/jupyter_lab_config.py << 'JUPCONF'
+cat > ~/.jupyter/jupyter_lab_config.py << JUPCONF
 c.ServerApp.ip = '0.0.0.0'
 c.ServerApp.port = 8888
 c.ServerApp.open_browser = False

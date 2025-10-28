@@ -32,13 +32,6 @@ scrape_configs:
         labels:
           instance: 'ml-train-server'
 
-  # NVIDIA GPU Exporter
-  - job_name: 'nvidia-gpu'
-    static_configs:
-      - targets: ['nvidia-gpu-exporter:9400']
-        labels:
-          instance: 'ml-train-server'
-
   # Docker Engine metrics (if enabled)
   - job_name: 'docker'
     static_configs:

@@ -323,8 +323,11 @@ if [[ -n "${AUTO_GENERATE_PASSWORDS:-}" ]]; then
 fi
 echo "Users can access the server via:"
 echo "  - SSH: ssh <user>@<server-ip> -p 2222 (or 2223, 2224, etc.)"
-echo "  - NoMachine: Download client from https://nomachine.com/"
-echo "    - Connect to ports 4000 (alice), 4001 (bob), etc."
+echo "  - Web Desktop (noVNC): http://<user>-desktop.<domain> or http://<user>.<domain>"
+echo "  - Guacamole (Web Gateway): http://guacamole.<domain> or http://remote.<domain>"
+echo "  - Kasm Workspaces: http://kasm.<domain>"
+echo "  - Direct VNC: <server-ip>:5900, 5901, 5902, etc."
+echo "  - Direct RDP: <server-ip>:3389, 3390, 3391, etc."
 echo ""
 echo "Next steps:"
 echo "  1. Add SSH keys for each user"

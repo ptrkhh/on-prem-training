@@ -16,7 +16,7 @@ if [[ -f "${CONFIG_FILE}" ]]; then
     source "${CONFIG_FILE}"
     # Use config variables with defaults
     GCS_BUCKET="${GCS_BUCKET:-gs://your-bucket-name}"
-    GDRIVE_REMOTE="${GDRIVE_DEST:-gdrive:backups/gcs-migration}"
+    GDRIVE_REMOTE="${GDRIVE_CUSTOMER_DATA:-gdrive:backups/gcs-migration}"
 else
     echo "Config file not found, using defaults (you can override with parameters)"
     # Default configuration - can be overridden by parameters
@@ -34,7 +34,7 @@ if [[ "${GCS_BUCKET}" == "gs://your-bucket-name" ]]; then
     echo "Usage: $0 [GCS_BUCKET] [GDRIVE_REMOTE] [BANDWIDTH_LIMIT]"
     echo "Example: $0 gs://my-bucket gdrive:my-folder 100M"
     echo ""
-    echo "Or set GCS_BUCKET and GDRIVE_DEST in config.sh"
+    echo "Or set GCS_BUCKET and GDRIVE_CUSTOMER_DATA in config.sh"
     exit 1
 fi
 

@@ -105,11 +105,11 @@ EOF
 chmod +x ${SCRIPTS_DIR}/create-snapshot.sh
 
 # Restic Initialization Script
-cat > ${SCRIPTS_DIR}/init-restic.sh <<'EOF'
+cat > ${SCRIPTS_DIR}/init-restic.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
-RESTIC_REPOSITORY="rclone:gdrive:backups/ml-train-server"
+RESTIC_REPOSITORY="rclone:${BACKUP_REMOTE}"
 RESTIC_PASSWORD_FILE="/root/.restic-password"
 
 # Generate random password if doesn't exist
@@ -164,14 +164,15 @@ for container in ${PAUSED_CONTAINERS}; do
 done
 
 # Run backup with bandwidth limit
-echo "Running backup (100 Mbps limit)..."
-if restic -r ${RESTIC_REPOSITORY} backup \
+BANDWIDTH_LIMIT_KBPS=\$((${BACKUP_BANDWIDTH_LIMIT_MBPS} * 1000 / 8))
+echo "Running backup (${BACKUP_BANDWIDTH_LIMIT_MBPS} Mbps limit)..."
+if restic -r \${RESTIC_REPOSITORY} backup \
     --verbose \
     --tag daily \
-    --limit-upload 12500 \
-    ${MOUNT_POINT}/homes \
-    ${MOUNT_POINT}/docker-volumes \
-    ${MOUNT_POINT}/shared/tensorboard; then
+    --limit-upload \${BANDWIDTH_LIMIT_KBPS} \
+    \${MOUNT_POINT}/homes \
+    \${MOUNT_POINT}/docker-volumes \
+    \${MOUNT_POINT}/shared/tensorboard; then
 
     echo "Backup completed successfully"
     BACKUP_STATUS="success"
@@ -215,11 +216,11 @@ EOF
 chmod +x ${SCRIPTS_DIR}/restic-backup.sh
 
 # Restic Restore Verification Script
-cat > ${SCRIPTS_DIR}/verify-restore.sh <<'EOF'
+cat > ${SCRIPTS_DIR}/verify-restore.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
-RESTIC_REPOSITORY="rclone:gdrive:backups/ml-train-server"
+RESTIC_REPOSITORY="rclone:${BACKUP_REMOTE}"
 RESTIC_PASSWORD_FILE="/root/.restic-password"
 RESTORE_DIR="/tmp/restore-test"
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"

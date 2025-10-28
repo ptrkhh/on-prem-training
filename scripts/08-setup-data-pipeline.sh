@@ -28,7 +28,7 @@ SCRIPTS_DIR="/opt/scripts/data"
 
 # Use config variables with defaults
 GCS_BUCKET="${GCS_BUCKET:-gcs:customer-daily-bucket}"
-GDRIVE_DEST="${GDRIVE_DEST:-gdrive:customer-daily}"
+GDRIVE_CUSTOMER_DATA="${GDRIVE_CUSTOMER_DATA:-gdrive:customer-daily}"
 
 # Install rclone if not already installed
 if ! command -v rclone &> /dev/null; then
@@ -85,8 +85,8 @@ set -euo pipefail
 
 # Daily customer data sync from GCS to GDrive
 GCS_BUCKET="${GCS_BUCKET}"
-GDRIVE_DEST="${GDRIVE_DEST}"
-BANDWIDTH_LIMIT="100M"  # 100 Mbps (12.5 MB/s)
+GDRIVE_DEST="${GDRIVE_CUSTOMER_DATA}"
+BANDWIDTH_LIMIT="${DATA_SYNC_BANDWIDTH_LIMIT_MBPS}M"
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 LOG_FILE="/var/log/customer-data-sync.log"
 
@@ -139,13 +139,13 @@ EOF
 chmod +x ${SCRIPTS_DIR}/sync-customer-data.sh
 
 # Manual sync script (for testing)
-cat > ${SCRIPTS_DIR}/manual-sync.sh <<'EOF'
+cat > ${SCRIPTS_DIR}/manual-sync.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
 # Manual data sync (no bandwidth limit, for testing)
-GCS_BUCKET="gcs:customer-daily-bucket"
-GDRIVE_DEST="gdrive:customer-daily"
+GCS_BUCKET="${GCS_BUCKET}"
+GDRIVE_DEST="${GDRIVE_CUSTOMER_DATA}"
 
 echo "=== Manual Customer Data Sync ==="
 echo "Source: ${GCS_BUCKET}"
@@ -168,13 +168,13 @@ EOF
 chmod +x ${SCRIPTS_DIR}/manual-sync.sh
 
 # GDrive cleanup script (for old data)
-cat > ${SCRIPTS_DIR}/cleanup-old-data.sh <<'EOF'
+cat > ${SCRIPTS_DIR}/cleanup-old-data.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
 # Cleanup old customer data from GDrive
-GDRIVE_PATH="gdrive:customer-daily"
-DAYS_TO_KEEP=90
+GDRIVE_PATH="${GDRIVE_CUSTOMER_DATA}"
+DAYS_TO_KEEP=${DATA_CLEANUP_DAYS}
 
 echo "=== Cleanup Old Data ==="
 echo "Path: ${GDRIVE_PATH}"

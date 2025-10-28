@@ -124,6 +124,33 @@ services:
       - guacamole-db-data:/var/lib/postgresql/data
     networks:
       - ml-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U guacamole_user -d guacamole_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  guacamole-db-init:
+    image: guacamole/guacamole:latest
+    container_name: guacamole-db-init
+    depends_on:
+      guacamole-db:
+        condition: service_healthy
+    environment:
+      - POSTGRES_HOSTNAME=guacamole-db
+      - POSTGRES_DATABASE=guacamole_db
+      - POSTGRES_USER=guacamole_user
+      - POSTGRES_PASSWORD=\${GUACAMOLE_DB_PASSWORD:-guacamole_password}
+    networks:
+      - ml-net
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        # Generate and apply Guacamole schema
+        /opt/guacamole/bin/initdb.sh --postgresql > /tmp/initdb.sql
+        PGPASSWORD="\${GUACAMOLE_DB_PASSWORD:-guacamole_password}" psql -h guacamole-db -U guacamole_user -d guacamole_db -f /tmp/initdb.sql 2>&1 | grep -v "already exists" || true
+        echo "Guacamole database initialized"
+    restart: "no"
 
   guacamole:
     image: guacamole/guacamole:latest
@@ -137,7 +164,7 @@ services:
       - POSTGRES_PASSWORD=\${GUACAMOLE_DB_PASSWORD:-guacamole_password}
     depends_on:
       - guacd
-      - guacamole-db
+      - guacamole-db-init
     networks:
       - ml-net
     labels:
@@ -241,10 +268,12 @@ services:
       - '--path.procfs=/host/proc'
       - '--path.sysfs=/host/sys'
       - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.textfile.directory=/var/lib/node_exporter/textfile_collector'
     volumes:
       - /proc:/host/proc:ro
       - /sys:/host/sys:ro
       - /:/rootfs:ro
+      - /var/lib/node_exporter/textfile_collector:/var/lib/node_exporter/textfile_collector:ro
     networks:
       - ml-net
 

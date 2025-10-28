@@ -11,6 +11,18 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Load configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+    echo "ERROR: Configuration file not found: ${CONFIG_FILE}"
+    echo "Please create config.sh from config.sh.example"
+    exit 1
+fi
+
+source "${CONFIG_FILE}"
+
 # Step 1: Install UFW
 echo ""
 echo "=== Step 1: Installing UFW ==="
@@ -51,11 +63,16 @@ ufw default allow outgoing
 # Allow SSH (port 22)
 ufw allow 22/tcp comment 'SSH'
 
-# Allow local network access (if needed for office)
-read -p "Allow local network access? (y/n): " allow_local
-if [[ "$allow_local" == "y" ]]; then
-    read -p "Enter local network CIDR (e.g., 192.168.1.0/24): " local_cidr
-    ufw allow from ${local_cidr} comment 'Local network'
+# Allow local network access (use LOCAL_NETWORK_CIDR from config)
+if [[ -n "${LOCAL_NETWORK_CIDR:-}" ]]; then
+    echo "Allowing local network access from ${LOCAL_NETWORK_CIDR}"
+    ufw allow from ${LOCAL_NETWORK_CIDR} comment 'Local network'
+else
+    read -p "Allow local network access? (y/n): " allow_local
+    if [[ "$allow_local" == "y" ]]; then
+        read -p "Enter local network CIDR (e.g., 192.168.1.0/24): " local_cidr
+        ufw allow from ${local_cidr} comment 'Local network'
+    fi
 fi
 
 # Enable UFW
