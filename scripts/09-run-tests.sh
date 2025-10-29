@@ -135,8 +135,13 @@ fi
 
 # Check running containers
 RUNNING_CONTAINERS=$(docker ps --format '{{.Names}}' | wc -l)
+HEALTHY_CONTAINERS=$(docker ps --filter "health=healthy" --format '{{.Names}}' | wc -l)
 if [[ ${RUNNING_CONTAINERS} -gt 0 ]]; then
-    pass "${RUNNING_CONTAINERS} containers are running"
+    if [[ ${HEALTHY_CONTAINERS} -gt 0 ]]; then
+        pass "${HEALTHY_CONTAINERS} containers are healthy (${RUNNING_CONTAINERS} total running)"
+    else
+        pass "${RUNNING_CONTAINERS} containers are running (health check status unavailable or not configured)"
+    fi
 else
     warn "No containers are running"
 fi

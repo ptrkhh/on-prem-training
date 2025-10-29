@@ -23,6 +23,12 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Validate domain format
+if [[ ! "${DOMAIN}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$ ]]; then
+    echo "ERROR: Invalid domain format: ${DOMAIN}"
+    exit 1
+fi
+
 # Convert users string to array
 USER_ARRAY=(${USERS})
 USER_COUNT=${#USER_ARRAY[@]}

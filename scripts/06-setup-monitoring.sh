@@ -168,12 +168,12 @@ EOF
 chmod +x ${SCRIPTS_DIR}/check-disk-smart.sh
 
 # GPU Temperature Monitoring Script
-cat > ${SCRIPTS_DIR}/check-gpu-temperature.sh <<EOF
+cat > ${SCRIPTS_DIR}/check-gpu-temperature.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
 
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
-TEMP_THRESHOLD=${GPU_TEMP_THRESHOLD}
+TEMP_THRESHOLD=85
 
 if ! command -v nvidia-smi &> /dev/null; then
     echo "nvidia-smi not found"
@@ -190,6 +190,9 @@ else
     echo "GPU temperature: ${GPU_TEMP}°C"
 fi
 EOF
+
+# Update the threshold value in the generated script
+sed -i "s/TEMP_THRESHOLD=85/TEMP_THRESHOLD=${GPU_TEMP_THRESHOLD}/" ${SCRIPTS_DIR}/check-gpu-temperature.sh
 
 chmod +x ${SCRIPTS_DIR}/check-gpu-temperature.sh
 
@@ -208,13 +211,11 @@ if ! mountpoint -q \${MOUNT_POINT}; then
     exit 1
 fi
 
-# Check filesystem usage
-USAGE=\$(btrfs filesystem usage \${MOUNT_POINT} | grep "Free (estimated)" | awk '{print \$3}' | sed 's/[^0-9.]//g')
-TOTAL=\$(btrfs filesystem usage \${MOUNT_POINT} | grep "Device size" | awk '{print \$3}' | sed 's/[^0-9.]//g')
+# Check filesystem usage (using df for consistent units)
+USAGE_PERCENT=\$(df -BG \${MOUNT_POINT} | tail -1 | awk '{print \$5}' | sed 's/%//')
 
-if [[ -n "\${USAGE}" ]] && [[ -n "\${TOTAL}" ]]; then
-    USAGE_PERCENT=\$(echo "scale=2; (1 - \${USAGE} / \${TOTAL}) * 100" | bc)
-    if (( \$(echo "\${USAGE_PERCENT} > 90" | bc -l) )); then
+if [[ -n "\${USAGE_PERCENT}" ]]; then
+    if (( \${USAGE_PERCENT} > 90 )); then
         MESSAGE="WARNING: BTRFS filesystem is \${USAGE_PERCENT}% full"
         echo "\${MESSAGE}"
         [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"

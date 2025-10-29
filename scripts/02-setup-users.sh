@@ -219,7 +219,7 @@ ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 
 # Convert GB to bytes for comparison
 QUOTA_LIMIT_BYTES=\$((QUOTA_LIMIT_GB * 1024 * 1024 * 1024))
-QUOTA_WARNING_BYTES=\$(awk "BEGIN {printf \"%.0f\", ${QUOTA_LIMIT_BYTES} * ${QUOTA_WARNING_PERCENT} / 100.0}")
+QUOTA_WARNING_BYTES=\$(awk "BEGIN {printf \"%.0f\", \${QUOTA_LIMIT_BYTES} * \${QUOTA_WARNING_PERCENT} / 100.0}")
 
 echo "=== User Quota Check: \$(date) ==="
 echo ""
@@ -245,15 +245,13 @@ for user_dir in \${MOUNT_POINT}/homes/*; do
             DOCKER_USAGE=\$(du -sb "\${MOUNT_POINT}/docker-volumes/\${USER}-state" 2>/dev/null | cut -f1 || echo 0)
         fi
 
-        # Total usage
-        TOTAL_USAGE=\$((HOME_USAGE + WORKSPACE_USAGE + DOCKER_USAGE))
-
-        # Convert to human-readable
-        TOTAL_GB=\$(awk "BEGIN {printf \"%.2f\", \${TOTAL_USAGE} / 1024 / 1024 / 1024}")
+        # Convert to human-readable and calculate total (using awk to avoid integer overflow)
+        TOTAL_GB=\$(awk "BEGIN {printf \"%.2f\", (\${HOME_USAGE} + \${WORKSPACE_USAGE} + \${DOCKER_USAGE}) / 1024 / 1024 / 1024}")
         HOME_GB=\$(awk "BEGIN {printf \"%.2f\", \${HOME_USAGE} / 1024 / 1024 / 1024}")
         WORKSPACE_GB=\$(awk "BEGIN {printf \"%.2f\", \${WORKSPACE_USAGE} / 1024 / 1024 / 1024}")
         DOCKER_GB=\$(awk "BEGIN {printf \"%.2f\", \${DOCKER_USAGE} / 1024 / 1024 / 1024}")
-        PERCENT=\$(awk "BEGIN {printf \"%.1f\", \${TOTAL_USAGE} * 100.0 / \${QUOTA_LIMIT_BYTES}}")
+        PERCENT=\$(awk "BEGIN {printf \"%.1f\", (\${HOME_USAGE} + \${WORKSPACE_USAGE} + \${DOCKER_USAGE}) * 100.0 / \${QUOTA_LIMIT_BYTES}}")
+        TOTAL_USAGE_BYTES=\$(awk "BEGIN {printf \"%.0f\", \${HOME_USAGE} + \${WORKSPACE_USAGE} + \${DOCKER_USAGE}}")
 
         echo "User: \${USER}"
         echo "  Total: \${TOTAL_GB}GB / \${QUOTA_LIMIT_GB}GB (\${PERCENT}%)"
@@ -263,8 +261,8 @@ for user_dir in \${MOUNT_POINT}/homes/*; do
         echo "    - Docker:    \${DOCKER_GB}GB"
 
         # Check if exceeded quota
-        if [[ \${TOTAL_USAGE} -gt \${QUOTA_LIMIT_BYTES} ]]; then
-            OVER_GB=\$(awk "BEGIN {printf \"%.2f\", (\${TOTAL_USAGE} - \${QUOTA_LIMIT_BYTES}) / 1024 / 1024 / 1024}")
+        if (( \$(awk "BEGIN {print (\${TOTAL_USAGE_BYTES} > \${QUOTA_LIMIT_BYTES})}") )); then
+            OVER_GB=\$(awk "BEGIN {printf \"%.2f\", (\${TOTAL_USAGE_BYTES} - \${QUOTA_LIMIT_BYTES}) / 1024 / 1024 / 1024}")
             MESSAGE="⚠️ User \${USER} has EXCEEDED quota: \${TOTAL_GB}GB / \${QUOTA_LIMIT_GB}GB (over by \${OVER_GB}GB)"
             echo "  STATUS: ⚠️ OVER QUOTA by \${OVER_GB}GB"
 
@@ -274,7 +272,7 @@ for user_dir in \${MOUNT_POINT}/homes/*; do
             fi
 
         # Check if approaching quota (warning threshold)
-        elif [[ \${TOTAL_USAGE} -gt \${QUOTA_WARNING_BYTES} ]]; then
+        elif (( \$(awk "BEGIN {print (\${TOTAL_USAGE_BYTES} > \${QUOTA_WARNING_BYTES})}") )); then
             MESSAGE="User \${USER} approaching quota: \${TOTAL_GB}GB / \${QUOTA_LIMIT_GB}GB (\${PERCENT}%)"
             echo "  STATUS: ⚠️ WARNING (>\${QUOTA_WARNING_PERCENT}%)"
 

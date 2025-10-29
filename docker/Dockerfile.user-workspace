@@ -5,6 +5,7 @@ FROM nvidia/cuda:12.4.0-devel-ubuntu22.04
 
 # Build arguments for version configuration
 ARG PYCHARM_VERSION=2024.1
+ARG JULIA_VERSION=1.10.0
 
 # Prevent interactive prompts during build
 ENV DEBIAN_FRONTEND=noninteractive
@@ -247,7 +248,8 @@ ENV PATH="${PATH}:/usr/local/go/bin"
 
 
 # Julia (for scientific computing)
-RUN wget -q https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-1.10.0-linux-x86_64.tar.gz -O /tmp/julia.tar.gz && \
+ARG JULIA_VERSION
+RUN wget -q https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-${JULIA_VERSION}-linux-x86_64.tar.gz -O /tmp/julia.tar.gz && \
     tar -C /opt -xzf /tmp/julia.tar.gz && \
     ln -s /opt/julia-*/bin/julia /usr/local/bin/julia && \
     rm /tmp/julia.tar.gz

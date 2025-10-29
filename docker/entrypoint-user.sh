@@ -13,6 +13,12 @@ USER_GID="${USER_GID:-1000}"
 USER_PASSWORD="${USER_PASSWORD:-changeme}"
 VNC_PASSWORD="${VNC_PASSWORD:-vncpass}"
 
+# Validate username format
+if [[ ! "${USER_NAME}" =~ ^[a-z][-a-z0-9]*$ ]]; then
+    echo "ERROR: Invalid username '${USER_NAME}'. Must start with lowercase letter and contain only lowercase letters, digits, and hyphens"
+    exit 1
+fi
+
 echo "Initializing user: ${USER_NAME} (UID: ${USER_UID}, GID: ${USER_GID})"
 
 # Create user and group if they don't exist

@@ -177,6 +177,14 @@ echo ""
 
 # Calculate VFS cache size (80% of free space after reservations)
 FREE_GB=$((TOTAL_BTRFS_GB - RESERVED_GB))
+
+# Validate free space
+if [[ ${FREE_GB} -le 0 ]]; then
+    echo "ERROR: No free space available for VFS cache (${FREE_GB}GB free)"
+    echo "Reduce number of users or USER_QUOTA_GB in config.sh"
+    exit 1
+fi
+
 CACHE_SIZE_GB=$(awk "BEGIN {printf \"%.0f\", ${FREE_GB} * (1 - ${STORAGE_SAFETY_MARGIN_PERCENT}/100.0)}")
 SAFETY_BUFFER_GB=$((FREE_GB - CACHE_SIZE_GB))
 

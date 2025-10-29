@@ -122,6 +122,15 @@ fi
 
 export RESTIC_PASSWORD_FILE
 
+# Test rclone connection if using rclone backend
+if [[ "\${RESTIC_REPOSITORY}" =~ ^rclone: ]]; then
+    REMOTE_NAME=\$(echo "\${RESTIC_REPOSITORY}" | sed 's/rclone://' | cut -d: -f1)
+    if ! rclone lsd "\${REMOTE_NAME}:" &>/dev/null; then
+        echo "ERROR: Cannot access rclone remote '\${REMOTE_NAME}'. Check 'rclone config' and network connectivity"
+        exit 1
+    fi
+fi
+
 # Initialize repository
 if ! restic -r ${RESTIC_REPOSITORY} snapshots &>/dev/null; then
     echo "Initializing Restic repository..."
@@ -157,11 +166,13 @@ echo "=== Restic Backup Started: $(date) ==="
 
 # Pause all workspace containers to ensure consistency
 echo "Pausing all workspace containers..."
-PAUSED_CONTAINERS=$(docker ps --format '{{.Names}}' | grep -E 'workspace')
-for container in ${PAUSED_CONTAINERS}; do
-    echo "  Pausing ${container}..."
-    docker pause ${container} || true
-done
+PAUSED_CONTAINERS=$(docker ps --format '{{.Names}}' | grep -E 'workspace' || true)
+if [[ -n "${PAUSED_CONTAINERS}" ]]; then
+    for container in ${PAUSED_CONTAINERS}; do
+        echo "  Pausing ${container}..."
+        docker pause ${container} || true
+    done
+fi
 
 # Run backup with bandwidth limit
 BANDWIDTH_LIMIT_KBPS=\$((${BACKUP_BANDWIDTH_LIMIT_MBPS} * 1000 / 8))
@@ -183,9 +194,11 @@ fi
 
 # Resume Docker containers
 echo "Resuming Docker containers..."
-for container in ${PAUSED_CONTAINERS}; do
-    docker unpause ${container} || true
-done
+if [[ -n "${PAUSED_CONTAINERS}" ]]; then
+    for container in ${PAUSED_CONTAINERS}; do
+        docker unpause ${container} || true
+    done
+fi
 
 # Cleanup old backups (keep 7 daily, 52 weekly)
 echo "Pruning old backups..."

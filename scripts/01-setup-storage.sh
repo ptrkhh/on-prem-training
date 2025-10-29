@@ -241,7 +241,8 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
             break
         fi
         if [[ $i -eq 30 ]]; then
-            echo "ERROR: Timeout waiting for bcache cache device"
+            echo "ERROR: Timeout waiting for bcache cache device ${BCACHE_CACHE_DEV}"
+            echo "Check 'dmesg | tail -50' and verify bcache-tools installed correctly"
             exit 1
         fi
         sleep 1

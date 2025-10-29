@@ -169,7 +169,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.guacamole.rule=Host(\`guacamole.\${DOMAIN}\`) || Host(\`remote.\${DOMAIN}\`)"
+      - "traefik.http.routers.guacamole.rule=Host(`guacamole.\${DOMAIN}`) || Host(`remote.\${DOMAIN}`)"
       - "traefik.http.routers.guacamole.entrypoints=web"
       - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
       - "traefik.http.middlewares.guacamole-prefix.stripprefix.prefixes=/guacamole"
