@@ -1,11 +1,18 @@
 # ML Training Server - User Workspace Container
 # This container behaves like a full VM with desktop, dev tools, and ML stack
 
-FROM nvidia/cuda:12.4.0-devel-ubuntu22.04
+FROM nvidia/cuda:12.4.1-devel-ubuntu24.04
 
 # Build arguments for version configuration
-ARG PYCHARM_VERSION=2024.1
-ARG JULIA_VERSION=1.10.0
+ARG PYCHARM_VERSION=2025.2.4
+ARG JULIA_VERSION=1.12.1
+ARG NODE_VERSION=22.x
+ARG GO_VERSION=1.23.4
+
+# Container metadata
+LABEL maintainer="patrick.hermawan@outlook.com"
+LABEL version="1.0"
+LABEL description="ML Training Server with Desktop Environment"
 
 # Prevent interactive prompts during build
 ENV DEBIAN_FRONTEND=noninteractive
@@ -43,7 +50,7 @@ RUN apt-get update && apt-get install -y \
     # Development tools
     gdb valgrind strace \
     # Version control
-    git-lfs subversion mercurial \
+    git-lfs \
     # Shells
     zsh fish \
     && rm -rf /var/lib/apt/lists/*
@@ -122,7 +129,7 @@ RUN echo "startplasma-x11" > /etc/xrdp/startwm.sh && \
 RUN curl -fsSL https://code-server.dev/install.sh | sh
 
 # Install Node.js and npm
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+RUN curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION} | bash - && \
     apt-get install -y nodejs && \
     npm install -g yarn pnpm
 
@@ -137,46 +144,10 @@ RUN apt-get update && apt-get install -y \
 #==============================================================================
 
 # Install Python ML libraries
-# Note: pip cache will be persisted to /cache/pip (mounted at runtime)
-RUN pip3 install \
-    # Deep Learning
-    torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124 \
-    tensorflow[and-cuda] \
-    jax[cuda12] \
-    # Data Science
-    numpy pandas scipy scikit-learn \
-    matplotlib seaborn plotly \
-    jupyter jupyterlab ipywidgets \
-    notebook \
-    # ML Tools
-    transformers accelerate \
-    datasets \
-    tensorboard \
-    wandb \
-    mlflow \
-    # Computer Vision
-    opencv-python-headless pillow \
-    albumentations \
-    # NLP
-    spacy nltk gensim \
-    # Utilities
-    tqdm rich click typer \
-    pyyaml toml \
-    requests httpx \
-    # Development
-    pytest pytest-cov black flake8 mypy \
-    ipdb pudb \
-    # Jupyter extensions
-    jupyterlab-git jupyterlab-lsp \
-    python-lsp-server
+RUN pip3 install --no-cache-dir jupyter jupyterlab ipywidgets notebook tensorboard jupyterlab-git jupyterlab-lsp
 
 # Install JupyterLab extensions
-RUN pip3 install \
-    jupyterlab-vim \
-    jupyterlab-code-formatter \
-    jupyterlab-spreadsheet-editor && \
-    jupyter labextension install @jupyter-widgets/jupyterlab-manager --no-build && \
-    jupyter lab build --dev-build=False --minimize=True
+RUN pip3 install --no-cache-dir jupyterlab-vim jupyterlab-code-formatter jupyterlab-spreadsheet-editor jupyterlab-widgets && jupyter lab build --dev-build=False --minimize=True
 
 #==============================================================================
 # IDE & EDITORS
@@ -201,7 +172,7 @@ RUN wget -qO - https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/p
 
 RUN apt-get update && apt-get install -y \
     # Browsers
-    firefox chromium-browser \
+    firefox google-chrome-stable \
     # PDF viewers
     evince \
     # Image editors
@@ -241,7 +212,7 @@ RUN apt-get update && apt-get install -y \
 #==============================================================================
 
 # Go
-RUN wget -q https://go.dev/dl/go1.22.0.linux-amd64.tar.gz -O /tmp/go.tar.gz && \
+RUN wget -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -O /tmp/go.tar.gz && \
     tar -C /usr/local -xzf /tmp/go.tar.gz && \
     rm /tmp/go.tar.gz
 ENV PATH="${PATH}:/usr/local/go/bin"
@@ -249,7 +220,7 @@ ENV PATH="${PATH}:/usr/local/go/bin"
 
 # Julia (for scientific computing)
 ARG JULIA_VERSION
-RUN wget -q https://julialang-s3.julialang.org/bin/linux/x64/1.10/julia-${JULIA_VERSION}-linux-x86_64.tar.gz -O /tmp/julia.tar.gz && \
+RUN wget -q https://julialang-s3.julialang.org/bin/linux/x64/1.12/julia-${JULIA_VERSION}-linux-x86_64.tar.gz -O /tmp/julia.tar.gz && \
     tar -C /opt -xzf /tmp/julia.tar.gz && \
     ln -s /opt/julia-*/bin/julia /usr/local/bin/julia && \
     rm /tmp/julia.tar.gz
@@ -263,7 +234,7 @@ RUN apt-get update && apt-get install -y \
 # VERSION CONTROL & COLLABORATION
 #==============================================================================
 
-RUN pip3 install \
+RUN pip3 install --no-cache-dir \
     # Git tools
     git-review gitpython \
     # Collaboration
@@ -342,6 +313,10 @@ EXPOSE 6080    # noVNC HTML5 client (websockify)
 EXPOSE 8080    # code-server
 EXPOSE 8888    # Jupyter
 EXPOSE 6006    # TensorBoard
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+  CMD pgrep -x supervisord || exit 1
 
 # Set working directory
 WORKDIR /workspace

@@ -309,7 +309,7 @@ docker compose version
 sudo docker run hello-world
 
 # Test NVIDIA runtime
-sudo docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+sudo docker run --rm --gpus all nvidia/cuda:13.0.1-base-ubuntu24.04 nvidia-smi
 ```
 
 ---
