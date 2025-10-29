@@ -346,10 +346,6 @@ Each user gets ONE comprehensive container (e.g., `workspace-alice`) that functi
   - PyCharm Community Edition
   - Jupyter Lab (accessed through Traefik)
   - VSCodium
-- **Complete ML Stack**:
-  - PyTorch, TensorFlow, JAX (all with CUDA 12.4)
-  - NumPy, Pandas, Scikit-learn
-  - Hugging Face Transformers
 - **Multiple Languages**: Python 3.11+, Go, Rust, Julia, R, Node.js
 - **GUI Applications**: Firefox, Chromium, LibreOffice, GIMP, Inkscape
 - **Docker-in-Docker**: Run containers inside your workspace
@@ -681,20 +677,6 @@ This tests:
 - [ ] Backups: BTRFS snapshots, Restic repository
 - [ ] Alerts: Test Telegram bot delivery
 - [ ] Per-user services: SSH, code-server, Jupyter access
-
-### GPU Training Test
-
-Run a simple PyTorch training job to verify GPU:
-
-```bash
-cd ~/train-server/tests
-python3 test-gpu-training.py
-```
-
-Expected output:
-- CUDA available: True
-- GPU: NVIDIA GeForce RTX 5080
-- Training completes without errors
 
 ### Load Testing
 

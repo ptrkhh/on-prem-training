@@ -60,7 +60,6 @@ find /mnt/storage/cache/{pip,conda,apt} -type f -mtime +90 -delete
 
 - **Full KDE Plasma Desktop** (access via Guacamole/Kasm web interface or VNC/RDP)
 - **All Development Tools**: VS Code, PyCharm, Jupyter Lab, VSCodium
-- **Complete ML Stack**: PyTorch, TensorFlow, JAX (all with CUDA 12.4)
 - **Multiple Languages**: Python 3.11+, Go, Rust, Julia, R, Node.js
 - **GUI Applications**: Firefox, Chromium, LibreOffice, GIMP, Inkscape
 - **Docker-in-Docker**: Run containers inside your workspace
@@ -278,7 +277,6 @@ Each workspace contains:
 ├── noVNC websockify (HTML5 VNC in browser)
 ├── SSH server (for terminal access)
 ├── VS Code + PyCharm + Jupyter
-├── PyTorch + TensorFlow + JAX
 ├── Docker-in-Docker
 └── All development tools
 ```

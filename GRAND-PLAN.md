@@ -69,7 +69,6 @@ Automatic security updates: unattended-upgrades enabled
 UID/GID: Mapped to host users (1000-1004)
 Desktop: KDE Plasma
 Remote access: VNC (5900-5904), RDP (3389-3393), noVNC web (6080-6084), Guacamole gateway, Kasm Workspaces
-ML stack: PyTorch, TensorFlow, JAX, CUDA 12.4, cuDNN
 Development tools: VS Code, PyCharm, Jupyter Lab, Python 3.11+, Git, Go, Rust, Julia, R
 GUI apps: Firefox, Chromium, LibreOffice, GIMP, Inkscape, Konsole
 Audio: PulseAudio
