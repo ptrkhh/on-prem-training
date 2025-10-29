@@ -120,7 +120,15 @@ cat > ${SCRIPTS_DIR}/check-disk-smart.sh <<EOF
 set -euo pipefail
 
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
-DEVICES=("/dev/sda" "/dev/sdb" "/dev/sdc" "/dev/sdd" "/dev/nvme0n1")
+
+# Auto-detect devices from configuration
+DETECTED_DEVICES=""
+[[ -n "${NVME_DEVICE}" ]] && [[ -b "${NVME_DEVICE}" ]] && DETECTED_DEVICES="${NVME_DEVICE}"
+for dev in ${HDD_DEVICES}; do
+    [[ -b "\${dev}" ]] && DETECTED_DEVICES="\${DETECTED_DEVICES} \${dev}"
+done
+DEVICES=(\${DETECTED_DEVICES})
+
 DISK_TEMP_THRESHOLD=${DISK_TEMP_THRESHOLD}
 
 for device in "\${DEVICES[@]}"; do

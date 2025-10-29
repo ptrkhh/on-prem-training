@@ -122,6 +122,14 @@ c.ServerApp.jpserver_extensions = {
 JUPCONF
 EOF
 
+# Install Rust for user
+echo "Installing Rust for user..."
+su - ${USER_NAME} << EOF
+if [ ! -d ~/.cargo ]; then
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+fi
+EOF
+
 # Setup shell environment
 echo "Configuring shell environment..."
 su - ${USER_NAME} << EOF

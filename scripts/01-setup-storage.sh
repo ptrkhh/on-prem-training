@@ -191,7 +191,18 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
         fi
 
         # Get total size and calculate bcache start
-        TOTAL_SIZE_GB=$(lsblk -ndo SIZE ${NVME_DEVICE} | sed 's/[^0-9.]//g' | awk '{print int($1)}')
+        TOTAL_SIZE_RAW=$(lsblk -ndo SIZE ${NVME_DEVICE})
+        TOTAL_SIZE_GB=$(echo "${TOTAL_SIZE_RAW}" | awk '
+            {
+                size = $1
+                unit = substr($1, length($1))
+                value = substr($1, 1, length($1)-1)
+                if (unit == "T") print int(value * 1024)
+                else if (unit == "G") print int(value)
+                else if (unit == "M") print int(value / 1024)
+                else print int(value)
+            }
+        ')
         BCACHE_SIZE_GB=$((TOTAL_SIZE_GB - OS_PARTITION_SIZE_GB))
 
         # Create bcache partition
@@ -214,6 +225,13 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
     make-bcache -C ${BCACHE_CACHE_DEV} --wipe-bcache
 
     echo "bcache cache device created: ${BCACHE_CACHE_DEV}"
+
+    # Verify bcache-super-show command is available
+    if ! command -v bcache-super-show &>/dev/null; then
+        echo "ERROR: bcache-super-show command not found!"
+        echo "bcache-tools may not be installed correctly."
+        exit 1
+    fi
 
     # Wait for cache device to be fully ready
     echo "Waiting for bcache cache device to be ready..."

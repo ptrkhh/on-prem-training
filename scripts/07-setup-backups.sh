@@ -142,7 +142,7 @@ cat > ${SCRIPTS_DIR}/restic-backup.sh <<EOF
 #!/bin/bash
 set -euo pipefail
 
-RESTIC_REPOSITORY="${BACKUP_REMOTE}"
+RESTIC_REPOSITORY="rclone:${BACKUP_REMOTE}"
 RESTIC_PASSWORD_FILE="/root/.restic-password"
 MOUNT_POINT="${MOUNT_POINT}"
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
