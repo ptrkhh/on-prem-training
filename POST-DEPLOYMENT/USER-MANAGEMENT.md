@@ -45,17 +45,28 @@
    # Check container is running
    docker ps | grep workspace-frank
 
-   # Check NoMachine port (e.g., 4003 for 4th user)
-   ss -tulpn | grep 4003
+   # Check VNC port (e.g., 5903 for 4th user)
+   ss -tulpn | grep 5903
+
+   # Check RDP port (e.g., 3392 for 4th user)
+   ss -tulpn | grep 3392
+
+   # Check noVNC web port (e.g., 6083 for 4th user)
+   ss -tulpn | grep 6083
 
    # Test SSH access
-   ssh frank@localhost -p 2222
+   ssh frank@localhost -p 2225
    ```
 
 7. **Provide credentials to user**
-   - NoMachine: `server_ip:4003` (adjust port based on user index)
-   - SSH: `ssh frank@server_ip -p 2222`
-   - Web services: `https://frank-code.yourdomain.com`, `https://frank-jupyter.yourdomain.com`
+   - Web Desktop (noVNC): `http://frank-desktop.yourdomain.com` or `http://frank.yourdomain.com`
+   - Guacamole: `http://guacamole.yourdomain.com` or `http://remote.yourdomain.com`
+   - Kasm Workspaces: `http://kasm.yourdomain.com`
+   - Direct VNC: `server_ip:5903` (adjust port based on user index)
+   - Direct RDP: `server_ip:3392` (adjust port based on user index)
+   - SSH: `ssh frank@server_ip -p 2225` (adjust port based on user index)
+   - VS Code: `http://frank-code.yourdomain.com`
+   - Jupyter: `http://frank-jupyter.yourdomain.com`
    - Password: Set during user creation or provide initial password
 
 **Time estimate:** 10-15 minutes

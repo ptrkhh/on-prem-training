@@ -272,7 +272,8 @@
 
    Impact:
    - All services will be unavailable
-   - NoMachine access disabled
+   - Web desktop, Guacamole, and Kasm access disabled
+   - SSH, VNC, and RDP access disabled
    - Save your work before maintenance window
 
    We will send updates via Telegram/Email.

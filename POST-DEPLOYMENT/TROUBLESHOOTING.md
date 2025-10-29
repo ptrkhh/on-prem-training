@@ -60,9 +60,9 @@
 
 ---
 
-### NoMachine Connection Failed
+### Remote Desktop Connection Failed
 
-**Symptoms:** Can't connect to user's desktop via NoMachine.
+**Symptoms:** Can't connect to user's desktop via Guacamole, Kasm, VNC, or RDP.
 
 **Steps:**
 
@@ -71,42 +71,55 @@
    docker ps | grep workspace-alice
    ```
 
-2. **Check NoMachine process inside container**
+2. **Check desktop services inside container**
    ```bash
-   docker exec workspace-alice ps aux | grep nxserver
+   # Check VNC server
+   docker exec workspace-alice ps aux | grep vnc
+
+   # Check XRDP
+   docker exec workspace-alice ps aux | grep xrdp
+
+   # Check supervisord (manages all services)
+   docker exec workspace-alice supervisorctl status
    ```
 
-3. **Check port mapping**
+3. **Check port mappings**
    ```bash
-   docker port workspace-alice 4000
-   # Should show: 4000/tcp -> 0.0.0.0:4000
+   # VNC port
+   docker port workspace-alice 5900
+
+   # RDP port
+   docker port workspace-alice 3389
+
+   # noVNC (web) port
+   docker port workspace-alice 6080
    ```
 
-4. **Test port accessibility**
+4. **Test web access via Guacamole**
+   - Access: `http://guacamole.${DOMAIN}` or `http://remote.${DOMAIN}`
+   - Login with Guacamole default credentials: `guacadmin` / `guacadmin`
+   - Check if user connections are configured
+
+5. **Test web access via noVNC**
+   - Access: `http://alice-desktop.${DOMAIN}` or `http://alice.${DOMAIN}`
+   - Should see desktop in browser
+
+6. **Test Kasm Workspaces**
+   - Access: `http://kasm.${DOMAIN}`
+   - Login and check workspace availability
+
+7. **Restart services inside container**
    ```bash
-   telnet localhost 4000
-   # Should connect
+   docker exec workspace-alice supervisorctl restart all
    ```
 
-5. **Restart NoMachine inside container**
+8. **Check Traefik routing**
    ```bash
-   docker exec workspace-alice /etc/NX/nxserver --restart
-   ```
+   # Check Traefik dashboard
+   curl http://localhost:8080/api/http/routers | jq
 
-6. **Check firewall**
-   ```bash
-   sudo ufw status | grep 4000
-   # Should show: 4000/tcp ALLOW
-   ```
-
-7. **Verify NoMachine client settings**
-   - Protocol: NX
-   - Host: server_ip
-   - Port: 4000 (or correct user port)
-
-8. **Check NoMachine logs**
-   ```bash
-   docker exec workspace-alice tail -50 /usr/NX/var/log/nxerror.log
+   # Check if alice's routes are registered
+   docker logs traefik | grep alice
    ```
 
 9. **Recreate container if needed**

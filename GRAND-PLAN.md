@@ -37,7 +37,8 @@ Container Runtime: Docker + nvidia-container-toolkit
 ## Core Services
 
 Traefik: Reverse proxy + routing (no rate limiting - handled by Cloudflare)
-NoMachine: Per-user remote desktop access (NX protocol)
+Apache Guacamole: Clientless remote desktop gateway (guacamole.mydomain.com / remote.mydomain.com)
+Kasm Workspaces: Container streaming platform (kasm.mydomain.com)
 Netdata: health.mydomain.com (includes disk SMART monitoring)
 Prometheus: prometheus.mydomain.com (scrapes nvidia-smi exporter, node exporter)
 Grafana: grafana.mydomain.com (dashboards for GPU, disk, network, container resources)
@@ -57,7 +58,7 @@ Passwords stored in /etc/shadow, SSH keys in ~/.ssh/authorized_keys, Users in do
 Cloudflare Tunnel: All traffic routed through Cloudflare (no ports exposed)
 Cloudflare Access: Google Workspace login with 2FA enforcement (provides application-level authentication)
 SSH: SSH key-based authentication only (no passwords, no additional 2FA since Cloudflare Access already enforces 2FA)
-NoMachine: Password authentication (over Cloudflare Tunnel or local network)
+Remote Desktop: Multiple access methods (Guacamole web gateway, Kasm Workspaces, noVNC, direct VNC/RDP)
 Local users: All users in docker and sudo groups
 UFW: Deny all incoming, allow all outgoing
 fail2ban: Monitor auth logs for SSH brute force attempts
@@ -67,7 +68,7 @@ Automatic security updates: unattended-upgrades enabled
 
 UID/GID: Mapped to host users (1000-1004)
 Desktop: KDE Plasma
-Remote access: NoMachine (NX protocol on ports 4000-4004, web access via Traefik)
+Remote access: VNC (5900-5904), RDP (3389-3393), noVNC web (6080-6084), Guacamole gateway, Kasm Workspaces
 ML stack: PyTorch, TensorFlow, JAX, CUDA 12.4, cuDNN
 Development tools: VS Code, PyCharm, Jupyter Lab, Python 3.11+, Git, Go, Rust, Julia, R
 GUI apps: Firefox, Chromium, LibreOffice, GIMP, Inkscape, Konsole

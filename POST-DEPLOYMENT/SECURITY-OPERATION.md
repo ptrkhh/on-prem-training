@@ -112,8 +112,10 @@
 sudo ufw allow 22/tcp      # SSH (if not using Cloudflare Tunnel only)
 sudo ufw allow 80/tcp      # HTTP (for Traefik)
 sudo ufw allow 443/tcp     # HTTPS (if using direct access)
-sudo ufw allow 2222/tcp    # User SSH
-sudo ufw allow 4000:4010/tcp  # NoMachine (adjust range for user count)
+sudo ufw allow 2222:2232/tcp  # User SSH (adjust range for user count)
+sudo ufw allow 5900:5910/tcp  # VNC (adjust range for user count)
+sudo ufw allow 3389:3399/tcp  # RDP (adjust range for user count)
+sudo ufw allow 6080:6090/tcp  # noVNC web (adjust range for user count)
 ```
 
 **Time estimate:** 10 minutes

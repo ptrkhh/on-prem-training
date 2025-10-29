@@ -50,7 +50,7 @@
    Subject: Container restart - New package available
 
    Your workspace container was restarted to install [package-name].
-   Please save your work and reconnect via NoMachine.
+   Please save your work and reconnect via web desktop, Guacamole, or SSH.
    ```
 
 5. **Verify installation**
