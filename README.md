@@ -178,6 +178,7 @@ cd ../scripts && sudo ./09-run-tests.sh
 **Shared:**
 - TensorBoard: `http://tensorboard.yourdomain.com` (all users)
 - Guacamole Gateway: `http://guacamole.yourdomain.com` (default: guacadmin/guacadmin)
+  - **⚠️ SECURITY WARNING: Change the default credentials immediately after first login!**
 - Kasm Workspaces: `http://kasm.yourdomain.com`
 
 ## Key Features

@@ -88,6 +88,9 @@ esac
 HOSTNAME=$(hostname)
 TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
 
+# Escape special Markdown characters in message
+MESSAGE=$(echo "${MESSAGE}" | sed 's/[_*`\[]/\\&/g')
+
 # Format message (Telegram supports Markdown)
 TEXT="${EMOJI} *ML Training Server Alert*
 

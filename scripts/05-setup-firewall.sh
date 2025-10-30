@@ -23,6 +23,33 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Input validation helper function
+validate_yes_no() {
+    local prompt="$1"
+    local response
+    while true; do
+        read -p "${prompt} (y/n): " response
+        case "${response}" in
+            y|Y|yes|Yes|YES) return 0;;
+            n|N|no|No|NO) return 1;;
+            *) echo "Please answer y or n";;
+        esac
+    done
+}
+
+validate_yes_no_full() {
+    local prompt="$1"
+    local response
+    while true; do
+        read -p "${prompt} (yes/no): " response
+        case "${response}" in
+            yes|Yes|YES) return 0;;
+            no|No|NO) return 1;;
+            *) echo "Please answer yes or no";;
+        esac
+    done
+}
+
 # Step 1: Install UFW
 echo ""
 echo "=== Step 1: Installing UFW ==="
@@ -47,8 +74,7 @@ if ufw status &>/dev/null; then
     fi
 fi
 echo ""
-read -p "Continue with UFW reset? (yes/no): " confirm_reset
-if [[ "$confirm_reset" != "yes" ]]; then
+if ! validate_yes_no_full "Continue with UFW reset?"; then
     echo "Aborted."
     exit 1
 fi
@@ -91,18 +117,50 @@ if [[ -n "${LOCAL_NETWORK_CIDR:-}" ]]; then
     echo "Allowing local network access from ${LOCAL_NETWORK_CIDR}"
     ufw allow from ${LOCAL_NETWORK_CIDR} comment 'Local network'
 else
-    read -p "Allow local network access? (y/n): " allow_local
-    if [[ "$allow_local" == "y" ]]; then
+    if validate_yes_no "Allow local network access?"; then
         read -p "Enter local network CIDR (e.g., 192.168.1.0/24): " local_cidr
         ufw allow from ${local_cidr} comment 'Local network'
     fi
 fi
+
+# Show ports before enabling
+echo ""
+echo "Ports that will be allowed after UFW is enabled:"
+ufw show added | grep -E "^ufw allow" || echo "  (No rules configured yet)"
+echo ""
 
 # Enable UFW
 echo "Enabling UFW..."
 ufw --force enable
 
 echo "UFW configured and enabled"
+
+# Test critical ports after enabling
+echo ""
+echo "Testing critical services after firewall enable..."
+SERVICES_OK=true
+
+# Test SSH (should be accessible)
+if nc -z -w5 localhost 22 2>/dev/null; then
+    echo "✓ SSH port 22 is accessible"
+else
+    echo "✗ WARNING: SSH port 22 not accessible"
+    SERVICES_OK=false
+fi
+
+# Test HTTP (Docker services)
+if nc -z -w5 localhost 80 2>/dev/null; then
+    echo "✓ HTTP port 80 is accessible"
+else
+    echo "✗ WARNING: HTTP port 80 not accessible"
+    SERVICES_OK=false
+fi
+
+if [[ "${SERVICES_OK}" == "false" ]]; then
+    echo ""
+    echo "⚠️  WARNING: Some services may not be accessible after firewall configuration"
+    echo "   Review UFW rules with: ufw status verbose"
+fi
 
 # Step 3: Install and configure fail2ban
 echo ""
@@ -178,9 +236,7 @@ fi
 
 # Step 6: Install and configure auditd (optional)
 echo ""
-read -p "Install auditd for security auditing? (y/n): " install_audit
-
-if [[ "$install_audit" == "y" ]]; then
+if validate_yes_no "Install auditd for security auditing?"; then
     apt install -y auditd audispd-plugins
 
     # Add some basic audit rules

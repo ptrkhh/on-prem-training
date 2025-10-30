@@ -1,7 +1,10 @@
 # ML Training Server - User Workspace Container
 # This container behaves like a full VM with desktop, dev tools, and ML stack
 
-FROM nvidia/cuda:12.4.1-devel-ubuntu24.04
+# Build argument for CUDA version (auto-detected from host)
+ARG CUDA_VERSION=12.4.1
+
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04
 
 # Build arguments for version configuration
 ARG PYCHARM_VERSION=2024.3
@@ -157,14 +160,14 @@ RUN pip3 install --no-cache-dir jupyterlab-vim jupyterlab-code-formatter jupyter
 #==============================================================================
 
 # Install PyCharm Community (headless for now, can be accessed via desktop)
-RUN wget -q https://download.jetbrains.com/python/pycharm-community-${PYCHARM_VERSION}.tar.gz -O /tmp/pycharm.tar.gz && \
+RUN wget --tries=3 --wait=5 --retry-connrefused -q https://download.jetbrains.com/python/pycharm-community-${PYCHARM_VERSION}.tar.gz -O /tmp/pycharm.tar.gz && \
     tar -xzf /tmp/pycharm.tar.gz -C /opt/ && \
     mv /opt/pycharm-* /opt/pycharm && \
     rm /tmp/pycharm.tar.gz && \
     ln -s /opt/pycharm/bin/pycharm.sh /usr/local/bin/pycharm
 
 # Install VSCodium (open source VS Code)
-RUN wget -qO - https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg | gpg --dearmor | dd of=/usr/share/keyrings/vscodium-archive-keyring.gpg && \
+RUN wget --tries=3 --wait=5 --retry-connrefused -qO - https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg | gpg --dearmor | dd of=/usr/share/keyrings/vscodium-archive-keyring.gpg && \
     echo 'deb [ signed-by=/usr/share/keyrings/vscodium-archive-keyring.gpg ] https://download.vscodium.com/debs vscodium main' | tee /etc/apt/sources.list.d/vscodium.list && \
     apt-get update && apt-get install -y codium && \
     rm -rf /var/lib/apt/lists/*
@@ -174,7 +177,7 @@ RUN wget -qO - https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/p
 #==============================================================================
 
 # Add Google Chrome repository
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg && \
+RUN wget --tries=3 --wait=5 --retry-connrefused -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
 
 RUN apt-get update && apt-get install -y \
@@ -222,7 +225,7 @@ RUN apt-get update && apt-get install -y \
 #==============================================================================
 
 # Go
-RUN wget -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -O /tmp/go.tar.gz && \
+RUN wget --tries=3 --wait=5 --retry-connrefused -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -O /tmp/go.tar.gz && \
     tar -C /usr/local -xzf /tmp/go.tar.gz && \
     rm /tmp/go.tar.gz
 ENV PATH="${PATH}:/usr/local/go/bin"
@@ -230,7 +233,7 @@ ENV PATH="${PATH}:/usr/local/go/bin"
 
 # Julia (for scientific computing)
 ARG JULIA_VERSION
-RUN wget -q https://julialang-s3.julialang.org/bin/linux/x64/1.12/julia-${JULIA_VERSION}-linux-x86_64.tar.gz -O /tmp/julia.tar.gz && \
+RUN wget --tries=3 --wait=5 --retry-connrefused -q https://julialang-s3.julialang.org/bin/linux/x64/1.12/julia-${JULIA_VERSION}-linux-x86_64.tar.gz -O /tmp/julia.tar.gz && \
     tar -C /opt -xzf /tmp/julia.tar.gz && \
     ln -s /opt/julia-*/bin/julia /usr/local/bin/julia && \
     rm /tmp/julia.tar.gz
@@ -279,37 +282,68 @@ RUN apt-get update && apt-get install -y supervisor && \
 #==============================================================================
 # These environment variables point to shared cache directories
 # mounted at runtime. This allows all users to benefit from cached downloads.
+# Cache environment is defined in /opt/cache-env.sh and sourced at runtime
+
+# Create cache-env.sh file (sourced at runtime by entrypoint)
+RUN cat > /opt/cache-env.sh <<'EOF'
+# Shared Cache Environment Variables
+# This file is sourced by the container entrypoint
 
 # ML Models & Datasets
-ENV HF_HOME=/cache/ml-models/huggingface \
-    TRANSFORMERS_CACHE=/cache/ml-models/huggingface \
-    HF_DATASETS_CACHE=/cache/ml-models/datasets \
-    TORCH_HOME=/cache/ml-models/torch \
-    TFHUB_CACHE_DIR=/cache/ml-models/tensorflow-hub
+export HF_HOME=/cache/ml-models/huggingface
+export TRANSFORMERS_CACHE=/cache/ml-models/huggingface
+export HF_DATASETS_CACHE=/cache/ml-models/datasets
+export TORCH_HOME=/cache/ml-models/torch
+export TFHUB_CACHE_DIR=/cache/ml-models/tensorflow-hub
 
 # Python packages
-ENV PIP_CACHE_DIR=/cache/pip
+export PIP_CACHE_DIR=/cache/pip
 
 # Conda packages
-ENV CONDA_PKGS_DIRS=/cache/conda/pkgs
+export CONDA_PKGS_DIRS=/cache/conda/pkgs
 
 # Git LFS
-ENV GIT_LFS_CACHE_DIR=/cache/git-lfs
+export GIT_LFS_CACHE_DIR=/cache/git-lfs
 
 # Language-specific caches
-ENV GOMODCACHE=/cache/go/pkg/mod \
-    npm_config_cache=/cache/npm \
-    CARGO_HOME=/cache/cargo \
-    JULIA_DEPOT_PATH=/cache/julia \
-    R_LIBS_USER=/cache/R/packages
+export GOMODCACHE=/cache/go/pkg/mod
+export npm_config_cache=/cache/npm
+export CARGO_HOME=/cache/cargo
+export JULIA_DEPOT_PATH=/cache/julia
+export R_LIBS_USER=/cache/R/packages
 
 # Container build cache
-ENV BUILDKIT_CACHE=/cache/buildkit
+export BUILDKIT_CACHE=/cache/buildkit
 
 # JetBrains IDEs
-ENV PYCHARM_CONFIG_PATH=/cache/jetbrains/config \
-    PYCHARM_PLUGINS_PATH=/cache/jetbrains/plugins \
-    PYCHARM_SYSTEM_PATH=/cache/jetbrains/system
+export PYCHARM_CONFIG_PATH=/cache/jetbrains/config
+export PYCHARM_PLUGINS_PATH=/cache/jetbrains/plugins
+export PYCHARM_SYSTEM_PATH=/cache/jetbrains/system
+EOF
+
+# Source cache-env.sh to set environment for build-time operations
+RUN chmod 644 /opt/cache-env.sh && \
+    echo 'source /opt/cache-env.sh' >> /etc/bash.bashrc
+
+# Also set as ENV for build-time (read from the file we just created)
+RUN . /opt/cache-env.sh && \
+    echo "HF_HOME=${HF_HOME}" >> /etc/environment && \
+    echo "TRANSFORMERS_CACHE=${TRANSFORMERS_CACHE}" >> /etc/environment && \
+    echo "HF_DATASETS_CACHE=${HF_DATASETS_CACHE}" >> /etc/environment && \
+    echo "TORCH_HOME=${TORCH_HOME}" >> /etc/environment && \
+    echo "TFHUB_CACHE_DIR=${TFHUB_CACHE_DIR}" >> /etc/environment && \
+    echo "PIP_CACHE_DIR=${PIP_CACHE_DIR}" >> /etc/environment && \
+    echo "CONDA_PKGS_DIRS=${CONDA_PKGS_DIRS}" >> /etc/environment && \
+    echo "GIT_LFS_CACHE_DIR=${GIT_LFS_CACHE_DIR}" >> /etc/environment && \
+    echo "GOMODCACHE=${GOMODCACHE}" >> /etc/environment && \
+    echo "npm_config_cache=${npm_config_cache}" >> /etc/environment && \
+    echo "CARGO_HOME=${CARGO_HOME}" >> /etc/environment && \
+    echo "JULIA_DEPOT_PATH=${JULIA_DEPOT_PATH}" >> /etc/environment && \
+    echo "R_LIBS_USER=${R_LIBS_USER}" >> /etc/environment && \
+    echo "BUILDKIT_CACHE=${BUILDKIT_CACHE}" >> /etc/environment && \
+    echo "PYCHARM_CONFIG_PATH=${PYCHARM_CONFIG_PATH}" >> /etc/environment && \
+    echo "PYCHARM_PLUGINS_PATH=${PYCHARM_PLUGINS_PATH}" >> /etc/environment && \
+    echo "PYCHARM_SYSTEM_PATH=${PYCHARM_SYSTEM_PATH}" >> /etc/environment
 
 #==============================================================================
 # CONTAINER METADATA

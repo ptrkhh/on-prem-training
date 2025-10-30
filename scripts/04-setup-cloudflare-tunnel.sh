@@ -160,10 +160,10 @@ echo "Tunnel configuration created"
 echo ""
 echo "=== Step 4: Routing DNS ==="
 
-# Check if route already exists (idempotent)
-EXISTING_ROUTE=$(cloudflared tunnel route dns list 2>/dev/null | grep "*.${DOMAIN}" || echo "")
+# Check if route already exists (idempotent) - check by domain pattern, not tunnel name
+EXISTING_ROUTE=$(cloudflared tunnel route dns list 2>/dev/null | awk -v domain="*.${DOMAIN}" '$0 ~ domain {print $1}' || echo "")
 if [[ -n "${EXISTING_ROUTE}" ]]; then
-    echo "DNS route for *.${DOMAIN} already exists, skipping..."
+    echo "DNS route for *.${DOMAIN} already exists (tunnel: ${EXISTING_ROUTE}), skipping..."
 else
     cloudflared tunnel route dns ${TUNNEL_NAME} "*.${DOMAIN}"
     echo "DNS routed for *.${DOMAIN}"

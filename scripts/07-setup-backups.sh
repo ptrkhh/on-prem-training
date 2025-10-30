@@ -163,6 +163,21 @@ BACKUP_STATUS="success"
 
 export RESTIC_PASSWORD_FILE
 
+# Check disk space before backup
+echo "Checking disk space..."
+AVAILABLE_GB=\$(df -BG "\${MOUNT_POINT}" | tail -1 | awk '{print \$4}' | sed 's/G//')
+MIN_SPACE_GB=10
+
+if [[ \${AVAILABLE_GB} -lt \${MIN_SPACE_GB} ]]; then
+    echo "ERROR: Insufficient disk space for backup!"
+    echo "Available: \${AVAILABLE_GB}GB, Required: \${MIN_SPACE_GB}GB"
+    if [[ -x "\${ALERT_SCRIPT}" ]]; then
+        "\${ALERT_SCRIPT}" "critical" "Backup failed: Low disk space (\${AVAILABLE_GB}GB available)"
+    fi
+    exit 1
+fi
+echo "Disk space check passed: \${AVAILABLE_GB}GB available"
+
 # Cleanup trap to unlock on failure
 cleanup() {
     if [[ "\${BACKUP_STATUS}" == "failed" ]]; then
@@ -200,8 +215,15 @@ if [[ -n "${PAUSED_CONTAINERS}" ]]; then
 fi
 
 if [[ -n "${PAUSE_FAILURES}" ]]; then
-    echo "WARNING: Failed to pause containers:${PAUSE_FAILURES}"
-    echo "Backup may be inconsistent for these containers"
+    echo "ERROR: Failed to pause containers:${PAUSE_FAILURES}"
+    echo "Cannot proceed with backup - inconsistent state may cause data corruption"
+    echo "Unpausing containers that were successfully paused..."
+    for container in ${PAUSED_CONTAINERS}; do
+        if ! echo "${PAUSE_FAILURES}" | grep -q "${container}"; then
+            docker unpause "${container}" 2>/dev/null || true
+        fi
+    done
+    exit 1
 fi
 
 # Validate backup directories exist
@@ -276,6 +298,12 @@ RESTORE_DIR="/tmp/restore-test"
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 
 export RESTIC_PASSWORD_FILE
+
+# Ensure cleanup on exit
+cleanup() {
+    rm -rf "\${RESTORE_DIR}"
+}
+trap cleanup EXIT
 
 echo "=== Restic Restore Verification: $(date) ==="
 
@@ -388,7 +416,11 @@ echo "  - BTRFS: 24 hourly, 7 daily, 4 weekly"
 echo "  - Restic: 7 daily, 52 weekly"
 echo ""
 echo "Restic password: /root/.restic-password"
-echo "IMPORTANT: Back up this password file!"
+echo ""
+echo "=========================================="
+echo "IMPORTANT: Restic password is: $(cat /root/.restic-password)"
+echo "Store this securely - it's required to restore backups!"
+echo "=========================================="
 echo ""
 echo "Manual commands:"
 echo "  Create snapshot: ${SCRIPTS_DIR}/create-snapshot.sh daily"

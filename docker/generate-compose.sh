@@ -18,6 +18,33 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Auto-detect CUDA version from host
+if command -v nvidia-smi &>/dev/null; then
+    CUDA_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n1 | awk '{print $1}')
+    # Map driver version to compatible CUDA version
+    # This is a simplified mapping - adjust based on NVIDIA compatibility matrix
+    if [[ -n "${CUDA_VERSION}" ]]; then
+        MAJOR_VERSION=$(echo "${CUDA_VERSION}" | cut -d. -f1)
+        if [[ ${MAJOR_VERSION} -ge 550 ]]; then
+            DETECTED_CUDA="12.4.1"
+        elif [[ ${MAJOR_VERSION} -ge 525 ]]; then
+            DETECTED_CUDA="12.0.1"
+        elif [[ ${MAJOR_VERSION} -ge 515 ]]; then
+            DETECTED_CUDA="11.8.0"
+        else
+            DETECTED_CUDA="11.7.1"
+        fi
+        CUDA_BUILD_VERSION="${DETECTED_CUDA}"
+        echo "Detected NVIDIA Driver: ${CUDA_VERSION}, using CUDA: ${CUDA_BUILD_VERSION}"
+    else
+        CUDA_BUILD_VERSION="12.4.1"
+        echo "Could not detect CUDA version, defaulting to: ${CUDA_BUILD_VERSION}"
+    fi
+else
+    CUDA_BUILD_VERSION="12.4.1"
+    echo "nvidia-smi not found, defaulting to CUDA: ${CUDA_BUILD_VERSION}"
+fi
+
 # Validate required configuration
 if [[ -z "${DOMAIN}" ]]; then
     echo "ERROR: DOMAIN is not set in config.sh"
@@ -101,6 +128,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - ml-net
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   # Apache Guacamole - Clientless Remote Desktop Gateway
   guacd:
@@ -109,6 +141,11 @@ services:
     restart: unless-stopped
     networks:
       - ml-net
+    healthcheck:
+      test: ["CMD-SHELL", "netstat -an | grep -q 4822"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
 
   guacamole-db:
     image: postgres:15
@@ -172,6 +209,11 @@ services:
       - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
       - "traefik.http.middlewares.guacamole-prefix.stripprefix.prefixes=/guacamole"
       - "traefik.http.routers.guacamole.middlewares=guacamole-prefix"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/guacamole || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   # Kasm Workspaces - Container Streaming Platform
   kasm:
@@ -188,7 +230,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.kasm.rule=Host(\`kasm.\${DOMAIN}\`)"
+      - "traefik.http.routers.kasm.rule=Host(\"kasm.\${DOMAIN}\")"
       - "traefik.http.routers.kasm.entrypoints=web"
       - "traefik.http.services.kasm.loadbalancer.server.port=443"
       - "traefik.http.services.kasm.loadbalancer.server.scheme=https"
@@ -233,6 +275,11 @@ services:
       - '--storage.tsdb.path=/prometheus'
     networks:
       - ml-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9090/-/healthy || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.prometheus.rule=Host(`prometheus.${DOMAIN}`)"
@@ -251,6 +298,11 @@ services:
       - grafana-data:/var/lib/grafana
     networks:
       - ml-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.grafana.rule=Host(`grafana.${DOMAIN}`)"
@@ -390,6 +442,8 @@ for USERNAME in ${USER_ARRAY[@]}; do
     build:
       context: ..
       dockerfile: docker/Dockerfile.user-workspace
+      args:
+        - CUDA_VERSION=${CUDA_BUILD_VERSION}
     image: ml-workspace:latest
     container_name: workspace-${USERNAME}
     hostname: ${USERNAME}-workspace
@@ -447,22 +501,22 @@ for USERNAME in ${USER_ARRAY[@]}; do
     labels:
       - "traefik.enable=true"
       # Desktop (noVNC HTML5)
-      - "traefik.http.routers.${USERNAME}-desktop.rule=Host(\`${USERNAME}-desktop.\${DOMAIN}\`) || Host(\`${USERNAME}.\${DOMAIN}\`)"
+      - "traefik.http.routers.${USERNAME}-desktop.rule=Host(\"${USERNAME}-desktop.\${DOMAIN}\") || Host(\"${USERNAME}.\${DOMAIN}\")"
       - "traefik.http.routers.${USERNAME}-desktop.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-desktop.service=${USERNAME}-desktop"
       - "traefik.http.services.${USERNAME}-desktop.loadbalancer.server.port=6080"
       # Code-server (VS Code in browser)
-      - "traefik.http.routers.${USERNAME}-code.rule=Host(\`${USERNAME}-code.\${DOMAIN}\`)"
+      - "traefik.http.routers.${USERNAME}-code.rule=Host(\"${USERNAME}-code.\${DOMAIN}\")"
       - "traefik.http.routers.${USERNAME}-code.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-code.service=${USERNAME}-code"
       - "traefik.http.services.${USERNAME}-code.loadbalancer.server.port=8080"
       # Jupyter Lab
-      - "traefik.http.routers.${USERNAME}-jupyter.rule=Host(\`${USERNAME}-jupyter.\${DOMAIN}\`)"
+      - "traefik.http.routers.${USERNAME}-jupyter.rule=Host(\"${USERNAME}-jupyter.\${DOMAIN}\")"
       - "traefik.http.routers.${USERNAME}-jupyter.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-jupyter.service=${USERNAME}-jupyter"
       - "traefik.http.services.${USERNAME}-jupyter.loadbalancer.server.port=8888"
       # Per-user TensorBoard
-      - "traefik.http.routers.${USERNAME}-tensorboard.rule=Host(\`${USERNAME}-tensorboard.\${DOMAIN}\`)"
+      - "traefik.http.routers.${USERNAME}-tensorboard.rule=Host(\"${USERNAME}-tensorboard.\${DOMAIN}\")"
       - "traefik.http.routers.${USERNAME}-tensorboard.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-tensorboard.service=${USERNAME}-tensorboard"
       - "traefik.http.services.${USERNAME}-tensorboard.loadbalancer.server.port=6006"
@@ -562,8 +616,38 @@ else
 fi
 echo ""
 
+# Generate .env file
+ENV_FILE="${SCRIPT_DIR}/.env"
+if [[ ! -f "${ENV_FILE}" ]]; then
+    echo "=== Generating .env file ==="
+    cat > "${ENV_FILE}" << EOF
+# ML Training Server Environment Variables
+# Generated by generate-compose.sh
+
+# Domain configuration
+DOMAIN=${DOMAIN}
+
+# Storage mount point
+MOUNT_POINT=${MOUNT_POINT:-/mnt/storage}
+
+# Service passwords
+GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD:-guacamole_password}
+
+# Resource limits
+MEMORY_LIMIT_GB=${MEMORY_LIMIT_GB:-100}
+MEMORY_GUARANTEE_GB=${MEMORY_GUARANTEE_GB:-32}
+EOF
+    echo "✅ Generated: ${ENV_FILE}"
+    echo "⚠️  IMPORTANT: Update passwords in .env file before deployment!"
+    echo ""
+else
+    echo "⚠️  .env file already exists, skipping generation"
+    echo ""
+fi
+
 echo "Next steps:"
-echo "  1. Create .env file with passwords"
+echo "  1. Review and update passwords in .env file"
 echo "  2. Build image: docker compose build"
 echo "  3. Start services: docker compose up -d"
 echo "  4. Setup Cloudflare Tunnel (for remote access)"

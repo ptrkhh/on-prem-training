@@ -144,6 +144,15 @@ apt install -y btrfs-progs parted gdisk smartmontools
 
 if [[ "${BCACHE_MODE}" != "none" ]]; then
     echo "Installing bcache-tools for bcache support..."
+    # Check Ubuntu version compatibility
+    UBUNTU_VERSION=$(lsb_release -rs 2>/dev/null || echo "0")
+    UBUNTU_MAJOR=$(echo "${UBUNTU_VERSION}" | cut -d. -f1)
+    if [[ ${UBUNTU_MAJOR} -lt 18 ]]; then
+        echo "ERROR: bcache-tools requires Ubuntu 18.04 or newer!"
+        echo "Current version: Ubuntu ${UBUNTU_VERSION}"
+        echo "Please upgrade Ubuntu or set BCACHE_MODE=none in config.sh"
+        exit 1
+    fi
     if ! apt install -y bcache-tools; then
         echo "ERROR: Failed to install bcache-tools!"
         echo "bcache mode is set to '${BCACHE_MODE}' but bcache-tools cannot be installed."
@@ -430,21 +439,21 @@ EOF
     echo "bcache persistence configured"
 fi
 
-# Step 7: Setup monthly BTRFS scrub
+# Step 7: Setup weekly BTRFS scrub
 echo ""
-echo "=== Step 7: Setting up monthly BTRFS scrub ==="
+echo "=== Step 7: Setting up weekly BTRFS scrub ==="
 
-mkdir -p /etc/cron.monthly
-cat > /etc/cron.monthly/btrfs-scrub <<EOF
+mkdir -p /etc/cron.weekly
+cat > /etc/cron.weekly/btrfs-scrub <<EOF
 #!/bin/bash
-# Monthly BTRFS scrub
+# Weekly BTRFS scrub (runs on Saturday)
 btrfs scrub start -B ${MOUNT_POINT}
 btrfs scrub status ${MOUNT_POINT} | logger -t btrfs-scrub
 EOF
 
-chmod +x /etc/cron.monthly/btrfs-scrub
+chmod +x /etc/cron.weekly/btrfs-scrub
 
-echo "Monthly BTRFS scrub configured"
+echo "Weekly BTRFS scrub configured (runs every Saturday)"
 
 # Final verification
 echo ""

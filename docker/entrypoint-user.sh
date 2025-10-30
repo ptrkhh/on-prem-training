@@ -11,7 +11,7 @@ USER_NAME="${USER_NAME:-user}"
 USER_UID="${USER_UID:-1000}"
 USER_GID="${USER_GID:-1000}"
 USER_PASSWORD="${USER_PASSWORD:-changeme}"
-VNC_PASSWORD="${VNC_PASSWORD:-vncpass}"
+VNC_PASSWORD="${USER_PASSWORD}"
 
 # Validate username format
 if [[ ! "${USER_NAME}" =~ ^[a-z][-a-z0-9]*$ ]]; then
@@ -150,10 +150,16 @@ EOF
 # Setup shell environment
 echo "Configuring shell environment..."
 su - ${USER_NAME} << EOF
+# Source shared cache environment
+[[ -f /opt/cache-env.sh ]] && source /opt/cache-env.sh
+
 # Bash configuration
 cat >> ~/.bashrc << 'BASHRC'
 
 # ML Training Server Environment
+# Source shared cache environment
+[[ -f /opt/cache-env.sh ]] && source /opt/cache-env.sh
+
 export WORKSPACE=/workspace
 export SHARED=/shared
 export MODELS=~/models

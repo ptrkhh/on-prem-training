@@ -23,6 +23,33 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Input validation helper function
+validate_yes_no() {
+    local prompt="$1"
+    local response
+    while true; do
+        read -p "${prompt} (y/n): " response
+        case "${response}" in
+            y|Y|yes|Yes|YES) return 0;;
+            n|N|no|No|NO) return 1;;
+            *) echo "Please answer y or n";;
+        esac
+    done
+}
+
+validate_yes_no_full() {
+    local prompt="$1"
+    local response
+    while true; do
+        read -p "${prompt} (yes/no): " response
+        case "${response}" in
+            yes|Yes|YES) return 0;;
+            no|No|NO) return 1;;
+            *) echo "Please answer yes or no";;
+        esac
+    done
+}
+
 # Step 1: Install Docker
 echo ""
 echo "=== Step 1: Installing Docker ==="
@@ -68,14 +95,28 @@ else
     ubuntu-drivers autoinstall
 
     echo "NVIDIA drivers installed. Reboot required."
-    read -p "Reboot now? (y/n): " do_reboot
-    if [[ "$do_reboot" == "y" ]]; then
+    if validate_yes_no "Reboot now?"; then
         reboot
     else
         echo "Please reboot manually before continuing."
         exit 0
     fi
 fi
+
+# Verify nvidia-smi is working before proceeding
+echo ""
+echo "Verifying GPU access..."
+if ! nvidia-smi &>/dev/null; then
+    echo "ERROR: nvidia-smi is not working!"
+    echo "NVIDIA drivers may not be properly installed or system needs a reboot."
+    echo "Please ensure:"
+    echo "  1. System has been rebooted after driver installation"
+    echo "  2. NVIDIA GPU is properly connected"
+    echo "  3. Drivers are compatible with your GPU"
+    exit 1
+fi
+echo "✓ GPU detected successfully:"
+nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
 
 # Step 3: Install NVIDIA Container Toolkit
 echo ""
@@ -159,8 +200,7 @@ docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu24.04 nvidia-smi
 
 # Step 6: Configure GPU time-slicing (optional)
 echo ""
-read -p "Configure GPU time-slicing for shared access? (y/n): " setup_timeslice
-if [[ "$setup_timeslice" == "y" ]]; then
+if validate_yes_no "Configure GPU time-slicing for shared access?"; then
     echo "Configuring GPU time-slicing..."
 
     # Create time-slicing config

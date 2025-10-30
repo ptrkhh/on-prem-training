@@ -49,11 +49,13 @@ Thumbs.db
 *.wmv
 # Sensitive configuration files
 .env
+*.env
 config.sh
 docker/.env
 
 # Generated docker-compose (regenerated from generate-compose.sh)
 docker/docker-compose.yml
+docker-compose.yml
 
 # Secrets and credentials
 *.pem
@@ -69,3 +71,4 @@ docker/docker-compose.yml
 # Backup data
 *.restic
 backups/
+*.log

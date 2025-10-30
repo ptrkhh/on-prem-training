@@ -64,9 +64,22 @@ class SimpleNet(nn.Module):
 
 # Create model and move to GPU
 print("Creating model...")
-model = SimpleNet().cuda()
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+try:
+    model = SimpleNet().cuda()
+except RuntimeError as e:
+    print(f"ERROR: Failed to move model to GPU: {e}")
+    print("Possible causes:")
+    print("  - Insufficient GPU memory")
+    print("  - CUDA runtime error")
+    print("  - GPU driver mismatch")
+    sys.exit(1)
+
+try:
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+except Exception as e:
+    print(f"ERROR: Failed to create optimizer/criterion: {e}")
+    sys.exit(1)
 
 # Generate random training data
 batch_size = 128
@@ -77,22 +90,30 @@ print()
 
 start_time = time.time()
 
-for batch_idx in range(num_batches):
-    # Generate random input and target
-    inputs = torch.randn(batch_size, 1024).cuda()
-    targets = torch.randint(0, 10, (batch_size,)).cuda()
+try:
+    for batch_idx in range(num_batches):
+        # Generate random input and target
+        inputs = torch.randn(batch_size, 1024).cuda()
+        targets = torch.randint(0, 10, (batch_size,)).cuda()
 
-    # Forward pass
-    optimizer.zero_grad()
-    outputs = model(inputs)
-    loss = criterion(outputs, targets)
+        # Forward pass
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(outputs, targets)
 
-    # Backward pass
-    loss.backward()
-    optimizer.step()
+        # Backward pass
+        loss.backward()
+        optimizer.step()
 
-    if (batch_idx + 1) % 10 == 0:
-        print(f"Batch {batch_idx + 1}/{num_batches}, Loss: {loss.item():.4f}")
+        if (batch_idx + 1) % 10 == 0:
+            print(f"Batch {batch_idx + 1}/{num_batches}, Loss: {loss.item():.4f}")
+except RuntimeError as e:
+    print(f"\nERROR: Training failed with CUDA error: {e}")
+    print("Possible causes:")
+    print("  - Out of GPU memory")
+    print("  - CUDA kernel launch failure")
+    print("  - Invalid tensor operation")
+    sys.exit(1)
 
 end_time = time.time()
 elapsed = end_time - start_time

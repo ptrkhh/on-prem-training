@@ -186,11 +186,12 @@ if [[ ${FREE_GB} -le 0 ]]; then
 fi
 
 CACHE_SIZE_GB=$(awk "BEGIN {printf \"%.0f\", ${FREE_GB} * (1 - ${STORAGE_SAFETY_MARGIN_PERCENT}/100.0)}")
-SAFETY_BUFFER_GB=$((FREE_GB - CACHE_SIZE_GB))
+SAFETY_BUFFER_GB=$(awk "BEGIN {printf \"%.0f\", ${FREE_GB} - ${CACHE_SIZE_GB}}")
+CACHE_PERCENT=$(awk "BEGIN {printf \"%.0f\", ${CACHE_SIZE_GB} * 100.0 / ${TOTAL_BTRFS_GB}}")
 
 echo "Google Drive VFS cache allocation:"
 echo "  Free space after reservations: ${FREE_GB}GB"
-echo "  VFS cache size: ${CACHE_SIZE_GB}GB ($((CACHE_SIZE_GB * 100 / TOTAL_BTRFS_GB))% of total disk)"
+echo "  VFS cache size: ${CACHE_SIZE_GB}GB (${CACHE_PERCENT}% of total disk)"
 echo "  Safety buffer: ${SAFETY_BUFFER_GB}GB (${STORAGE_SAFETY_MARGIN_PERCENT}% of free space)"
 echo ""
 
