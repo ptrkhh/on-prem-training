@@ -19,6 +19,17 @@ if [[ ! "${USER_NAME}" =~ ^[a-z][-a-z0-9]*$ ]]; then
     exit 1
 fi
 
+# Validate UID/GID ranges
+if [[ ${USER_UID} -lt 1000 ]] || [[ ${USER_UID} -gt 60000 ]]; then
+    echo "ERROR: Invalid UID '${USER_UID}'. Must be 1000-60000"
+    exit 1
+fi
+
+if [[ ${USER_GID} -lt 1000 ]] || [[ ${USER_GID} -gt 60000 ]]; then
+    echo "ERROR: Invalid GID '${USER_GID}'. Must be 1000-60000"
+    exit 1
+fi
+
 echo "Initializing user: ${USER_NAME} (UID: ${USER_UID}, GID: ${USER_GID})"
 
 # Create user and group if they don't exist
@@ -343,11 +354,20 @@ chown -R ${USER_NAME}:${USER_NAME} /home/${USER_NAME}
 mkdir -p /run/dbus
 dbus-daemon --system --fork
 sleep 2
-# Verify DBUS is running
-if ! pgrep -x dbus-daemon > /dev/null; then
-    echo "ERROR: DBUS failed to start"
-    exit 1
-fi
+
+# Verify DBUS is running with retry logic
+for i in {1..3}; do
+    if pgrep -x dbus-daemon > /dev/null; then
+        echo "DBUS started successfully"
+        break
+    fi
+    if [[ $i -eq 3 ]]; then
+        echo "ERROR: DBUS failed to start after 3 attempts"
+        exit 1
+    fi
+    echo "Waiting for DBUS... (attempt $i/3)"
+    sleep 2
+done
 
 # Print access information
 echo ""

@@ -105,6 +105,12 @@ echo "=== Step 4: Configuring Docker Daemon ==="
 # Configure Docker to store data on BTRFS storage
 mkdir -p ${MOUNT_POINT}/docker
 
+# Backup existing daemon.json if present
+if [[ -f /etc/docker/daemon.json ]]; then
+    cp /etc/docker/daemon.json /etc/docker/daemon.json.backup.$(date +%Y%m%d_%H%M%S)
+    echo "Backed up existing daemon.json"
+fi
+
 # Create Docker daemon config
 cat > /etc/docker/daemon.json <<EOF
 {
@@ -149,7 +155,7 @@ docker run --rm hello-world
 # Test NVIDIA runtime
 echo ""
 echo "Testing NVIDIA runtime..."
-docker run --rm --gpus all nvidia/cuda:latest nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu24.04 nvidia-smi
 
 # Step 6: Configure GPU time-slicing (optional)
 echo ""

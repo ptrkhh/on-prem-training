@@ -29,7 +29,7 @@ SCRIPTS_DIR="/opt/scripts/backup"
 # Install required packages
 echo "Installing required packages..."
 apt update
-apt install -y restic rclone bc mailutils
+apt install -y restic rclone bc mailutils jq
 
 # Step 1: Setup rclone for GDrive
 echo ""
@@ -90,15 +90,15 @@ echo "Created snapshot: \${SNAPSHOT_NAME}"
 case "\${SNAPSHOT_TYPE}" in
     hourly)
         # Keep last 24 hourly snapshots
-        ls -t \${SNAPSHOT_DIR}/hourly_* 2>/dev/null | tail -n +25 | xargs -r rm -rf
+        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'hourly_*' -type d | sort -r | tail -n +25 | xargs -r rm -rf
         ;;
     daily)
         # Keep last 7 daily snapshots
-        ls -t \${SNAPSHOT_DIR}/daily_* 2>/dev/null | tail -n +8 | xargs -r rm -rf
+        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'daily_*' -type d | sort -r | tail -n +8 | xargs -r rm -rf
         ;;
     weekly)
         # Keep last 4 weekly snapshots
-        ls -t \${SNAPSHOT_DIR}/weekly_* 2>/dev/null | tail -n +5 | xargs -r rm -rf
+        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'weekly_*' -type d | sort -r | tail -n +5 | xargs -r rm -rf
         ;;
 esac
 
@@ -159,8 +159,18 @@ RESTIC_PASSWORD_FILE="/root/.restic-password"
 MOUNT_POINT="${MOUNT_POINT}"
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 LOG_FILE="/var/log/restic-backup.log"
+BACKUP_STATUS="success"
 
 export RESTIC_PASSWORD_FILE
+
+# Cleanup trap to unlock on failure
+cleanup() {
+    if [[ "\${BACKUP_STATUS}" == "failed" ]]; then
+        echo "Attempting to unlock repository..."
+        restic -r \${RESTIC_REPOSITORY} unlock || true
+    fi
+}
+trap cleanup EXIT
 
 # Redirect all output to log file
 exec > >(tee -a ${LOG_FILE}) 2>&1
@@ -193,6 +203,13 @@ if [[ -n "${PAUSE_FAILURES}" ]]; then
     echo "WARNING: Failed to pause containers:${PAUSE_FAILURES}"
     echo "Backup may be inconsistent for these containers"
 fi
+
+# Validate backup directories exist
+for dir in "\${MOUNT_POINT}/homes" "\${MOUNT_POINT}/docker-volumes" "\${MOUNT_POINT}/shared/tensorboard"; do
+    if [[ ! -d "\${dir}" ]]; then
+        echo "WARNING: Backup directory does not exist: \${dir}"
+    fi
+done
 
 # Run backup with bandwidth limit
 BANDWIDTH_LIMIT_KBPS=\$((${BACKUP_BANDWIDTH_LIMIT_MBPS} * 1000 / 8))

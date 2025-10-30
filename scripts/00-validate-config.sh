@@ -167,8 +167,10 @@ fi
 TOTAL_USER_QUOTA_GB=$((USER_QUOTA_GB * $(get_user_count)))
 
 # Check if user data + snapshots (50% overhead) exceeds safe limit (80% of disk)
+# Account for BTRFS metadata overhead (5%)
+BTRFS_OVERHEAD=0.95
 TOTAL_WITH_SNAPSHOTS=$(awk "BEGIN {printf \"%.0f\", ${TOTAL_USER_QUOTA_GB} * 1.5}")  # User data + 50% snapshots
-SAFE_LIMIT_GB=$(awk "BEGIN {printf \"%.0f\", ${ESTIMATED_CAPACITY_GB} * 0.8}")  # 80% of 40TB in GB
+SAFE_LIMIT_GB=$(awk "BEGIN {printf \"%.0f\", ${ESTIMATED_CAPACITY_GB} * ${BTRFS_OVERHEAD} * 0.8}")  # 80% of capacity after BTRFS overhead
 
 if [[ ${TOTAL_WITH_SNAPSHOTS} -gt ${SAFE_LIMIT_GB} ]]; then
     echo "  ⚠ WARNING: Total user quota + snapshots (${TOTAL_USER_QUOTA_GB}GB + 50%) may exceed safe storage limit"
@@ -207,6 +209,16 @@ if [[ ${MAX_USERS} -gt 50 ]]; then
     ((WARNINGS++))
 fi
 
+# Check for default passwords
+echo ""
+echo "Checking password security..."
+
+if [[ "${GRAFANA_ADMIN_PASSWORD:-admin}" == "admin" ]]; then
+    echo "  ⚠ WARNING: Grafana using default password 'admin'"
+    echo "    Set GRAFANA_ADMIN_PASSWORD in config.sh or .env"
+    ((WARNINGS++))
+fi
+
 # Check domain if Cloudflare is being used
 echo ""
 echo "Checking network configuration..."
@@ -216,6 +228,14 @@ if [[ -z "${DOMAIN}" ]]; then
     ((WARNINGS++))
 else
     echo "  ✓ Domain: ${DOMAIN}"
+fi
+
+# Check GPU
+if ! nvidia-smi &>/dev/null; then
+    echo "  ⚠ WARNING: No NVIDIA GPU detected"
+    ((WARNINGS++))
+else
+    echo "  ✓ NVIDIA GPU detected"
 fi
 
 # Check rclone remotes if configured

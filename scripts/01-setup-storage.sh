@@ -197,6 +197,7 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
         # Create bcache partition
         if ! parted -s "${NVME_DEVICE}" mkpart primary ${OS_PARTITION_SIZE_GB}GiB 100%; then
             echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
+            parted -s "${NVME_DEVICE}" print  # Show current state for debugging
             exit 1
         fi
 
@@ -227,12 +228,12 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
 
     # Wait for cache device to be fully ready
     echo "Waiting for bcache cache device to be ready..."
-    for i in {1..30}; do
+    for i in {1..60}; do
         if [[ -e "/sys/fs/bcache" ]] && bcache-super-show ${BCACHE_CACHE_DEV} &>/dev/null; then
             echo "Cache device ready after ${i} seconds"
             break
         fi
-        if [[ $i -eq 30 ]]; then
+        if [[ $i -eq 60 ]]; then
             echo "ERROR: Timeout waiting for bcache cache device ${BCACHE_CACHE_DEV}"
             echo "Check 'dmesg | tail -50' and verify bcache-tools installed correctly"
             exit 1

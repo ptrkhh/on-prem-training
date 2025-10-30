@@ -21,6 +21,10 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Install required dependencies for tests
+echo "Installing test dependencies..."
+apt-get update -qq && apt-get install -y -qq curl jq > /dev/null 2>&1 || true
+
 # Convert users string to array
 USER_ARRAY=(${USERS})
 USER_COUNT=${#USER_ARRAY[@]}

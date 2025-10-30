@@ -23,12 +23,6 @@ fi
 
 source "${CONFIG_FILE}"
 
-# Validate domain format
-if [[ ! "${DOMAIN}" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)*$ ]]; then
-    echo "ERROR: Invalid domain format: ${DOMAIN}"
-    exit 1
-fi
-
 # Convert users string to array
 USER_ARRAY=(${USERS})
 USER_COUNT=${#USER_ARRAY[@]}
@@ -184,6 +178,20 @@ systemctl enable cloudflared
 systemctl start cloudflared
 
 echo "Cloudflare Tunnel service installed and started"
+
+# Verify tunnel connection
+echo ""
+echo "Waiting for tunnel to connect..."
+for i in {1..30}; do
+    if journalctl -u cloudflared -n 20 | grep -q "Connection .* registered"; then
+        echo "✓ Tunnel connected successfully"
+        break
+    fi
+    if [[ $i -eq 30 ]]; then
+        echo "⚠️  WARNING: Tunnel may not be connected. Check: journalctl -u cloudflared"
+    fi
+    sleep 1
+done
 
 # Step 6: Display status
 echo ""

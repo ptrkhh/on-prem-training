@@ -5,9 +5,20 @@ Verifies CUDA is available and GPU can run a simple training loop
 """
 
 import sys
-import torch
-import torch.nn as nn
-import torch.optim as optim
+
+# Install torch if not available
+try:
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+except ImportError:
+    print("PyTorch not found. Installing...")
+    import subprocess
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "torch"])
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+
 import time
 
 print("=" * 60)

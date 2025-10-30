@@ -66,11 +66,25 @@ ufw allow 22/tcp comment 'SSH'
 # Allow SSH port range for user containers
 USER_COUNT=$(echo ${USERS} | wc -w)
 SSH_BASE_PORT=${SSH_BASE_PORT:-2222}
+VNC_BASE_PORT=${VNC_BASE_PORT:-5900}
+RDP_BASE_PORT=${RDP_BASE_PORT:-3389}
+NOVNC_BASE_PORT=${NOVNC_BASE_PORT:-6080}
+
 echo "Opening SSH ports for ${USER_COUNT} users (${SSH_BASE_PORT}-$((SSH_BASE_PORT + USER_COUNT - 1)))..."
 for ((i=0; i<USER_COUNT; i++)); do
     port=$((SSH_BASE_PORT + i))
     ufw allow ${port}/tcp comment "SSH - User container $i"
 done
+
+# Open VNC/RDP/noVNC ports if LOCAL_NETWORK_CIDR is set (for local access)
+if [[ -n "${LOCAL_NETWORK_CIDR:-}" ]]; then
+    echo "Opening VNC/RDP/noVNC ports for local network ${LOCAL_NETWORK_CIDR}..."
+    for ((i=0; i<USER_COUNT; i++)); do
+        ufw allow from ${LOCAL_NETWORK_CIDR} to any port $((VNC_BASE_PORT + i)) proto tcp comment "VNC - User $i"
+        ufw allow from ${LOCAL_NETWORK_CIDR} to any port $((RDP_BASE_PORT + i)) proto tcp comment "RDP - User $i"
+        ufw allow from ${LOCAL_NETWORK_CIDR} to any port $((NOVNC_BASE_PORT + i)) proto tcp comment "noVNC - User $i"
+    done
+fi
 
 # Allow local network access (use LOCAL_NETWORK_CIDR from config)
 if [[ -n "${LOCAL_NETWORK_CIDR:-}" ]]; then

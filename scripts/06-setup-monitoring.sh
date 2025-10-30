@@ -129,8 +129,6 @@ for dev in ${HDD_DEVICES}; do
 done
 DEVICES=(\${DETECTED_DEVICES})
 
-DISK_TEMP_THRESHOLD=${DISK_TEMP_THRESHOLD}
-
 for device in "\${DEVICES[@]}"; do
     if [[ ! -b "\${device}" ]]; then
         continue
@@ -153,15 +151,6 @@ for device in "\${DEVICES[@]}"; do
         [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
     fi
 
-    # Check temperature (HDDs)
-    if [[ "\${device}" != "/dev/nvme"* ]]; then
-        TEMP=\$(smartctl -A \${device} | grep "Temperature_Celsius" | awk '{print \$10}' || echo "0")
-        if [[ "\${TEMP}" -gt \${DISK_TEMP_THRESHOLD} ]]; then
-            MESSAGE="WARNING: \${device} temperature is \${TEMP}°C"
-            echo "\${MESSAGE}"
-            [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
-        fi
-    fi
 done
 EOF
 

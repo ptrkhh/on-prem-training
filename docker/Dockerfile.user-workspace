@@ -19,7 +19,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # Set locale
 RUN apt-get update && apt-get install -y locales && \
-    locale-gen en_US.UTF-8
+    locale-gen en_US.UTF-8 && \
+    update-locale LANG=en_US.UTF-8
 ENV LANG=en_US.UTF-8 LANGUAGE=en_US:en LC_ALL=en_US.UTF-8
 
 #==============================================================================
@@ -110,9 +111,11 @@ RUN mkdir -p /etc/vnc && \
 # Configure XRDP
 RUN echo "startplasma-x11" > /etc/xrdp/startwm.sh && \
     chmod +x /etc/xrdp/startwm.sh && \
-    sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini && \
-    sed -i 's/#tcp_send_buffer_bytes=32768/tcp_send_buffer_bytes=4194304/' /etc/xrdp/xrdp.ini && \
-    sed -i 's/#tcp_recv_buffer_bytes=32768/tcp_recv_buffer_bytes=6291456/' /etc/xrdp/xrdp.ini
+    if [ -f /etc/xrdp/xrdp.ini ]; then \
+        sed -i 's/max_bpp=32/max_bpp=24/' /etc/xrdp/xrdp.ini && \
+        sed -i 's/#tcp_send_buffer_bytes=32768/tcp_send_buffer_bytes=4194304/' /etc/xrdp/xrdp.ini && \
+        sed -i 's/#tcp_recv_buffer_bytes=32768/tcp_recv_buffer_bytes=6291456/' /etc/xrdp/xrdp.ini; \
+    fi
 
 # Users can connect via:
 #  - Apache Guacamole web interface (primary method, browser-based)
@@ -171,8 +174,8 @@ RUN wget -qO - https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/p
 #==============================================================================
 
 # Add Google Chrome repository
-RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - && \
-    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg && \
+    echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
 
 RUN apt-get update && apt-get install -y \
     # Browsers
@@ -323,7 +326,7 @@ EXPOSE 6006    # TensorBoard
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD pgrep -x supervisord || exit 1
+  CMD pgrep -x supervisord && pgrep -x sshd && pgrep -x Xvnc || exit 1
 
 # Set working directory
 WORKDIR /workspace

@@ -112,7 +112,6 @@ UseSTARTTLS=YES
 
    # Adjust thresholds
    GPU_TEMP_THRESHOLD=85          # Was: 80
-   DISK_TEMP_THRESHOLD=55         # Was: 50
    FS_USAGE_THRESHOLD=85          # Was: 90
    USER_QUOTA_WARNING_PERCENT=75  # Was: 80
    ```

@@ -24,9 +24,21 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Validate USERS is not empty
+if [[ -z "${USERS}" ]]; then
+    echo "ERROR: USERS variable is empty in config.sh"
+    exit 1
+fi
+
 # Convert users string to array
 USER_ARRAY=(${USERS})
 USER_COUNT=${#USER_ARRAY[@]}
+
+# Validate array has at least one element
+if [[ ${USER_COUNT} -eq 0 ]]; then
+    echo "ERROR: USERS array is empty after parsing"
+    exit 1
+fi
 
 # Check storage is mounted
 if ! mountpoint -q "${MOUNT_POINT}"; then
@@ -147,6 +159,10 @@ Subsystem sftp /usr/lib/openssh/sftp-server
 EOF
 
 echo "SSH configured (password authentication enabled until SSH keys are added)"
+echo ""
+echo "⚠️  SECURITY REMINDER: SSH password authentication is currently ENABLED"
+echo "   Add SSH keys for all users, then run: /root/disable-ssh-password-auth.sh"
+echo "   Do this within 24 hours of setup for security"
 
 # Create script to disable password authentication after SSH keys are verified
 cat > /root/disable-ssh-password-auth.sh <<'EOFSCRIPT'

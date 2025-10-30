@@ -541,6 +541,27 @@ echo "  - Faster pip installs (10-50x for cached wheels)"
 echo "  - Faster Docker builds (shared build cache)"
 echo "  - Reduced bandwidth (no redundant downloads)"
 echo ""
+
+# Validate prometheus config
+if [[ ! -f "${SCRIPT_DIR}/prometheus/prometheus.yml" ]]; then
+    echo "⚠️  WARNING: Prometheus config not found: ${SCRIPT_DIR}/prometheus/prometheus.yml"
+    echo "   Create this file before starting services"
+    echo ""
+fi
+
+# Validate generated docker-compose.yml
+if command -v docker &>/dev/null; then
+    if docker compose -f "${OUTPUT_FILE}" config &>/dev/null; then
+        echo "✓ Generated docker-compose.yml is valid"
+    else
+        echo "⚠️  WARNING: Generated docker-compose.yml may have syntax errors"
+        echo "   Run: docker compose config to validate"
+    fi
+else
+    echo "⚠️  WARNING: Docker not available, skipping validation"
+fi
+echo ""
+
 echo "Next steps:"
 echo "  1. Create .env file with passwords"
 echo "  2. Build image: docker compose build"
