@@ -62,7 +62,7 @@ else
     fail "BTRFS filesystem is NOT mounted at ${MOUNT_POINT}"
 fi
 
-if btrfs filesystem show ${MOUNT_POINT} | grep -qi "${BTRFS_RAID_LEVEL}"; then
+if btrfs filesystem df ${MOUNT_POINT} | grep -qi "Data.*${BTRFS_RAID_LEVEL}"; then
     pass "BTRFS is using ${BTRFS_RAID_LEVEL}"
 else
     fail "BTRFS is NOT using ${BTRFS_RAID_LEVEL}"

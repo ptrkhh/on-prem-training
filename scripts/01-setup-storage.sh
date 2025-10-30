@@ -191,22 +191,14 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
         fi
 
         # Get total size and calculate bcache start
-        TOTAL_SIZE_RAW=$(lsblk -ndo SIZE ${NVME_DEVICE})
-        TOTAL_SIZE_GB=$(echo "${TOTAL_SIZE_RAW}" | awk '
-            {
-                size = $1
-                unit = substr($1, length($1))
-                value = substr($1, 1, length($1)-1)
-                if (unit == "T") print int(value * 1024)
-                else if (unit == "G") print int(value)
-                else if (unit == "M") print int(value / 1024)
-                else print int(value)
-            }
-        ')
+        TOTAL_SIZE_GB=$(lsblk -bndo SIZE ${NVME_DEVICE} | awk '{print int($1/1024/1024/1024)}')
         BCACHE_SIZE_GB=$((TOTAL_SIZE_GB - OS_PARTITION_SIZE_GB))
 
         # Create bcache partition
-        parted -s ${NVME_DEVICE} mkpart primary ${OS_PARTITION_SIZE_GB}GiB 100%
+        if ! parted -s "${NVME_DEVICE}" mkpart primary ${OS_PARTITION_SIZE_GB}GiB 100%; then
+            echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
+            exit 1
+        fi
 
         # Wait for partition to appear
         sleep 2
@@ -278,6 +270,8 @@ for hdd in "${HDD_ARRAY[@]}"; do
 
         # Find the bcache device using sysfs (more reliable than lsblk)
         echo "  Waiting for bcache device to appear..."
+        udevadm settle --timeout=30
+        sleep 2
         BCACHE_DEV=""
         for i in {1..30}; do
             # Check /sys/block/bcache*/slaves/ for the source device

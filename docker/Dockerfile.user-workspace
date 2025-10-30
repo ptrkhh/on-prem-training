@@ -4,10 +4,10 @@
 FROM nvidia/cuda:12.4.1-devel-ubuntu24.04
 
 # Build arguments for version configuration
-ARG PYCHARM_VERSION=2025.2.4
-ARG JULIA_VERSION=1.12.1
+ARG PYCHARM_VERSION=2024.3
+ARG JULIA_VERSION=1.12.0
 ARG NODE_VERSION=22.x
-ARG GO_VERSION=1.23.4
+ARG GO_VERSION=1.22.0
 
 # Container metadata
 LABEL maintainer="patrick.hermawan@outlook.com"
@@ -170,6 +170,10 @@ RUN wget -qO - https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/p
 # BROWSERS & GUI APPS
 #==============================================================================
 
+# Add Google Chrome repository
+RUN wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | apt-key add - && \
+    echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list
+
 RUN apt-get update && apt-get install -y \
     # Browsers
     firefox google-chrome-stable \
@@ -184,7 +188,7 @@ RUN apt-get update && apt-get install -y \
     # Screenshot tools
     spectacle \
     # Monitoring & Profiling
-    nvitop, nvtop, ncdu \
+    nvitop nvtop ncdu \
     && rm -rf /var/lib/apt/lists/*
 
 #==============================================================================
@@ -207,7 +211,8 @@ RUN apt-get update && apt-get install -y \
 
 RUN apt-get update && apt-get install -y \
     docker.io docker-compose \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -f docker
 
 #==============================================================================
 # LANGUAGE RUNTIMES

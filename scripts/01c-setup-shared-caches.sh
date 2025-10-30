@@ -228,7 +228,7 @@ EOF
 chmod +x /opt/scripts/cache/show-cache-info.sh
 
 # Create cache cleanup template (to be customized later)
-cat > /opt/scripts/cache/clean-cache.sh <<'EOF'
+cat > /opt/scripts/cache/clean-cache.sh.example <<'EOF'
 #!/bin/bash
 # Clean old cache entries (template - customize retention policies as needed)
 
@@ -257,7 +257,7 @@ echo "      as they are large downloads that users may need long-term."
 echo ""
 EOF
 
-chmod +x /opt/scripts/cache/clean-cache.sh
+chmod +x /opt/scripts/cache/clean-cache.sh.example
 
 # Create environment file for cache paths
 cat > /opt/cache-env.sh <<EOF

@@ -63,6 +63,15 @@ ufw default allow outgoing
 # Allow SSH (port 22)
 ufw allow 22/tcp comment 'SSH'
 
+# Allow SSH port range for user containers
+USER_COUNT=$(echo ${USERS} | wc -w)
+SSH_BASE_PORT=${SSH_BASE_PORT:-2222}
+echo "Opening SSH ports for ${USER_COUNT} users (${SSH_BASE_PORT}-$((SSH_BASE_PORT + USER_COUNT - 1)))..."
+for ((i=0; i<USER_COUNT; i++)); do
+    port=$((SSH_BASE_PORT + i))
+    ufw allow ${port}/tcp comment "SSH - User container $i"
+done
+
 # Allow local network access (use LOCAL_NETWORK_CIDR from config)
 if [[ -n "${LOCAL_NETWORK_CIDR:-}" ]]; then
     echo "Allowing local network access from ${LOCAL_NETWORK_CIDR}"

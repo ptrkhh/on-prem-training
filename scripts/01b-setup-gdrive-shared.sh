@@ -216,6 +216,7 @@ ExecStart=/usr/bin/rclone mount ${GDRIVE_SHARED_REMOTE}: ${MOUNT_POINT}/shared \
     --vfs-cache-mode full \\
     --vfs-cache-max-size ${CACHE_SIZE_GB}G \\
     --vfs-cache-max-age ${GDRIVE_CACHE_MAX_AGE} \\
+    --vfs-read-ahead 1G \\
     --vfs-read-chunk-size ${GDRIVE_READ_CHUNK_SIZE} \\
     --vfs-read-chunk-size-limit ${GDRIVE_READ_CHUNK_LIMIT} \\
     --vfs-write-back ${GDRIVE_WRITE_BACK} \\

@@ -42,6 +42,17 @@ else
     echo "  ✓ Mount point: ${MOUNT_POINT}"
 fi
 
+# Validate MOUNT_POINT format
+if [[ "${MOUNT_POINT}" =~ [[:space:]] ]]; then
+    echo "  ✗ ERROR: MOUNT_POINT cannot contain spaces: '${MOUNT_POINT}'"
+    ((ERRORS++))
+elif [[ ! "${MOUNT_POINT}" =~ ^/ ]]; then
+    echo "  ✗ ERROR: MOUNT_POINT must be an absolute path: '${MOUNT_POINT}'"
+    ((ERRORS++))
+else
+    echo "  ✓ Mount point format is valid: ${MOUNT_POINT}"
+fi
+
 if [[ -z "${DOMAIN}" ]]; then
     echo "  ✗ ERROR: DOMAIN is not set (required for Cloudflare Tunnel)"
     ((ERRORS++))
@@ -157,7 +168,7 @@ TOTAL_USER_QUOTA_GB=$((USER_QUOTA_GB * $(get_user_count)))
 
 # Check if user data + snapshots (50% overhead) exceeds safe limit (80% of disk)
 TOTAL_WITH_SNAPSHOTS=$(awk "BEGIN {printf \"%.0f\", ${TOTAL_USER_QUOTA_GB} * 1.5}")  # User data + 50% snapshots
-SAFE_LIMIT_GB=$((ESTIMATED_CAPACITY_GB * 80 / 100))  # 80% of 40TB in GB
+SAFE_LIMIT_GB=$(awk "BEGIN {printf \"%.0f\", ${ESTIMATED_CAPACITY_GB} * 0.8}")  # 80% of 40TB in GB
 
 if [[ ${TOTAL_WITH_SNAPSHOTS} -gt ${SAFE_LIMIT_GB} ]]; then
     echo "  ⚠ WARNING: Total user quota + snapshots (${TOTAL_USER_QUOTA_GB}GB + 50%) may exceed safe storage limit"
@@ -205,6 +216,16 @@ if [[ -z "${DOMAIN}" ]]; then
     ((WARNINGS++))
 else
     echo "  ✓ Domain: ${DOMAIN}"
+fi
+
+# Check rclone remotes if configured
+if [[ -n "${BACKUP_REMOTE}" ]]; then
+    REMOTE_NAME=$(echo "${BACKUP_REMOTE}" | cut -d: -f1)
+    if ! rclone listremotes 2>/dev/null | grep -q "^${REMOTE_NAME}:$"; then
+        echo "  ⚠ WARNING: Backup remote '${REMOTE_NAME}' not configured in rclone"
+        echo "    Run 'rclone config' to set up ${REMOTE_NAME} before running setup"
+        ((WARNINGS++))
+    fi
 fi
 
 # Summary

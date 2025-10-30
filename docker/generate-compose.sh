@@ -53,8 +53,6 @@ fi
 ###############################################################################
 
 cat > "${OUTPUT_FILE}" << 'EOFMAIN'
-version: '3.8'
-
 # ML Training Server
 # Infrastructure + Per-User VM-like Containers
 

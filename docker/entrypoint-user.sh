@@ -316,12 +316,38 @@ priority=1
 exitcodes=0
 SUPCONF
 
+# Create main supervisord.conf
+cat > /etc/supervisor/supervisord.conf <<'SUPERMAIN'
+[unix_http_server]
+file=/var/run/supervisor.sock
+
+[supervisord]
+logfile=/var/log/supervisor/supervisord.log
+pidfile=/var/run/supervisord.pid
+childlogdir=/var/log/supervisor
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[supervisorctl]
+serverurl=unix:///var/run/supervisor.sock
+
+[include]
+files = /etc/supervisor/conf.d/*.conf
+SUPERMAIN
+
 # Fix permissions
 chown -R ${USER_NAME}:${USER_NAME} /home/${USER_NAME}
 
 # Start DBUS (needed for KDE)
 mkdir -p /run/dbus
-dbus-daemon --system --fork || true
+dbus-daemon --system --fork
+sleep 2
+# Verify DBUS is running
+if ! pgrep -x dbus-daemon > /dev/null; then
+    echo "ERROR: DBUS failed to start"
+    exit 1
+fi
 
 # Print access information
 echo ""

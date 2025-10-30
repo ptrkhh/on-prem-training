@@ -117,7 +117,10 @@ workloads.
 
 Break-even: ~1.5 months (even if buying all new hardware)
 
-## Quick Start (30-60 minutes)
+## Quick Start (~2-3 hours total, 30 minutes hands-on)
+
+**Attended time:** ~30-60 minutes (configuration + supervision)
+**Unattended time:** ~1-2 hours (Docker builds, initial sync, scrubs)
 
 ```bash
 # 1. Clone repository

@@ -29,7 +29,7 @@ USER_ARRAY=(${USERS})
 USER_COUNT=${#USER_ARRAY[@]}
 
 # Check storage is mounted
-if ! mountpoint -q ${MOUNT_POINT}; then
+if ! mountpoint -q "${MOUNT_POINT}"; then
     echo "ERROR: ${MOUNT_POINT} is not mounted. Run 01-setup-storage.sh first."
     exit 1
 fi

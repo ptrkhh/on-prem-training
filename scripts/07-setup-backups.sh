@@ -36,24 +36,27 @@ echo ""
 echo "=== Step 1: Validating rclone configuration for Google Drive ==="
 echo ""
 
-# Actually validate rclone config exists
-if ! rclone config show gdrive &>/dev/null; then
-    echo "ERROR: rclone remote 'gdrive' is not configured"
+# Extract remote name from BACKUP_REMOTE (format: "remotename:path")
+REMOTE_NAME=$(echo "${BACKUP_REMOTE}" | cut -d: -f1)
+
+# Validate rclone config exists
+if ! rclone config show "${REMOTE_NAME}" &>/dev/null; then
+    echo "ERROR: rclone remote '${REMOTE_NAME}' is not configured"
     echo "Please run: rclone config"
-    echo "Create a new remote named 'gdrive' with Google Drive backend"
+    echo "Create a new remote named '${REMOTE_NAME}' with the appropriate backend"
     echo "Then run this script again."
     exit 1
 fi
 
-echo "✓ rclone remote 'gdrive' configuration found"
+echo "✓ rclone remote '${REMOTE_NAME}' configuration found"
 
 # Verify rclone config works by testing connectivity
-echo "Testing Google Drive connectivity..."
-if ! rclone lsd gdrive: --max-depth 1 &>/dev/null; then
-    echo "ERROR: Cannot access Google Drive via rclone"
+echo "Testing remote storage connectivity..."
+if ! rclone lsd ${REMOTE_NAME}: --max-depth 1 &>/dev/null; then
+    echo "ERROR: Cannot access remote storage '${REMOTE_NAME}' via rclone"
     echo "The remote is configured but connectivity test failed."
     echo "Possible issues:"
-    echo "  - OAuth token expired (run: rclone config reconnect gdrive:)"
+    echo "  - OAuth token expired (run: rclone config reconnect ${REMOTE_NAME}:)"
     echo "  - Network connectivity issues"
     echo "  - Insufficient permissions"
     exit 1
@@ -164,14 +167,31 @@ exec > >(tee -a ${LOG_FILE}) 2>&1
 
 echo "=== Restic Backup Started: $(date) ==="
 
+# Verify repository access before pausing containers
+echo "Verifying repository access..."
+if ! restic -r ${RESTIC_REPOSITORY} snapshots &>/dev/null; then
+    echo "ERROR: Cannot access restic repository!"
+    echo "Check network connectivity and rclone authentication"
+    exit 1
+fi
+
 # Pause all workspace containers to ensure consistency
 echo "Pausing all workspace containers..."
 PAUSED_CONTAINERS=$(docker ps --format '{{.Names}}' | grep -E 'workspace' || true)
+PAUSE_FAILURES=""
 if [[ -n "${PAUSED_CONTAINERS}" ]]; then
     for container in ${PAUSED_CONTAINERS}; do
         echo "  Pausing ${container}..."
-        docker pause ${container} || true
+        if ! docker pause "${container}" 2>/dev/null; then
+            PAUSE_FAILURES="${PAUSE_FAILURES} ${container}"
+            echo "    WARNING: Failed to pause ${container}"
+        fi
     done
+fi
+
+if [[ -n "${PAUSE_FAILURES}" ]]; then
+    echo "WARNING: Failed to pause containers:${PAUSE_FAILURES}"
+    echo "Backup may be inconsistent for these containers"
 fi
 
 # Run backup with bandwidth limit
@@ -196,7 +216,7 @@ fi
 echo "Resuming Docker containers..."
 if [[ -n "${PAUSED_CONTAINERS}" ]]; then
     for container in ${PAUSED_CONTAINERS}; do
-        docker unpause ${container} || true
+        docker unpause "${container}" || true
     done
 fi
 
@@ -356,6 +376,6 @@ echo ""
 echo "Manual commands:"
 echo "  Create snapshot: ${SCRIPTS_DIR}/create-snapshot.sh daily"
 echo "  Run backup: ${SCRIPTS_DIR}/restic-backup.sh"
-echo "  List snapshots: restic -r rclone:gdrive:backups/ml-train-server snapshots"
+echo "  List snapshots: restic -r ${BACKUP_REMOTE} snapshots"
 echo "  Verify restore: ${SCRIPTS_DIR}/verify-restore.sh"
 echo ""
