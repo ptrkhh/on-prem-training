@@ -165,7 +165,7 @@ echo "   Add SSH keys for all users, then run: /root/disable-ssh-password-auth.s
 echo "   Do this within 24 hours of setup for security"
 
 # Create script to disable password authentication after SSH keys are verified
-cat > /root/disable-ssh-password-auth.sh <<'EOFSCRIPT'
+cat > /root/disable-ssh-password-auth.sh <<EOFSCRIPT
 #!/bin/bash
 # Disable password authentication after verifying SSH keys are set up
 
@@ -176,21 +176,21 @@ echo ""
 
 # Check if all users have SSH keys
 for user_home in ${MOUNT_POINT}/homes/*; do
-    if [[ -d "${user_home}" ]]; then
-        USERNAME=$(basename ${user_home})
-        KEY_FILE="${user_home}/.ssh/authorized_keys"
+    if [[ -d "\${user_home}" ]]; then
+        USERNAME=\$(basename \${user_home})
+        KEY_FILE="\${user_home}/.ssh/authorized_keys"
 
-        if [[ ! -s "${KEY_FILE}" ]]; then
-            echo "⚠️  WARNING: User ${USERNAME} has no SSH keys in ${KEY_FILE}"
+        if [[ ! -s "\${KEY_FILE}" ]]; then
+            echo "⚠️  WARNING: User \${USERNAME} has no SSH keys in \${KEY_FILE}"
             echo "   Add SSH keys before proceeding to avoid lockout!"
             echo ""
             read -p "Continue anyway? (yes/no): " confirm
-            if [[ "$confirm" != "yes" ]]; then
+            if [[ "\$confirm" != "yes" ]]; then
                 echo "Aborted."
                 exit 1
             fi
         else
-            echo "✓ User ${USERNAME} has SSH keys configured"
+            echo "✓ User \${USERNAME} has SSH keys configured"
         fi
     fi
 done

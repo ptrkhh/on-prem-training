@@ -192,13 +192,13 @@ cleanup() {
 trap cleanup EXIT
 
 # Redirect all output to log file
-exec > >(tee -a ${LOG_FILE}) 2>&1
+exec > >(tee -a \${LOG_FILE}) 2>&1
 
-echo "=== Restic Backup Started: $(date) ==="
+echo "=== Restic Backup Started: \$(date) ==="
 
 # Verify repository access before pausing containers
 echo "Verifying repository access..."
-if ! restic -r ${RESTIC_REPOSITORY} snapshots &>/dev/null; then
+if ! restic -r \${RESTIC_REPOSITORY} snapshots &>/dev/null; then
     echo "ERROR: Cannot access restic repository!"
     echo "Check network connectivity and rclone authentication"
     exit 1
@@ -206,25 +206,25 @@ fi
 
 # Pause all workspace containers to ensure consistency
 echo "Pausing all workspace containers..."
-PAUSED_CONTAINERS=$(docker ps --format '{{.Names}}' | grep -E 'workspace' || true)
+PAUSED_CONTAINERS=\$(docker ps --format '{{.Names}}' | grep -E 'workspace' || true)
 PAUSE_FAILURES=""
-if [[ -n "${PAUSED_CONTAINERS}" ]]; then
-    for container in ${PAUSED_CONTAINERS}; do
-        echo "  Pausing ${container}..."
-        if ! docker pause "${container}" 2>/dev/null; then
-            PAUSE_FAILURES="${PAUSE_FAILURES} ${container}"
-            echo "    WARNING: Failed to pause ${container}"
+if [[ -n "\${PAUSED_CONTAINERS}" ]]; then
+    for container in \${PAUSED_CONTAINERS}; do
+        echo "  Pausing \${container}..."
+        if ! docker pause "\${container}" 2>/dev/null; then
+            PAUSE_FAILURES="\${PAUSE_FAILURES} \${container}"
+            echo "    WARNING: Failed to pause \${container}"
         fi
     done
 fi
 
-if [[ -n "${PAUSE_FAILURES}" ]]; then
-    echo "ERROR: Failed to pause containers:${PAUSE_FAILURES}"
+if [[ -n "\${PAUSE_FAILURES}" ]]; then
+    echo "ERROR: Failed to pause containers:\${PAUSE_FAILURES}"
     echo "Cannot proceed with backup - inconsistent state may cause data corruption"
     echo "Unpausing containers that were successfully paused..."
-    for container in ${PAUSED_CONTAINERS}; do
-        if ! echo "${PAUSE_FAILURES}" | grep -q "${container}"; then
-            docker unpause "${container}" 2>/dev/null || true
+    for container in \${PAUSED_CONTAINERS}; do
+        if ! echo "\${PAUSE_FAILURES}" | grep -q "\${container}"; then
+            docker unpause "\${container}" 2>/dev/null || true
         fi
     done
     exit 1
@@ -279,35 +279,35 @@ fi
 
 # Resume Docker containers
 echo "Resuming Docker containers..."
-if [[ -n "${PAUSED_CONTAINERS}" ]]; then
-    for container in ${PAUSED_CONTAINERS}; do
-        docker unpause "${container}" || true
+if [[ -n "\${PAUSED_CONTAINERS}" ]]; then
+    for container in \${PAUSED_CONTAINERS}; do
+        docker unpause "\${container}" || true
     done
 fi
 
 # Cleanup old backups (keep 7 daily, 52 weekly)
 echo "Pruning old backups..."
-restic -r ${RESTIC_REPOSITORY} forget \
+restic -r \${RESTIC_REPOSITORY} forget \
     --keep-daily 7 \
     --keep-weekly 52 \
     --prune
 
 # Send alert if backup failed
-if [[ "${BACKUP_STATUS}" == "failed" ]] && [[ -x "${ALERT_SCRIPT}" ]]; then
-    ${ALERT_SCRIPT} "critical" "Restic backup failed! Check ${LOG_FILE}"
+if [[ "\${BACKUP_STATUS}" == "failed" ]] && [[ -x "\${ALERT_SCRIPT}" ]]; then
+    \${ALERT_SCRIPT} "critical" "Restic backup failed! Check \${LOG_FILE}"
 fi
 
 # Send healthcheck ping
 if [[ -f /root/.healthchecks-url ]]; then
-    HEALTHCHECK_URL=$(cat /root/.healthchecks-url)
-    if [[ "${BACKUP_STATUS}" == "success" ]]; then
-        curl -fsS -m 10 --retry 5 "${HEALTHCHECK_URL}" > /dev/null || true
+    HEALTHCHECK_URL=\$(cat /root/.healthchecks-url)
+    if [[ "\${BACKUP_STATUS}" == "success" ]]; then
+        curl -fsS -m 10 --retry 5 "\${HEALTHCHECK_URL}" > /dev/null || true
     else
-        curl -fsS -m 10 --retry 5 "${HEALTHCHECK_URL}/fail" > /dev/null || true
+        curl -fsS -m 10 --retry 5 "\${HEALTHCHECK_URL}/fail" > /dev/null || true
     fi
 fi
 
-echo "=== Restic Backup Finished: $(date) ==="
+echo "=== Restic Backup Finished: \$(date) ==="
 echo ""
 EOF
 

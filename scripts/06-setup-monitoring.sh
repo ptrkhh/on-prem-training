@@ -128,30 +128,30 @@ ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 DETECTED_DEVICES=""
 [[ -n "${NVME_DEVICE}" ]] && [[ -b "${NVME_DEVICE}" ]] && DETECTED_DEVICES="${NVME_DEVICE}"
 for dev in ${HDD_DEVICES}; do
-    [[ -b "${dev}" ]] && DETECTED_DEVICES="${DETECTED_DEVICES} ${dev}"
+    [[ -b "\${dev}" ]] && DETECTED_DEVICES="\${DETECTED_DEVICES} \${dev}"
 done
-DEVICES=(${DETECTED_DEVICES})
+DEVICES=(\${DETECTED_DEVICES})
 
-for device in "${DEVICES[@]}"; do
-    if [[ ! -b "${device}" ]]; then
+for device in "\${DEVICES[@]}"; do
+    if [[ ! -b "\${device}" ]]; then
         continue
     fi
 
     # Run SMART test
-    if smartctl -H ${device} | grep -q "PASSED"; then
-        echo "${device}: SMART status PASSED"
+    if smartctl -H \${device} | grep -q "PASSED"; then
+        echo "\${device}: SMART status PASSED"
     else
-        MESSAGE="CRITICAL: SMART test failed for ${device}!"
-        echo "${MESSAGE}"
-        [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "critical" "${MESSAGE}"
+        MESSAGE="CRITICAL: SMART test failed for \${device}!"
+        echo "\${MESSAGE}"
+        [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "critical" "\${MESSAGE}"
     fi
 
     # Check for reallocated sectors
-    REALLOCATED=$(smartctl -A ${device} | grep "Reallocated_Sector_Ct" | awk '{print $10}' || echo "0")
-    if [[ "${REALLOCATED}" -gt 0 ]]; then
-        MESSAGE="WARNING: ${device} has ${REALLOCATED} reallocated sectors"
-        echo "${MESSAGE}"
-        [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "warning" "\${MESSAGE}"
+    REALLOCATED=\$(smartctl -A \${device} | grep "Reallocated_Sector_Ct" | awk '{print \$10}' || echo "0")
+    if [[ "\${REALLOCATED}" -gt 0 ]]; then
+        MESSAGE="WARNING: \${device} has \${REALLOCATED} reallocated sectors"
+        echo "\${MESSAGE}"
+        [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
     fi
 
 done
