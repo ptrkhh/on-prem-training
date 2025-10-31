@@ -173,11 +173,18 @@ fi
 echo ""
 echo "=== Step 5: Installing tunnel as systemd service ==="
 
-cloudflared service install
-systemctl enable cloudflared
-systemctl start cloudflared
-
-echo "Cloudflare Tunnel service installed and started"
+# Check if service already exists
+if systemctl list-unit-files | grep -q "cloudflared.service"; then
+    echo "Cloudflare Tunnel service already installed, restarting..."
+    systemctl daemon-reload
+    systemctl restart cloudflared
+else
+    echo "Installing Cloudflare Tunnel as systemd service..."
+    cloudflared service install
+    systemctl enable cloudflared
+    systemctl start cloudflared
+    echo "Cloudflare Tunnel service installed and started"
+fi
 
 # Verify tunnel connection
 echo ""

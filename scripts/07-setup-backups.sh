@@ -137,8 +137,12 @@ fi
 # Initialize repository
 if ! restic -r ${RESTIC_REPOSITORY} snapshots &>/dev/null; then
     echo "Initializing Restic repository..."
-    restic -r ${RESTIC_REPOSITORY} init
-    echo "Restic repository initialized"
+    if ! restic -r ${RESTIC_REPOSITORY} init; then
+        echo "ERROR: Failed to initialize Restic repository"
+        echo "Check remote connectivity and permissions"
+        exit 1
+    fi
+    echo "Restic repository initialized successfully"
 else
     echo "Restic repository already exists"
 fi
@@ -227,11 +231,33 @@ if [[ -n "${PAUSE_FAILURES}" ]]; then
 fi
 
 # Validate backup directories exist
+echo "Validating backup directories..."
+MISSING_DIRS=""
 for dir in "\${MOUNT_POINT}/homes" "\${MOUNT_POINT}/docker-volumes" "\${MOUNT_POINT}/shared/tensorboard"; do
     if [[ ! -d "\${dir}" ]]; then
-        echo "WARNING: Backup directory does not exist: \${dir}"
+        echo "ERROR: Required backup directory does not exist: \${dir}"
+        MISSING_DIRS="\${MISSING_DIRS} \${dir}"
+    else
+        echo "  ✓ \${dir}"
     fi
 done
+
+if [[ -n "\${MISSING_DIRS}" ]]; then
+    echo "ERROR: Cannot proceed with backup - missing required directories:"
+    echo "\${MISSING_DIRS}"
+    # Resume containers before exiting
+    if [[ -n "\${PAUSED_CONTAINERS}" ]]; then
+        echo "Resuming containers..."
+        for container in \${PAUSED_CONTAINERS}; do
+            docker unpause "\${container}" || true
+        done
+    fi
+    if [[ -x "\${ALERT_SCRIPT}" ]]; then
+        "\${ALERT_SCRIPT}" "critical" "Backup failed: Missing directories - \${MISSING_DIRS}"
+    fi
+    exit 1
+fi
+echo "All backup directories verified"
 
 # Run backup with bandwidth limit
 BANDWIDTH_LIMIT_KBPS=\$((${BACKUP_BANDWIDTH_LIMIT_MBPS} * 1000 / 8))
@@ -340,11 +366,18 @@ fi
 rm -rf ${RESTORE_DIR}
 
 # Send alert if verification failed
-if [[ "${VERIFY_STATUS}" == "failed" ]] && [[ -x "${ALERT_SCRIPT}" ]]; then
-    ${ALERT_SCRIPT} "critical" "Restic restore verification failed!"
+if [[ "\${VERIFY_STATUS}" == "failed" ]]; then
+    if [[ -x "\${ALERT_SCRIPT}" ]]; then
+        "\${ALERT_SCRIPT}" "critical" "Restic restore verification failed! Manual investigation required."
+    fi
+    echo "ERROR: Restore verification failed"
+    echo "=== Restore Verification Finished: \$(date) ==="
+    exit 1
 fi
 
-echo "=== Restore Verification Finished: $(date) ==="
+echo "✓ Restore verification successful"
+echo "=== Restore Verification Finished: \$(date) ==="
+exit 0
 EOF
 
 chmod +x ${SCRIPTS_DIR}/verify-restore.sh

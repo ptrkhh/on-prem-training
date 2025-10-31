@@ -196,7 +196,38 @@ docker run --rm hello-world
 # Test NVIDIA runtime
 echo ""
 echo "Testing NVIDIA runtime..."
-docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu24.04 nvidia-smi
+
+# Auto-detect CUDA version from driver
+CUDA_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -1)
+echo "Detected NVIDIA driver version: ${CUDA_VERSION}"
+DRIVER_MAJOR=$(echo ${CUDA_VERSION} | cut -d. -f1)
+
+if [[ ${DRIVER_MAJOR} -ge 550 ]]; then
+    CUDA_IMAGE="nvidia/cuda:12.4.1-base-ubuntu24.04"
+elif [[ ${DRIVER_MAJOR} -ge 535 ]]; then
+    CUDA_IMAGE="nvidia/cuda:12.2.0-base-ubuntu22.04"
+elif [[ ${DRIVER_MAJOR} -ge 525 ]]; then
+    CUDA_IMAGE="nvidia/cuda:12.0.0-base-ubuntu22.04"
+else
+    CUDA_IMAGE="nvidia/cuda:11.8.0-base-ubuntu22.04"
+fi
+
+echo "Selected CUDA image: ${CUDA_IMAGE}"
+
+# Test with selected version, fall back to latest if it fails
+if ! docker run --rm --gpus all ${CUDA_IMAGE} nvidia-smi; then
+    echo "WARNING: Selected CUDA image ${CUDA_IMAGE} failed"
+    echo "Falling back to latest CUDA image..."
+    CUDA_IMAGE="nvidia/cuda:latest"
+
+    if ! docker run --rm --gpus all ${CUDA_IMAGE} nvidia-smi; then
+        echo "ERROR: NVIDIA runtime test failed with both specific and latest CUDA images"
+        echo "This may indicate a driver/runtime compatibility issue"
+        exit 1
+    fi
+fi
+
+echo "✓ NVIDIA runtime test passed with ${CUDA_IMAGE}"
 
 # Step 6: Configure GPU time-slicing (optional)
 echo ""

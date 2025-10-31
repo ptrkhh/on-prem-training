@@ -33,6 +33,22 @@ if [[ -z "${USERS}" ]]; then
 else
     USER_COUNT=$(get_user_count)
     echo "  ✓ Users configured: ${USERS} (${USER_COUNT} users)"
+
+    # Validate each username format (lowercase, start with letter, alphanumeric + hyphens)
+    USER_ARRAY=(${USERS})
+    for username in "${USER_ARRAY[@]}"; do
+        if [[ ! "${username}" =~ ^[a-z][-a-z0-9]*$ ]]; then
+            echo "  ✗ ERROR: Invalid username '${username}'"
+            echo "    Usernames must start with a lowercase letter and contain only lowercase letters, digits, and hyphens"
+            ((ERRORS++))
+        elif [[ ${#username} -gt 32 ]]; then
+            echo "  ✗ ERROR: Username '${username}' is too long (max 32 characters)"
+            ((ERRORS++))
+        elif [[ ${#username} -lt 1 ]]; then
+            echo "  ✗ ERROR: Username cannot be empty"
+            ((ERRORS++))
+        fi
+    done
 fi
 
 if [[ -z "${MOUNT_POINT}" ]]; then
@@ -71,12 +87,7 @@ if [[ -z "${NVME}" ]]; then
 else
     echo "  ✓ SSD/NVMe: ${NVME}"
     if [[ -b "${NVME}" ]]; then
-        # Try to get size, but make it non-fatal if not running as root
-        if [[ $EUID -eq 0 ]]; then
-            SIZE=$(blockdev --getsize64 ${NVME} 2>/dev/null | awk '{print int($1/1024/1024/1024)"GB"}' || echo "unknown")
-        else
-            SIZE=$(lsblk -ndo SIZE ${NVME} 2>/dev/null || echo "unknown")
-        fi
+        SIZE=$(lsblk -ndo SIZE ${NVME} 2>/dev/null || echo "unknown")
         echo "    Size: ${SIZE}"
     fi
 fi
@@ -92,7 +103,7 @@ else
     echo "  ✓ HDDs detected: ${HDD_COUNT}"
     for hdd in ${HDDS}; do
         if [[ -b "${hdd}" ]]; then
-            SIZE=$(blockdev --getsize64 ${hdd} 2>/dev/null | awk '{print int($1/1024/1024/1024)"GB"}' || echo "unknown")
+            SIZE=$(lsblk -ndo SIZE ${hdd} 2>/dev/null || echo "unknown")
             echo "    - ${hdd}: ${SIZE}"
         fi
     done

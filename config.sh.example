@@ -125,7 +125,7 @@ BACKUP_REMOTE="gdrive:backups/ml-train-server"
 BACKUP_BANDWIDTH_LIMIT_MBPS=100
 
 # BTRFS snapshot retention policy
-# Set to 0 to disable that tier (e.g., SNAPSHOT_DAILY_KEEP=0 for no daily snapshots)
+# Set to 0 to disable that tier (e.g., SNAPSHOT_KEEP_DAILY=0 for no daily snapshots)
 SNAPSHOT_KEEP_HOURLY=24
 SNAPSHOT_KEEP_DAILY=7
 SNAPSHOT_KEEP_WEEKLY=4

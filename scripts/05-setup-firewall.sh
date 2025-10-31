@@ -50,12 +50,12 @@ validate_yes_no_full() {
     done
 }
 
-# Step 1: Install UFW
+# Step 1: Install UFW and netcat
 echo ""
-echo "=== Step 1: Installing UFW ==="
+echo "=== Step 1: Installing UFW and dependencies ==="
 
 apt update
-apt install -y ufw
+apt install -y ufw netcat-openbsd
 
 # Step 2: Configure UFW
 echo ""
@@ -141,15 +141,17 @@ echo "Testing critical services after firewall enable..."
 SERVICES_OK=true
 
 # Test SSH (should be accessible)
-if nc -z -w5 localhost 22 2>/dev/null; then
+if command -v nc &>/dev/null && nc -z -w5 localhost 22 2>/dev/null; then
     echo "✓ SSH port 22 is accessible"
 else
-    echo "✗ WARNING: SSH port 22 not accessible"
+    echo "✗ WARNING: SSH port 22 not accessible (or nc not available)"
     SERVICES_OK=false
 fi
 
-# Test HTTP (Docker services)
-if nc -z -w5 localhost 80 2>/dev/null; then
+# Test HTTP (Docker services) - use curl as primary method since it's more reliable
+if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://localhost:80 >/dev/null 2>&1; then
+    echo "✓ HTTP port 80 is accessible"
+elif command -v nc &>/dev/null && nc -z -w5 localhost 80 2>/dev/null; then
     echo "✓ HTTP port 80 is accessible"
 else
     echo "✗ WARNING: HTTP port 80 not accessible"

@@ -11,7 +11,6 @@ USER_NAME="${USER_NAME:-user}"
 USER_UID="${USER_UID:-1000}"
 USER_GID="${USER_GID:-1000}"
 USER_PASSWORD="${USER_PASSWORD:-changeme}"
-VNC_PASSWORD="${USER_PASSWORD}"
 
 # Validate username format
 if [[ ! "${USER_NAME}" =~ ^[a-z][-a-z0-9]*$ ]]; then
@@ -28,6 +27,17 @@ fi
 if [[ ${USER_GID} -lt 1000 ]] || [[ ${USER_GID} -gt 60000 ]]; then
     echo "ERROR: Invalid GID '${USER_GID}'. Must be 1000-60000"
     exit 1
+fi
+
+# Validate USER_PASSWORD length for VNC (6-8 chars required)
+PASS_LEN=${#USER_PASSWORD}
+if [[ ${PASS_LEN} -lt 6 ]]; then
+    echo "WARNING: USER_PASSWORD is too short for VNC (min 6 chars). Padding to 6 chars."
+    USER_PASSWORD="${USER_PASSWORD}000000"
+    USER_PASSWORD="${USER_PASSWORD:0:8}"
+elif [[ ${PASS_LEN} -gt 8 ]]; then
+    echo "INFO: Truncating USER_PASSWORD to 8 chars for VNC compatibility"
+    USER_PASSWORD="${USER_PASSWORD:0:8}"
 fi
 
 echo "Initializing user: ${USER_NAME} (UID: ${USER_UID}, GID: ${USER_GID})"
@@ -67,7 +77,7 @@ su - ${USER_NAME} << EOF
 mkdir -p ~/.vnc
 
 # Create VNC password file
-echo "${VNC_PASSWORD}" | vncpasswd -f > ~/.vnc/passwd
+echo "${USER_PASSWORD}" | vncpasswd -f > ~/.vnc/passwd
 chmod 600 ~/.vnc/passwd
 
 # Create VNC startup script
@@ -115,6 +125,10 @@ EOF
 
 # Configure Jupyter
 echo "Configuring Jupyter..."
+
+# Generate Jupyter password hash
+JUPYTER_PASSWORD_HASH=$(python3 -c "from jupyter_server.auth import passwd; print(passwd('${USER_PASSWORD}'))")
+
 su - ${USER_NAME} << EOF
 mkdir -p ~/.jupyter
 
@@ -124,7 +138,7 @@ c.ServerApp.port = 8888
 c.ServerApp.open_browser = False
 c.ServerApp.allow_root = False
 c.ServerApp.token = ''
-c.ServerApp.password = ''
+c.ServerApp.password = '${JUPYTER_PASSWORD_HASH}'
 c.ServerApp.allow_origin = '*'
 c.ServerApp.tornado_settings = {'headers': {'Content-Security-Policy': "frame-ancestors 'self' *"}}
 
@@ -175,7 +189,7 @@ export GOPATH=~/go
 export PATH=\$PATH:/usr/local/go/bin:\$GOPATH/bin
 
 # Rust
-export PATH="\$HOME/.cargo/bin:\$PATH"
+export PATH="$HOME/.cargo/bin:$PATH"
 
 # Python
 export PYTHONPATH=\$WORKSPACE:\$PYTHONPATH
@@ -227,7 +241,7 @@ stderr_logfile_maxbytes=0
 exitcodes=0
 
 [program:vncserver]
-command=/bin/bash -c 'su - ${USER_NAME} -c "vncserver :0 -fg -localhost no -SecurityTypes None"'
+command=/bin/bash -c 'su - ${USER_NAME} -c "vncserver :0 -fg -localhost no -PasswordFile ~/.vnc/passwd -SecurityTypes VncAuth"'
 autostart=true
 autorestart=true
 startsecs=10
@@ -359,20 +373,23 @@ chown -R ${USER_NAME}:${USER_NAME} /home/${USER_NAME}
 # Start DBUS (needed for KDE)
 mkdir -p /run/dbus
 dbus-daemon --system --fork
-sleep 2
 
-# Verify DBUS is running with retry logic
-for i in {1..3}; do
-    if pgrep -x dbus-daemon > /dev/null; then
-        echo "DBUS started successfully"
+# Verify DBUS is running with proper socket check
+echo "Waiting for DBUS socket..."
+DBUS_SOCKET="/var/run/dbus/system_bus_socket"
+for i in {1..10}; do
+    if [[ -S "${DBUS_SOCKET}" ]]; then
+        echo "DBUS started successfully (socket ready after ${i} attempts)"
         break
     fi
-    if [[ $i -eq 3 ]]; then
-        echo "ERROR: DBUS failed to start after 3 attempts"
+    if [[ $i -eq 10 ]]; then
+        echo "ERROR: DBUS socket not available after 10 attempts"
+        echo "Check: ls -la /var/run/dbus/"
+        ls -la /var/run/dbus/ || true
         exit 1
     fi
-    echo "Waiting for DBUS... (attempt $i/3)"
-    sleep 2
+    echo "Waiting for DBUS socket... (attempt $i/10)"
+    sleep 1
 done
 
 # Print access information

@@ -175,7 +175,7 @@ echo "This will disable password authentication and require SSH keys."
 echo ""
 
 # Check if all users have SSH keys
-for user_home in /mnt/storage/homes/*; do
+for user_home in ${MOUNT_POINT}/homes/*; do
     if [[ -d "${user_home}" ]]; then
         USERNAME=$(basename ${user_home})
         KEY_FILE="${user_home}/.ssh/authorized_keys"

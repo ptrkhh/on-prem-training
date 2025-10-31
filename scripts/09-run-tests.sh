@@ -66,10 +66,14 @@ else
     fail "BTRFS filesystem is NOT mounted at ${MOUNT_POINT}"
 fi
 
-if btrfs filesystem df ${MOUNT_POINT} | grep -qi "Data.*${BTRFS_RAID_LEVEL}"; then
-    pass "BTRFS is using ${BTRFS_RAID_LEVEL}"
+# Parse BTRFS RAID level more robustly with awk
+ACTUAL_RAID=$(btrfs filesystem df ${MOUNT_POINT} | awk '/^Data/ {gsub(/[,:]/, ""); print tolower($2)}')
+EXPECTED_RAID=$(echo "${BTRFS_RAID_LEVEL}" | tr '[:upper:]' '[:lower:]')
+
+if [[ "${ACTUAL_RAID}" == "${EXPECTED_RAID}" ]]; then
+    pass "BTRFS is using ${BTRFS_RAID_LEVEL} (detected: ${ACTUAL_RAID})"
 else
-    fail "BTRFS is NOT using ${BTRFS_RAID_LEVEL}"
+    fail "BTRFS is NOT using ${BTRFS_RAID_LEVEL} (detected: ${ACTUAL_RAID})"
 fi
 
 # Check bcache

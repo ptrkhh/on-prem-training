@@ -56,7 +56,25 @@ echo "Detected configuration:"
 if [[ -n "${NVME_DEVICE}" ]]; then
     echo "  SSD/NVMe: ${NVME_DEVICE}"
     NVME_SIZE=$(lsblk -ndo SIZE ${NVME_DEVICE} 2>/dev/null || echo "unknown")
-    echo "    Size: ${NVME_SIZE}"
+    NVME_SIZE_GB=$(lsblk -bndo SIZE ${NVME_DEVICE} 2>/dev/null | awk '{print int($1/1024/1024/1024)}' || echo "0")
+    echo "    Size: ${NVME_SIZE} (${NVME_SIZE_GB}GB)"
+
+    # Validate OS_PARTITION_SIZE_GB doesn't exceed NVME size
+    if [[ ${NVME_SIZE_GB} -gt 0 ]] && [[ ${OS_PARTITION_SIZE_GB} -ge ${NVME_SIZE_GB} ]]; then
+        echo "  ERROR: OS_PARTITION_SIZE_GB (${OS_PARTITION_SIZE_GB}GB) must be less than NVME size (${NVME_SIZE_GB}GB)"
+        exit 1
+    fi
+
+    # Calculate and warn about bcache partition size
+    if [[ "${BCACHE_MODE}" != "none" ]] && [[ ${NVME_SIZE_GB} -gt 0 ]]; then
+        BCACHE_SIZE_GB=$((NVME_SIZE_GB - OS_PARTITION_SIZE_GB))
+        if [[ ${BCACHE_SIZE_GB} -lt 10 ]]; then
+            echo "  WARNING: bcache partition will be only ${BCACHE_SIZE_GB}GB (NVME: ${NVME_SIZE_GB}GB - OS: ${OS_PARTITION_SIZE_GB}GB)"
+            echo "  This may be too small for effective caching. Consider reducing OS_PARTITION_SIZE_GB or using larger SSD."
+        else
+            echo "    bcache partition: ${BCACHE_SIZE_GB}GB available"
+        fi
+    fi
 else
     echo "  SSD/NVMe: None detected (bcache will be disabled)"
 fi
@@ -252,6 +270,15 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
 
     # Get cache set UUID
     CACHE_SET_UUID=$(bcache-super-show ${BCACHE_CACHE_DEV} | grep 'cset.uuid' | awk '{print $2}')
+
+    # Validate CACHE_SET_UUID is not empty
+    if [[ -z "${CACHE_SET_UUID}" ]]; then
+        echo "ERROR: Failed to get cache set UUID from ${BCACHE_CACHE_DEV}"
+        echo "bcache-super-show output:"
+        bcache-super-show ${BCACHE_CACHE_DEV} || true
+        exit 1
+    fi
+
     echo "Cache set UUID: ${CACHE_SET_UUID}"
 else
     echo ""
@@ -308,11 +335,34 @@ for hdd in "${HDD_ARRAY[@]}"; do
             # Attach cache
             BCACHE_SYSFS="/sys/block/$(basename ${BCACHE_DEV})/bcache"
             if [[ -n "${CACHE_SET_UUID}" ]]; then
-                echo ${CACHE_SET_UUID} > ${BCACHE_SYSFS}/attach || true
+                # Attempt to attach cache
+                if ! echo ${CACHE_SET_UUID} > ${BCACHE_SYSFS}/attach 2>/dev/null; then
+                    echo "  WARNING: Failed to attach ${BCACHE_DEV} to cache set ${CACHE_SET_UUID}"
+                    echo "  This may happen if already attached. Checking attachment status..."
+
+                    # Check if already attached
+                    if [[ -f "${BCACHE_SYSFS}/cache_mode" ]]; then
+                        echo "  Device appears to be already attached to cache"
+                    else
+                        echo "  ERROR: bcache attach failed and device not attached"
+                        exit 1
+                    fi
+                fi
                 sleep 1
 
+                # Validate bcache device is properly attached
+                if [[ ! -f "${BCACHE_SYSFS}/cache_mode" ]]; then
+                    echo "  ERROR: bcache device ${BCACHE_DEV} not properly attached (cache_mode not available)"
+                    echo "  Check: ls -la ${BCACHE_SYSFS}/"
+                    ls -la ${BCACHE_SYSFS}/ || true
+                    exit 1
+                fi
+
                 # Set cache mode
-                echo ${BCACHE_MODE} > ${BCACHE_SYSFS}/cache_mode
+                if ! echo ${BCACHE_MODE} > ${BCACHE_SYSFS}/cache_mode; then
+                    echo "  ERROR: Failed to set cache mode to ${BCACHE_MODE}"
+                    exit 1
+                fi
 
                 # Tune bcache settings
                 echo 0 > ${BCACHE_SYSFS}/sequential_cutoff || true

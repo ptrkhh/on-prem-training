@@ -154,7 +154,7 @@ services:
     environment:
       - POSTGRES_DB=guacamole_db
       - POSTGRES_USER=guacamole_user
-      - POSTGRES_PASSWORD=\${GUACAMOLE_DB_PASSWORD:-guacamole_password}
+      - POSTGRES_PASSWORD=${GUACAMOLE_DB_PASSWORD:-guacamole_password}
     volumes:
       - guacamole-db-data:/var/lib/postgresql/data
     networks:
@@ -175,7 +175,7 @@ services:
       - POSTGRES_HOSTNAME=guacamole-db
       - POSTGRES_DATABASE=guacamole_db
       - POSTGRES_USER=guacamole_user
-      - POSTGRES_PASSWORD=\${GUACAMOLE_DB_PASSWORD:-guacamole_password}
+      - POSTGRES_PASSWORD=${GUACAMOLE_DB_PASSWORD:-guacamole_password}
     networks:
       - ml-net
     entrypoint: ["/bin/sh", "-c"]
@@ -183,7 +183,7 @@ services:
       - |
         # Generate and apply Guacamole schema
         /opt/guacamole/bin/initdb.sh --postgresql > /tmp/initdb.sql
-        PGPASSWORD="\${GUACAMOLE_DB_PASSWORD:-guacamole_password}" psql -h guacamole-db -U guacamole_user -d guacamole_db -f /tmp/initdb.sql 2>&1 | grep -v "already exists" || true
+        PGPASSWORD="${GUACAMOLE_DB_PASSWORD:-guacamole_password}" psql -h guacamole-db -U guacamole_user -d guacamole_db -f /tmp/initdb.sql 2>&1 | grep -v "already exists" || true
         echo "Guacamole database initialized"
     restart: "no"
 
@@ -196,7 +196,7 @@ services:
       - POSTGRES_HOSTNAME=guacamole-db
       - POSTGRES_DATABASE=guacamole_db
       - POSTGRES_USER=guacamole_user
-      - POSTGRES_PASSWORD=\${GUACAMOLE_DB_PASSWORD:-guacamole_password}
+      - POSTGRES_PASSWORD=${GUACAMOLE_DB_PASSWORD:-guacamole_password}
     depends_on:
       - guacd
       - guacamole-db-init
@@ -204,7 +204,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.guacamole.rule=Host(`guacamole.\${DOMAIN}`) || Host(`remote.\${DOMAIN}`)"
+      - "traefik.http.routers.guacamole.rule=Host(`guacamole.${DOMAIN}`) || Host(`remote.${DOMAIN}`)"
       - "traefik.http.routers.guacamole.entrypoints=web"
       - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
       - "traefik.http.middlewares.guacamole-prefix.stripprefix.prefixes=/guacamole"
@@ -230,7 +230,7 @@ services:
       - ml-net
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.kasm.rule=Host(\"kasm.\${DOMAIN}\")"
+      - "traefik.http.routers.kasm.rule=Host(\"kasm.${DOMAIN}\")"
       - "traefik.http.routers.kasm.entrypoints=web"
       - "traefik.http.services.kasm.loadbalancer.server.port=443"
       - "traefik.http.services.kasm.loadbalancer.server.scheme=https"
@@ -453,34 +453,34 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - USER_NAME=${USERNAME}
       - USER_UID=${UID}
       - USER_GID=${UID}
-      - USER_PASSWORD=\${USER_${USERNAME^^}_PASSWORD:-changeme}
-      - CODE_SERVER_PASSWORD=\${USER_${USERNAME^^}_PASSWORD:-changeme}
+      - USER_PASSWORD=${USER_${USERNAME^^}_PASSWORD:-changeme}
+      - CODE_SERVER_PASSWORD=${USER_${USERNAME^^}_PASSWORD:-changeme}
       - DISPLAY=:0
       - WORKSPACE=/workspace
       - SHARED=/shared
     volumes:
       # Persistent home directory
-      - \${MOUNT_POINT:-/mnt/storage}/homes/${USERNAME}:/home/${USERNAME}:rw
+      - ${MOUNT_POINT:-/mnt/storage}/homes/${USERNAME}:/home/${USERNAME}:rw
       # Ephemeral workspace (fast scratch space)
-      - \${MOUNT_POINT:-/mnt/storage}/workspaces/${USERNAME}:/workspace:rw
+      - ${MOUNT_POINT:-/mnt/storage}/workspaces/${USERNAME}:/workspace:rw
       # Shared data (read-write for all users to share files)
-      - \${MOUNT_POINT:-/mnt/storage}/shared:/shared:rw
+      - ${MOUNT_POINT:-/mnt/storage}/shared:/shared:rw
       # Container state
-      - \${MOUNT_POINT:-/mnt/storage}/docker-volumes/${USERNAME}-state:/var/lib/state:rw
+      - ${MOUNT_POINT:-/mnt/storage}/docker-volumes/${USERNAME}-state:/var/lib/state:rw
       # Shared caches (for all users to benefit from cached downloads)
-      - \${MOUNT_POINT:-/mnt/storage}/cache/ml-models:/cache/ml-models:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/pip:/cache/pip:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/conda:/cache/conda:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/apt:/var/cache/apt:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/git-lfs:/cache/git-lfs:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/go:/cache/go:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/npm:/cache/npm:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/cargo:/cache/cargo:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/julia:/cache/julia:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/R:/cache/R:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/buildkit:/cache/buildkit:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/browser:/cache/browser:rw
-      - \${MOUNT_POINT:-/mnt/storage}/cache/jetbrains:/cache/jetbrains:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/ml-models:/cache/ml-models:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/pip:/cache/pip:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/conda:/cache/conda:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/apt:/var/cache/apt:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/git-lfs:/cache/git-lfs:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/go:/cache/go:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/npm:/cache/npm:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/cargo:/cache/cargo:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/julia:/cache/julia:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/R:/cache/R:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/buildkit:/cache/buildkit:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/browser:/cache/browser:rw
+      - ${MOUNT_POINT:-/mnt/storage}/cache/jetbrains:/cache/jetbrains:rw
     ports:
       - "${SSH_PORT}:22"         # SSH (for terminal access)
       - "${VNC_PORT}:5900"       # VNC (for Guacamole/direct VNC clients)
@@ -489,9 +489,9 @@ for USERNAME in ${USER_ARRAY[@]}; do
     deploy:
       resources:
         limits:
-          memory: \${MEMORY_LIMIT_GB:-100}G
+          memory: ${MEMORY_LIMIT_GB:-100}G
         reservations:
-          memory: \${MEMORY_GUARANTEE_GB:-32}G
+          memory: ${MEMORY_GUARANTEE_GB:-32}G
           devices:
             - driver: nvidia
               count: all
@@ -501,22 +501,22 @@ for USERNAME in ${USER_ARRAY[@]}; do
     labels:
       - "traefik.enable=true"
       # Desktop (noVNC HTML5)
-      - "traefik.http.routers.${USERNAME}-desktop.rule=Host(\"${USERNAME}-desktop.\${DOMAIN}\") || Host(\"${USERNAME}.\${DOMAIN}\")"
+      - "traefik.http.routers.${USERNAME}-desktop.rule=Host(\"${USERNAME}-desktop.${DOMAIN}\") || Host(\"${USERNAME}.${DOMAIN}\")"
       - "traefik.http.routers.${USERNAME}-desktop.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-desktop.service=${USERNAME}-desktop"
       - "traefik.http.services.${USERNAME}-desktop.loadbalancer.server.port=6080"
       # Code-server (VS Code in browser)
-      - "traefik.http.routers.${USERNAME}-code.rule=Host(\"${USERNAME}-code.\${DOMAIN}\")"
+      - "traefik.http.routers.${USERNAME}-code.rule=Host(\"${USERNAME}-code.${DOMAIN}\")"
       - "traefik.http.routers.${USERNAME}-code.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-code.service=${USERNAME}-code"
       - "traefik.http.services.${USERNAME}-code.loadbalancer.server.port=8080"
       # Jupyter Lab
-      - "traefik.http.routers.${USERNAME}-jupyter.rule=Host(\"${USERNAME}-jupyter.\${DOMAIN}\")"
+      - "traefik.http.routers.${USERNAME}-jupyter.rule=Host(\"${USERNAME}-jupyter.${DOMAIN}\")"
       - "traefik.http.routers.${USERNAME}-jupyter.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-jupyter.service=${USERNAME}-jupyter"
       - "traefik.http.services.${USERNAME}-jupyter.loadbalancer.server.port=8888"
       # Per-user TensorBoard
-      - "traefik.http.routers.${USERNAME}-tensorboard.rule=Host(\"${USERNAME}-tensorboard.\${DOMAIN}\")"
+      - "traefik.http.routers.${USERNAME}-tensorboard.rule=Host(\"${USERNAME}-tensorboard.${DOMAIN}\")"
       - "traefik.http.routers.${USERNAME}-tensorboard.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-tensorboard.service=${USERNAME}-tensorboard"
       - "traefik.http.services.${USERNAME}-tensorboard.loadbalancer.server.port=6006"

@@ -128,30 +128,30 @@ ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 DETECTED_DEVICES=""
 [[ -n "${NVME_DEVICE}" ]] && [[ -b "${NVME_DEVICE}" ]] && DETECTED_DEVICES="${NVME_DEVICE}"
 for dev in ${HDD_DEVICES}; do
-    [[ -b "\${dev}" ]] && DETECTED_DEVICES="\${DETECTED_DEVICES} \${dev}"
+    [[ -b "${dev}" ]] && DETECTED_DEVICES="${DETECTED_DEVICES} ${dev}"
 done
-DEVICES=(\${DETECTED_DEVICES})
+DEVICES=(${DETECTED_DEVICES})
 
-for device in "\${DEVICES[@]}"; do
-    if [[ ! -b "\${device}" ]]; then
+for device in "${DEVICES[@]}"; do
+    if [[ ! -b "${device}" ]]; then
         continue
     fi
 
     # Run SMART test
-    if smartctl -H \${device} | grep -q "PASSED"; then
-        echo "\${device}: SMART status PASSED"
+    if smartctl -H ${device} | grep -q "PASSED"; then
+        echo "${device}: SMART status PASSED"
     else
-        MESSAGE="CRITICAL: SMART test failed for \${device}!"
-        echo "\${MESSAGE}"
-        [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "critical" "\${MESSAGE}"
+        MESSAGE="CRITICAL: SMART test failed for ${device}!"
+        echo "${MESSAGE}"
+        [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "critical" "${MESSAGE}"
     fi
 
     # Check for reallocated sectors
-    REALLOCATED=\$(smartctl -A \${device} | grep "Reallocated_Sector_Ct" | awk '{print \$10}' || echo "0")
-    if [[ "\${REALLOCATED}" -gt 0 ]]; then
-        MESSAGE="WARNING: \${device} has \${REALLOCATED} reallocated sectors"
-        echo "\${MESSAGE}"
-        [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
+    REALLOCATED=$(smartctl -A ${device} | grep "Reallocated_Sector_Ct" | awk '{print $10}' || echo "0")
+    if [[ "${REALLOCATED}" -gt 0 ]]; then
+        MESSAGE="WARNING: ${device} has ${REALLOCATED} reallocated sectors"
+        echo "${MESSAGE}"
+        [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "warning" "\${MESSAGE}"
     fi
 
 done
@@ -196,9 +196,9 @@ set -euo pipefail
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 MOUNT_POINT="${MOUNT_POINT}"
 
-if ! mountpoint -q \${MOUNT_POINT}; then
-    MESSAGE="CRITICAL: \${MOUNT_POINT} is not mounted!"
-    echo "\${MESSAGE}"
+if ! mountpoint -q ${MOUNT_POINT}; then
+    MESSAGE="CRITICAL: ${MOUNT_POINT} is not mounted!"
+    echo "${MESSAGE}"
     [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "critical" "\${MESSAGE}"
     exit 1
 fi
@@ -208,17 +208,17 @@ USAGE_PERCENT=\$(df -BG \${MOUNT_POINT} | tail -1 | awk '{print \$5}' | sed 's/%
 
 if [[ -n "\${USAGE_PERCENT}" ]]; then
     if (( \${USAGE_PERCENT} > 90 )); then
-        MESSAGE="WARNING: BTRFS filesystem is \${USAGE_PERCENT}% full"
-        echo "\${MESSAGE}"
-        [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
+        MESSAGE="WARNING: BTRFS filesystem is ${USAGE_PERCENT}% full"
+        echo "${MESSAGE}"
+        [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "warning" "${MESSAGE}"
     fi
 fi
 
 # Check device stats for errors
-if btrfs device stats \${MOUNT_POINT} | grep -v " 0\$"; then
-    MESSAGE="WARNING: BTRFS device has errors. Run 'btrfs device stats \${MOUNT_POINT}'"
-    echo "\${MESSAGE}"
-    [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
+if btrfs device stats ${MOUNT_POINT} | grep -v " 0\$"; then
+    MESSAGE="WARNING: BTRFS device has errors. Run 'btrfs device stats ${MOUNT_POINT}'"
+    echo "${MESSAGE}"
+    [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "warning" "${MESSAGE}"
 fi
 EOF
 
