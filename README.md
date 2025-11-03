@@ -134,7 +134,7 @@ nano config.sh
 # 3. Validate configuration
 ./scripts/00-validate-config.sh
 
-# 4. Generate docker-compose.yml
+# 4. Generate docker-compose.yml (also auto-generates docker/.env)
 cd docker && ./generate-compose.sh && cd ..
 
 # 5. Run setup scripts (in order)

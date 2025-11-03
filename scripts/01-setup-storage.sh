@@ -52,6 +52,15 @@ fi
 # Convert HDD_DEVICES to array
 HDD_ARRAY=(${HDD_DEVICES})
 
+# Check if we have a single NVMe setup (no HDDs)
+SINGLE_NVME_MODE=false
+if [[ -n "${NVME_DEVICE}" && ${#HDD_ARRAY[@]} -eq 0 ]]; then
+    echo "Single NVMe mode detected (no HDDs)"
+    SINGLE_NVME_MODE=true
+    # Force bcache to none for single NVMe mode
+    BCACHE_MODE="none"
+fi
+
 echo "Detected configuration:"
 if [[ -n "${NVME_DEVICE}" ]]; then
     echo "  SSD/NVMe: ${NVME_DEVICE}"
@@ -79,40 +88,54 @@ else
     echo "  SSD/NVMe: None detected (bcache will be disabled)"
 fi
 
-echo "  HDDs: ${HDD_DEVICES}"
-echo "  HDD count: ${#HDD_ARRAY[@]}"
-for hdd in "${HDD_ARRAY[@]}"; do
-    HDD_SIZE=$(lsblk -ndo SIZE ${hdd} 2>/dev/null || echo "unknown")
-    echo "    ${hdd}: ${HDD_SIZE}"
-done
+if [[ ${#HDD_ARRAY[@]} -gt 0 ]]; then
+    echo "  HDDs: ${HDD_DEVICES}"
+    echo "  HDD count: ${#HDD_ARRAY[@]}"
+    for hdd in "${HDD_ARRAY[@]}"; do
+        HDD_SIZE=$(lsblk -ndo SIZE ${hdd} 2>/dev/null || echo "unknown")
+        echo "    ${hdd}: ${HDD_SIZE}"
+    done
+else
+    echo "  HDDs: None (single NVMe mode)"
+fi
 echo "  RAID level: ${BTRFS_RAID_LEVEL}"
 echo "  Compression: ${BTRFS_COMPRESSION}"
 echo "  bcache mode: ${BCACHE_MODE}"
 echo "  OS partition: ${OS_PARTITION_SIZE_GB}GB"
+if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
+    NVME_SIZE_GB=$(lsblk -bndo SIZE ${NVME_DEVICE} 2>/dev/null | awk '{print int($1/1024/1024/1024)}' || echo "0")
+    STORAGE_SIZE_GB=$((NVME_SIZE_GB - OS_PARTITION_SIZE_GB))
+    echo "  Storage partition: ${STORAGE_SIZE_GB}GB (from NVMe after OS partition)"
+fi
 echo ""
 
 # Validate device count for RAID level
+DEVICE_COUNT=${#HDD_ARRAY[@]}
+if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
+    DEVICE_COUNT=1  # Single NVMe partition
+fi
+
 case "${BTRFS_RAID_LEVEL}" in
     raid10)
-        if [[ ${#HDD_ARRAY[@]} -lt 4 ]]; then
-            echo "ERROR: RAID10 requires at least 4 disks, found ${#HDD_ARRAY[@]}"
+        if [[ ${DEVICE_COUNT} -lt 4 ]]; then
+            echo "ERROR: RAID10 requires at least 4 disks, found ${DEVICE_COUNT}"
             exit 1
         fi
         ;;
     raid1)
-        if [[ ${#HDD_ARRAY[@]} -lt 2 ]]; then
-            echo "ERROR: RAID1 requires at least 2 disks, found ${#HDD_ARRAY[@]}"
+        if [[ ${DEVICE_COUNT} -lt 2 ]]; then
+            echo "ERROR: RAID1 requires at least 2 disks, found ${DEVICE_COUNT}"
             exit 1
         fi
         ;;
     raid0)
-        if [[ ${#HDD_ARRAY[@]} -lt 2 ]]; then
-            echo "ERROR: RAID0 requires at least 2 disks, found ${#HDD_ARRAY[@]}"
+        if [[ ${DEVICE_COUNT} -lt 2 ]]; then
+            echo "ERROR: RAID0 requires at least 2 disks, found ${DEVICE_COUNT}"
             exit 1
         fi
         ;;
     single)
-        if [[ ${#HDD_ARRAY[@]} -lt 1 ]]; then
+        if [[ ${DEVICE_COUNT} -lt 1 ]]; then
             echo "ERROR: At least 1 disk required"
             exit 1
         fi
@@ -141,7 +164,9 @@ esac
 
 echo ""
 echo "WARNING: This will DESTROY all data on:"
-if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
+if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
+    echo "  - ${NVME_DEVICE} (NVMe - will create storage partition)"
+elif [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
     echo "  - ${NVME_DEVICE} (SSD/NVMe - partition for bcache)"
 fi
 for hdd in "${HDD_ARRAY[@]}"; do
@@ -286,12 +311,60 @@ else
     BCACHE_MODE="none"
 fi
 
-# Step 2: Prepare HDDs
+# Step 2: Prepare storage devices (HDDs or NVMe partition)
 echo ""
-echo "=== Step 2: Preparing HDDs ==="
+if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
+    echo "=== Step 2: Preparing NVMe storage partition ==="
+else
+    echo "=== Step 2: Preparing HDDs ==="
+fi
 
 HDD_DEVICES_FOR_BTRFS=()
 
+# Handle single NVMe mode
+if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
+    echo "Creating storage partition on ${NVME_DEVICE}..."
+
+    # Check if NVMe is partitioned (OS already installed)
+    NUM_PARTITIONS=$(lsblk -nlo NAME ${NVME_DEVICE} | wc -l)
+
+    if [[ $NUM_PARTITIONS -gt 1 ]]; then
+        # OS is installed, add storage partition
+        echo "OS detected on ${NVME_DEVICE}, creating storage partition..."
+
+        # Determine partition naming (nvme0n1p3 vs sda3)
+        if [[ ${NVME_DEVICE} == *"nvme"* ]]; then
+            STORAGE_PARTITION="${NVME_DEVICE}p3"
+        else
+            STORAGE_PARTITION="${NVME_DEVICE}3"
+        fi
+
+        # Get total size and calculate storage start
+        TOTAL_SIZE_GB=$(lsblk -bndo SIZE ${NVME_DEVICE} | awk '{print int($1/1024/1024/1024)}')
+
+        # Create storage partition
+        if ! parted -s "${NVME_DEVICE}" mkpart primary btrfs ${OS_PARTITION_SIZE_GB}GiB 100%; then
+            echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
+            parted -s "${NVME_DEVICE}" print  # Show current state for debugging
+            exit 1
+        fi
+
+        # Wait for partition to appear
+        sleep 2
+        partprobe ${NVME_DEVICE}
+        sleep 2
+
+        echo "Created storage partition: ${STORAGE_PARTITION}"
+        HDD_DEVICES_FOR_BTRFS+=("${STORAGE_PARTITION}")
+    else
+        # No OS, use entire device
+        echo "No OS detected, using entire ${NVME_DEVICE} for storage..."
+        wipefs -af ${NVME_DEVICE}
+        HDD_DEVICES_FOR_BTRFS+=("${NVME_DEVICE}")
+    fi
+fi
+
+# Handle HDD mode
 for hdd in "${HDD_ARRAY[@]}"; do
     echo "Preparing ${hdd}..."
 
@@ -382,7 +455,11 @@ for hdd in "${HDD_ARRAY[@]}"; do
     fi
 done
 
-echo "Devices ready for BTRFS: ${HDD_DEVICES_FOR_BTRFS[*]}"
+if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
+    echo "NVMe partition ready for BTRFS: ${HDD_DEVICES_FOR_BTRFS[*]}"
+else
+    echo "Devices ready for BTRFS: ${HDD_DEVICES_FOR_BTRFS[*]}"
+fi
 
 # Step 3: Create BTRFS filesystem
 echo ""

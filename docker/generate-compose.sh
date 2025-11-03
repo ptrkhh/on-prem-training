@@ -18,6 +18,17 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Auto-generate .env file from config.sh
+GENERATE_ENV_SCRIPT="${SCRIPT_DIR}/../scripts/generate-env.sh"
+if [[ -f "${GENERATE_ENV_SCRIPT}" ]]; then
+    echo "=== Auto-generating docker/.env from config.sh ==="
+    bash "${GENERATE_ENV_SCRIPT}"
+    echo ""
+else
+    echo "⚠ WARNING: generate-env.sh not found, skipping .env generation"
+    echo ""
+fi
+
 # Auto-detect CUDA version from host
 if command -v nvidia-smi &>/dev/null; then
     # Query maximum supported CUDA version directly from nvidia-smi
@@ -67,9 +78,9 @@ echo "  - ${USER_COUNT} user workspace containers (with VNC/RDP remote desktop)"
 echo ""
 
 # Warn about default passwords
-if [[ "${GRAFANA_ADMIN_PASSWORD:-admin}" == "admin" ]]; then
-    echo "⚠️  WARNING: Grafana is using default password 'admin'"
-    echo "   Set GRAFANA_ADMIN_PASSWORD in .env file for security"
+if [[ "${GRAFANA_ADMIN_PASSWORD:-admin}" == "admin" || "${GRAFANA_ADMIN_PASSWORD}" == "changeme_secure_password" ]]; then
+    echo "⚠️  WARNING: Grafana is using default password"
+    echo "   Set GRAFANA_ADMIN_PASSWORD in config.sh for security"
     echo ""
 fi
 

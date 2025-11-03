@@ -96,9 +96,20 @@ HDDS=$(detect_hdd_devices)
 HDD_ARRAY=(${HDDS})
 HDD_COUNT=${#HDD_ARRAY[@]}
 
+# Check for single NVMe mode (no HDDs)
+SINGLE_NVME_MODE=false
+if [[ -n "${NVME}" && ${HDD_COUNT} -eq 0 ]]; then
+    SINGLE_NVME_MODE=true
+    echo "  ℹ Single NVMe mode detected (no HDDs)"
+fi
+
 if [[ ${HDD_COUNT} -eq 0 ]]; then
-    echo "  ✗ ERROR: No HDDs detected"
-    ((ERRORS++))
+    if [[ "${SINGLE_NVME_MODE}" == "false" ]]; then
+        echo "  ✗ ERROR: No HDDs detected and no NVMe available for single NVMe mode"
+        ((ERRORS++))
+    else
+        echo "  ✓ Single NVMe mode: Will use NVMe partition for storage"
+    fi
 else
     echo "  ✓ HDDs detected: ${HDD_COUNT}"
     for hdd in ${HDDS}; do
@@ -113,41 +124,58 @@ fi
 echo ""
 echo "Checking RAID configuration..."
 
+DEVICE_COUNT=${HDD_COUNT}
+if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
+    DEVICE_COUNT=1
+fi
+
 case "${BTRFS_RAID_LEVEL}" in
     raid10)
-        if [[ ${HDD_COUNT} -lt 4 ]]; then
-            echo "  ✗ ERROR: RAID10 requires at least 4 disks, found ${HDD_COUNT}"
+        if [[ ${DEVICE_COUNT} -lt 4 ]]; then
+            echo "  ✗ ERROR: RAID10 requires at least 4 disks, found ${DEVICE_COUNT}"
             ((ERRORS++))
         else
-            echo "  ✓ RAID10 with ${HDD_COUNT} disks"
+            echo "  ✓ RAID10 with ${DEVICE_COUNT} disks"
         fi
         ;;
     raid1)
-        if [[ ${HDD_COUNT} -lt 2 ]]; then
-            echo "  ✗ ERROR: RAID1 requires at least 2 disks, found ${HDD_COUNT}"
+        if [[ ${DEVICE_COUNT} -lt 2 ]]; then
+            echo "  ✗ ERROR: RAID1 requires at least 2 disks, found ${DEVICE_COUNT}"
             ((ERRORS++))
         else
-            echo "  ✓ RAID1 with ${HDD_COUNT} disks"
+            echo "  ✓ RAID1 with ${DEVICE_COUNT} disks"
         fi
         ;;
     raid0)
-        if [[ ${HDD_COUNT} -lt 2 ]]; then
-            echo "  ⚠ WARNING: RAID0 requires at least 2 disks, found ${HDD_COUNT}"
+        if [[ ${DEVICE_COUNT} -lt 2 ]]; then
+            echo "  ⚠ WARNING: RAID0 requires at least 2 disks, found ${DEVICE_COUNT}"
             ((WARNINGS++))
         else
-            echo "  ⚠ RAID0 with ${HDD_COUNT} disks (NO REDUNDANCY!)"
+            echo "  ⚠ RAID0 with ${DEVICE_COUNT} disks (NO REDUNDANCY!)"
             ((WARNINGS++))
         fi
         ;;
     single)
-        echo "  ⚠ WARNING: Single disk mode (NO REDUNDANCY!)"
-        ((WARNINGS++))
+        if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
+            echo "  ✓ Single NVMe mode (NO REDUNDANCY!)"
+        else
+            echo "  ⚠ WARNING: Single disk mode (NO REDUNDANCY!)"
+            ((WARNINGS++))
+        fi
         ;;
     *)
         echo "  ✗ ERROR: Unknown RAID level: ${BTRFS_RAID_LEVEL}"
         ((ERRORS++))
         ;;
 esac
+
+# Validate bcache mode for single NVMe
+if [[ "${SINGLE_NVME_MODE}" == "true" && "${BCACHE_MODE}" != "none" ]]; then
+    echo "  ⚠ WARNING: bcache mode should be 'none' for single NVMe setups"
+    echo "    Current setting: ${BCACHE_MODE}"
+    echo "    bcache will be automatically disabled during setup"
+    ((WARNINGS++))
+fi
 
 # Check numeric values
 echo ""
@@ -186,7 +214,7 @@ SAFE_LIMIT_GB=$(awk "BEGIN {printf \"%.0f\", ${ESTIMATED_CAPACITY_GB} * ${BTRFS_
 if [[ ${TOTAL_WITH_SNAPSHOTS} -gt ${SAFE_LIMIT_GB} ]]; then
     echo "  ⚠ WARNING: Total user quota + snapshots (${TOTAL_USER_QUOTA_GB}GB + 50%) may exceed safe storage limit"
     echo "    User data: ${TOTAL_USER_QUOTA_GB}GB, With snapshots: ~$(awk "BEGIN {printf \"%.1f\", ${TOTAL_USER_QUOTA_GB} * 1.5}")GB"
-    echo "    Safe limit: $(awk "BEGIN {printf \"%.0f\", ${SAFE_LIMIT_GB} / 1024}")TB (80% of estimated ${ESTIMATED_CAPACITY_GB}GB)"
+    echo "    Safe limit: $(awk "BEGIN {printf \"%.0f\", ${SAFE_LIMIT_GB}}")GB (80% of estimated ${ESTIMATED_CAPACITY_GB}GB)"
     ((WARNINGS++))
 else
     echo "  ✓ Total user quota: ${TOTAL_USER_QUOTA_GB}GB - reasonable for ${ESTIMATED_CAPACITY_GB}GB storage"
