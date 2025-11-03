@@ -203,8 +203,8 @@ if ! mountpoint -q ${MOUNT_POINT}; then
     exit 1
 fi
 
-# Check filesystem usage (using df for consistent units)
-USAGE_PERCENT=\$(df -BG \${MOUNT_POINT} | tail -1 | awk '{print \$5}' | sed 's/%//')
+# Check filesystem usage (using df with --output for reliable parsing)
+USAGE_PERCENT=\$(df --output=pcent "\${MOUNT_POINT}" | tail -1 | tr -d ' %')
 
 if [[ -n "\${USAGE_PERCENT}" ]]; then
     if (( \${USAGE_PERCENT} > 90 )); then

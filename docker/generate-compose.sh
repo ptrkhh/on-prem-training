@@ -20,25 +20,23 @@ source "${CONFIG_FILE}"
 
 # Auto-detect CUDA version from host
 if command -v nvidia-smi &>/dev/null; then
-    CUDA_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n1 | awk '{print $1}')
-    # Map driver version to compatible CUDA version
-    # This is a simplified mapping - adjust based on NVIDIA compatibility matrix
-    if [[ -n "${CUDA_VERSION}" ]]; then
-        MAJOR_VERSION=$(echo "${CUDA_VERSION}" | cut -d. -f1)
-        if [[ ${MAJOR_VERSION} -ge 550 ]]; then
-            DETECTED_CUDA="12.4.1"
-        elif [[ ${MAJOR_VERSION} -ge 525 ]]; then
-            DETECTED_CUDA="12.0.1"
-        elif [[ ${MAJOR_VERSION} -ge 515 ]]; then
-            DETECTED_CUDA="11.8.0"
-        else
-            DETECTED_CUDA="11.7.1"
-        fi
+    # Query maximum supported CUDA version directly from nvidia-smi
+    DETECTED_CUDA=$(nvidia-smi --query-gpu=cuda_version --format=csv,noheader | head -n1)
+
+    if [[ -n "${DETECTED_CUDA}" ]]; then
         CUDA_BUILD_VERSION="${DETECTED_CUDA}"
-        echo "Detected NVIDIA Driver: ${CUDA_VERSION}, using CUDA: ${CUDA_BUILD_VERSION}"
+        echo "Detected maximum supported CUDA version: ${CUDA_BUILD_VERSION}"
     else
-        CUDA_BUILD_VERSION="12.4.1"
-        echo "Could not detect CUDA version, defaulting to: ${CUDA_BUILD_VERSION}"
+        # Fallback: Query driver version
+        DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n1)
+        if [[ -n "${DRIVER_VERSION}" ]]; then
+            echo "Could not detect CUDA version directly, detected driver: ${DRIVER_VERSION}"
+            CUDA_BUILD_VERSION="12.4.1"
+            echo "Using fallback CUDA version: ${CUDA_BUILD_VERSION}"
+        else
+            CUDA_BUILD_VERSION="12.4.1"
+            echo "Could not detect CUDA or driver version, defaulting to: ${CUDA_BUILD_VERSION}"
+        fi
     fi
 else
     CUDA_BUILD_VERSION="12.4.1"
@@ -422,6 +420,9 @@ USER_INDEX=0
 for USERNAME in ${USER_ARRAY[@]}; do
     UID=$((FIRST_UID + USER_INDEX))
 
+    # Pre-process username to uppercase for environment variable lookup
+    USERNAME_UPPER=$(echo "${USERNAME}" | tr '[:lower:]' '[:upper:]')
+
     # SSH port: SSH_BASE_PORT + user_index
     SSH_PORT=$((SSH_BASE_PORT + USER_INDEX))
 
@@ -453,8 +454,8 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - USER_NAME=${USERNAME}
       - USER_UID=${UID}
       - USER_GID=${UID}
-      - USER_PASSWORD=${USER_${USERNAME^^}_PASSWORD:-changeme}
-      - CODE_SERVER_PASSWORD=${USER_${USERNAME^^}_PASSWORD:-changeme}
+      - USER_PASSWORD=\${USER_${USERNAME_UPPER}_PASSWORD:-changeme}
+      - CODE_SERVER_PASSWORD=\${USER_${USERNAME_UPPER}_PASSWORD:-changeme}
       - DISPLAY=:0
       - WORKSPACE=/workspace
       - SHARED=/shared
@@ -598,9 +599,9 @@ echo ""
 
 # Validate prometheus config
 if [[ ! -f "${SCRIPT_DIR}/prometheus/prometheus.yml" ]]; then
-    echo "⚠️  WARNING: Prometheus config not found: ${SCRIPT_DIR}/prometheus/prometheus.yml"
-    echo "   Create this file before starting services"
-    echo ""
+    echo "ERROR: Prometheus config not found: ${SCRIPT_DIR}/prometheus/prometheus.yml"
+    echo "Prometheus is required for monitoring. Create this file before continuing."
+    exit 1
 fi
 
 # Validate generated docker-compose.yml

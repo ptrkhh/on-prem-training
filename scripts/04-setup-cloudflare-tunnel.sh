@@ -160,13 +160,33 @@ echo "Tunnel configuration created"
 echo ""
 echo "=== Step 4: Routing DNS ==="
 
-# Check if route already exists (idempotent) - check by domain pattern, not tunnel name
-EXISTING_ROUTE=$(cloudflared tunnel route dns list 2>/dev/null | awk -v domain="*.${DOMAIN}" '$0 ~ domain {print $1}' || echo "")
-if [[ -n "${EXISTING_ROUTE}" ]]; then
-    echo "DNS route for *.${DOMAIN} already exists (tunnel: ${EXISTING_ROUTE}), skipping..."
+# Helper function to check if DNS route exists
+check_dns_route() {
+    local domain="$1"
+
+    # Try to list routes. Use -qF for a fast, literal check.
+    # The 'list' command is piped to grep.
+    # If 'list' fails, grep gets no input and fails (returns 1).
+    # If 'list' succeeds but grep finds no match, grep fails (returns 1).
+    # If 'list' succeeds and grep finds a match, grep succeeds (returns 0).
+    if cloudflared tunnel route dns list 2>/dev/null | grep -qF "${domain}"; then
+        return 0  # Route exists
+    else
+        return 1  # Route doesn't exist (or 'list' command failed)
+    fi
+}
+
+# Check if route already exists (idempotent)
+if check_dns_route "*.${DOMAIN}"; then
+    echo "DNS route for *.${DOMAIN} already exists, skipping..."
 else
-    cloudflared tunnel route dns ${TUNNEL_NAME} "*.${DOMAIN}"
-    echo "DNS routed for *.${DOMAIN}"
+    echo "Creating DNS route for *.${DOMAIN}..."
+    if cloudflared tunnel route dns ${TUNNEL_NAME} "*.${DOMAIN}"; then
+        echo "✓ DNS route created for *.${DOMAIN}"
+    else
+        echo "ERROR: Failed to create DNS route"
+        exit 1
+    fi
 fi
 
 # Step 5: Install as service

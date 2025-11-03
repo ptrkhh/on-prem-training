@@ -60,12 +60,20 @@ if [[ "$rclone_configured" != "y" ]]; then
 fi
 
 # Verify remotes exist
-if ! rclone listremotes | grep -q "gcs"; then
+# First check if rclone command works
+if ! rclone listremotes &>/dev/null; then
+    echo "ERROR: rclone command failed - check installation"
+    exit 1
+fi
+
+# Check for gcs remote (remote names end with colon, e.g., "gcs:")
+if ! rclone listremotes | grep -q "^gcs:$"; then
     echo "ERROR: 'gcs' remote not configured"
     exit 1
 fi
 
-if ! rclone listremotes | grep -q "gdrive"; then
+# Check for gdrive remote
+if ! rclone listremotes | grep -q "^gdrive:$"; then
     echo "ERROR: 'gdrive' remote not configured"
     exit 1
 fi
