@@ -58,7 +58,13 @@ echo "  1. 'gcs' - Google Cloud Storage"
 echo "  2. 'gdrive' - Google Drive"
 echo ""
 
-read -p "Have you already configured rclone? (y/n): " rclone_configured
+while true; do
+    read -p "Have you already configured rclone? (y/n): " rclone_configured
+    if [[ "${rclone_configured}" =~ ^[yn]$ ]]; then
+        break
+    fi
+    echo "ERROR: Invalid input. Please enter 'y' or 'n'"
+done
 
 if [[ "$rclone_configured" != "y" ]]; then
     echo ""

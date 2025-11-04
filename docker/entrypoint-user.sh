@@ -369,6 +369,7 @@ files = /etc/supervisor/conf.d/*.conf
 SUPERMAIN
 
 # Fix permissions
+mkdir -p /home/${USER_NAME}
 chown -R ${USER_NAME}:${USER_NAME} /home/${USER_NAME}
 
 # Start DBUS (needed for KDE)

@@ -113,10 +113,10 @@ else
     # Fallback if function not defined
     HDDS="${HDD_DEVICES:-}"
     if [[ -z "${HDDS}" ]]; then
-        local hdds=""
+        hdds=""
         for dev in /dev/sd{b..z}; do
             if [[ -b "${dev}" ]] && [[ "${dev}" != "${NVME}" ]]; then
-                local disk_name=$(basename ${dev})
+                disk_name=$(basename ${dev})
                 if [[ -f "/sys/block/${disk_name}/queue/rotational" ]]; then
                     [[ "$(cat /sys/block/${disk_name}/queue/rotational)" == "1" ]] && hdds="${hdds} ${dev}"
                 fi

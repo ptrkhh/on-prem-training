@@ -70,6 +70,11 @@ else
     TUNNEL_ID=$(cloudflared tunnel list | grep "${TUNNEL_NAME}" | awk '{print $1}')
 fi
 
+if [[ -z "${TUNNEL_ID}" ]]; then
+    echo "ERROR: Failed to get tunnel ID for ${TUNNEL_NAME}"
+    exit 1
+fi
+
 echo "Tunnel ID: ${TUNNEL_ID}"
 
 # Step 3: Configure tunnel

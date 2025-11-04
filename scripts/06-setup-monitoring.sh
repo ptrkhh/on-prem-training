@@ -185,7 +185,7 @@ EOF
 
 # Update the threshold value in the generated script
 if ! sed -i "s/TEMP_THRESHOLD=85/TEMP_THRESHOLD=${GPU_TEMP_THRESHOLD}/" ${SCRIPTS_DIR}/check-gpu-temperature.sh; then
-    echo "ERROR: Failed to update GPU temperature threshold"
+    echo "ERROR: Failed to update GPU temperature threshold with sed"
     exit 1
 fi
 
@@ -376,12 +376,13 @@ if [[ -n "${TELEGRAM_BOT_TOKEN}" ]] && [[ -n "${TELEGRAM_CHAT_ID}" ]]; then
     export TELEGRAM_CHAT_ID="${telegram_chat_id}"
     ${SCRIPTS_DIR}/send-telegram-alert.sh "success" "Monitoring setup complete on ML Training Server"
 else
-    read -p "Do you want to configure Telegram alerts? (y/n): " setup_telegram
-    # Validate y/n input
-    if [[ ! "${setup_telegram}" =~ ^[yn]$ ]]; then
+    while true; do
+        read -p "Do you want to configure Telegram alerts? (y/n): " setup_telegram
+        if [[ "${setup_telegram}" =~ ^[yn]$ ]]; then
+            break
+        fi
         echo "ERROR: Invalid input. Please enter 'y' or 'n'"
-        exit 1
-    fi
+    done
 
     if [[ "$setup_telegram" == "y" ]]; then
         echo ""

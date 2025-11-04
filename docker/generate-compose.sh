@@ -39,6 +39,33 @@ fi
 echo "✓ Password validation passed"
 echo ""
 
+# Check Docker Compose version
+echo "=== Checking Docker Compose Version ==="
+if ! command -v docker &> /dev/null; then
+    echo "ERROR: docker command not found. Please install Docker first."
+    exit 1
+fi
+
+# Try docker compose (v2) command
+if docker compose version &> /dev/null; then
+    COMPOSE_VERSION=$(docker compose version --short 2>/dev/null || echo "unknown")
+    echo "✓ Docker Compose v2 detected: ${COMPOSE_VERSION}"
+elif command -v docker-compose &> /dev/null; then
+    COMPOSE_VERSION=$(docker-compose version --short 2>/dev/null || echo "unknown")
+    if [[ "${COMPOSE_VERSION}" =~ ^1\. ]]; then
+        echo "WARNING: Docker Compose v1 (docker-compose) detected: ${COMPOSE_VERSION}"
+        echo "This configuration uses v2 syntax. Please upgrade to Docker Compose v2."
+        echo "See: https://docs.docker.com/compose/install/"
+        exit 1
+    fi
+    echo "✓ Docker Compose detected: ${COMPOSE_VERSION}"
+else
+    echo "ERROR: Docker Compose not found. Please install Docker Compose v2."
+    echo "See: https://docs.docker.com/compose/install/"
+    exit 1
+fi
+echo ""
+
 # Check Prometheus config exists
 if [[ ! -f "${SCRIPT_DIR}/prometheus/prometheus.yml" ]]; then
     echo "ERROR: Prometheus config not found: ${SCRIPT_DIR}/prometheus/prometheus.yml"
@@ -60,7 +87,7 @@ echo "✓ Prometheus configuration found"
 echo ""
 
 # Auto-generate .env file from config.sh
-GENERATE_ENV_SCRIPT="${SCRIPT_DIR}/../scripts/generate-env.sh"
+GENERATE_ENV_SCRIPT="${SCRIPT_DIR}/../docker/generate-env.sh"
 if [[ -f "${GENERATE_ENV_SCRIPT}" ]]; then
     echo "=== Auto-generating docker/.env from config.sh ==="
     bash "${GENERATE_ENV_SCRIPT}"

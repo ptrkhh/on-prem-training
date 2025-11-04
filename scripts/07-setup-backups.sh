@@ -223,6 +223,28 @@ if ! restic -r \${RESTIC_REPOSITORY} snapshots &>/dev/null; then
     exit 1
 fi
 
+# Validate backup directories exist
+echo "Validating backup directories..."
+MISSING_DIRS=""
+for dir in "\${MOUNT_POINT}/homes" "\${MOUNT_POINT}/docker-volumes" "\${MOUNT_POINT}/shared/tensorboard"; do
+    if [[ ! -d "\${dir}" ]]; then
+        echo "ERROR: Required backup directory does not exist: \${dir}"
+        MISSING_DIRS="\${MISSING_DIRS} \${dir}"
+    else
+        echo "  ✓ \${dir}"
+    fi
+done
+
+if [[ -n "\${MISSING_DIRS}" ]]; then
+    echo "ERROR: Cannot proceed with backup - missing required directories:"
+    echo "\${MISSING_DIRS}"
+    if [[ -x "\${ALERT_SCRIPT}" ]]; then
+        "\${ALERT_SCRIPT}" "critical" "Backup failed: Missing directories - \${MISSING_DIRS}"
+    fi
+    exit 1
+fi
+echo "All backup directories verified"
+
 # Pause all workspace containers to ensure consistency
 echo "Pausing all workspace containers..."
 PAUSED_CONTAINERS=()
@@ -247,35 +269,6 @@ if [[ \${#FAILED_CONTAINERS[@]} -gt 0 ]]; then
     done
     exit 1
 fi
-
-# Validate backup directories exist
-echo "Validating backup directories..."
-MISSING_DIRS=""
-for dir in "\${MOUNT_POINT}/homes" "\${MOUNT_POINT}/docker-volumes" "\${MOUNT_POINT}/shared/tensorboard"; do
-    if [[ ! -d "\${dir}" ]]; then
-        echo "ERROR: Required backup directory does not exist: \${dir}"
-        MISSING_DIRS="\${MISSING_DIRS} \${dir}"
-    else
-        echo "  ✓ \${dir}"
-    fi
-done
-
-if [[ -n "\${MISSING_DIRS}" ]]; then
-    echo "ERROR: Cannot proceed with backup - missing required directories:"
-    echo "\${MISSING_DIRS}"
-    # Resume containers before exiting
-    if [[ \${#PAUSED_CONTAINERS[@]} -gt 0 ]]; then
-        echo "Resuming containers..."
-        for container in "\${PAUSED_CONTAINERS[@]}"; do
-            docker unpause "\${container}" || true
-        done
-    fi
-    if [[ -x "\${ALERT_SCRIPT}" ]]; then
-        "\${ALERT_SCRIPT}" "critical" "Backup failed: Missing directories - \${MISSING_DIRS}"
-    fi
-    exit 1
-fi
-echo "All backup directories verified"
 
 # Run backup with bandwidth limit
 BANDWIDTH_LIMIT_KBPS=\$((${BACKUP_BANDWIDTH_LIMIT_MBPS} * 1000 / 8))
@@ -320,8 +313,9 @@ if [[ -f /root/.healthchecks-url ]]; then
     HEALTHCHECK_URL=\$(cat /root/.healthchecks-url)
 
     # Validate URL format
-    if [[ ! "\${HEALTHCHECK_URL}" =~ ^https?:// ]]; then
+    if [[ ! "\${HEALTHCHECK_URL}" =~ ^https?://[a-zA-Z0-9.-]+(/.*)?$ ]]; then
         echo "WARNING: Invalid healthcheck URL format: \${HEALTHCHECK_URL}"
+        echo "Expected format: http://example.com/path or https://example.com/path"
         echo "Skipping healthcheck ping"
     else
         if [[ "\${BACKUP_STATUS}" == "success" ]]; then
