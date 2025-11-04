@@ -63,18 +63,14 @@ fi
 echo "Creating ${USER_COUNT} user accounts..."
 echo ""
 
-# Check for automated password generation
-if [[ -n "${AUTO_GENERATE_PASSWORDS:-}" ]]; then
-    echo "⚠️  AUTO_GENERATE_PASSWORDS is set - passwords will be generated automatically"
-    echo "   Passwords will be saved to /root/user-passwords.txt"
-    echo ""
-    # Create/clear the password file
-    > /root/user-passwords.txt
-    chmod 600 /root/user-passwords.txt
+# Validate USER_DEFAULT_PASSWORD is set
+if [[ -z "${USER_DEFAULT_PASSWORD:-}" ]]; then
+    echo "ERROR: USER_DEFAULT_PASSWORD is not set in config.sh"
+    exit 1
 fi
 
 USER_INDEX=0
-for USERNAME in ${USER_ARRAY[@]}; do
+for USERNAME in "${USER_ARRAY[@]}"; do
     UID=$((FIRST_UID + USER_INDEX))
 
     echo "Setting up user: ${USERNAME} (UID: ${UID})"
@@ -88,19 +84,9 @@ for USERNAME in ${USER_ARRAY[@]}; do
         echo "  Created user ${USERNAME}"
     fi
 
-    # Set initial password
-    # Check if automated password is set in environment
-    if [[ -n "${AUTO_GENERATE_PASSWORDS:-}" ]]; then
-        # Generate random password
-        RANDOM_PASS=$(openssl rand -base64 12)
-        echo "${USERNAME}:${RANDOM_PASS}" | chpasswd
-        echo "  Password set automatically (saved to /root/user-passwords.txt)"
-        echo "${USERNAME}: ${RANDOM_PASS}" >> /root/user-passwords.txt
-    else
-        # Interactive password prompt
-        echo "  Setting password for ${USERNAME}:"
-        passwd ${USERNAME}
-    fi
+    # Set password from config
+    echo "${USERNAME}:${USER_DEFAULT_PASSWORD}" | chpasswd
+    echo "  Password set from USER_DEFAULT_PASSWORD"
 
     # Create home directory on BTRFS storage
     mkdir -p ${MOUNT_POINT}/homes/${USERNAME}
@@ -326,15 +312,10 @@ echo ""
 echo "Created users: ${USERS}"
 echo ""
 echo "IMPORTANT: Add SSH public keys for each user:"
-for USERNAME in ${USER_ARRAY[@]}; do
+for USERNAME in "${USER_ARRAY[@]}"; do
     echo "  ${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys"
 done
 echo ""
-if [[ -n "${AUTO_GENERATE_PASSWORDS:-}" ]]; then
-    echo "⚠️  AUTO-GENERATED PASSWORDS saved to: /root/user-passwords.txt"
-    echo "   Share these securely with users and ask them to change on first login"
-    echo ""
-fi
 echo "Users can access the server via:"
 echo "  - SSH: ssh <user>@<server-ip> -p 2222 (or 2223, 2224, etc.)"
 echo "  - Web Desktop (noVNC): http://<user>-desktop.<domain> or http://<user>.<domain>"
@@ -347,7 +328,4 @@ echo "Next steps:"
 echo "  1. Add SSH keys for each user"
 echo "  2. Test SSH login: ssh alice@localhost"
 echo "  3. Run 03-setup-docker.sh to install Docker"
-echo ""
-echo "To enable automated password generation in future runs:"
-echo "  export AUTO_GENERATE_PASSWORDS=1 before running this script"
 echo ""
