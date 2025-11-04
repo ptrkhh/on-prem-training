@@ -310,33 +310,6 @@ GUACAMOLE_PORT=8090
 KASM_PORT=443
 
 #==============================================================================
-# SHARED CACHE SETTINGS
-#==============================================================================
-
-# Shared cache directories are automatically created and mounted in all user containers
-# This allows users to benefit from cached downloads (first user downloads, others reuse)
-#
-# Cached items include:
-#   - ML model weights (HuggingFace, PyTorch Hub, TensorFlow Hub)
-#   - Python pip packages (wheels cached locally)
-#   - Conda packages
-#   - APT system packages (.deb files)
-#   - Language-specific caches (Go, npm, Rust, Julia, R)
-#   - Git LFS objects
-#   - JetBrains IDE plugins and indices
-#   - Docker build layers
-#   - Browser profiles and extensions
-#
-# Benefits:
-#   - 10-50x faster pip installs for cached packages
-#   - Instant model loading after first download (e.g., BERT: 500MB → cached)
-#   - Reduced bandwidth consumption
-#   - Faster container rebuilds
-#
-# Cache location: ${MOUNT_POINT}/cache/
-# View cache usage: /opt/scripts/cache/show-cache-info.sh
-
-#==============================================================================
 # ADVANCED SETTINGS
 #==============================================================================
 
@@ -347,7 +320,7 @@ ENABLE_AUDITD=false
 ENABLE_UPS_MONITORING=false
 
 # Enable NVIDIA GPU timeslicing (share single GPU across multiple containers)
-ENABLE_GPU_TIMESLICING=false
+ENABLE_GPU_TIMESLICING=true
 
 # Enable automatic security updates (unattended-upgrades)
 ENABLE_AUTO_UPDATES=true

@@ -36,6 +36,19 @@ if ! command -v rclone &> /dev/null; then
     curl https://rclone.org/install.sh | bash
 fi
 
+# Check network connectivity
+echo ""
+echo "Checking network connectivity..."
+if ping -c 1 -W 5 8.8.8.8 &>/dev/null || \
+   ping -c 1 -W 5 1.1.1.1 &>/dev/null || \
+   getent hosts google.com &>/dev/null; then
+    echo "✓ Network connectivity verified"
+else
+    echo "ERROR: No network connectivity"
+    echo "Please check your internet connection and try again"
+    exit 1
+fi
+
 # Step 1: Configure rclone
 echo ""
 echo "=== Step 1: Configuring rclone ==="
@@ -104,16 +117,19 @@ exec > >(tee -a ${LOG_FILE}) 2>&1
 echo "=== Customer Data Sync: $(date) ==="
 
 # Sync data from GCS to GDrive
-if rclone copy \
+RCLONE_OUTPUT=$(rclone copy \
     "${GCS_BUCKET}/" \
     "${GDRIVE_DEST}/" \
     --bwlimit ${BANDWIDTH_LIMIT} \
     --transfers 4 \
     --checkers 8 \
+    --retries 3 \
     --log-level INFO \
     --use-server-modtime \
-    --fast-list; then
+    --fast-list 2>&1)
+RCLONE_EXIT=$?
 
+if [[ ${RCLONE_EXIT} -eq 0 ]]; then
     echo "Sync completed successfully"
     SYNC_STATUS="success"
 
@@ -121,7 +137,15 @@ if rclone copy \
     SUMMARY=$(rclone size "${GDRIVE_DEST}/")
     echo "${SUMMARY}"
 else
-    echo "ERROR: Sync failed!"
+    echo "ERROR: Sync failed with exit code ${RCLONE_EXIT}"
+    echo "Error output: ${RCLONE_OUTPUT}"
+    case ${RCLONE_EXIT} in
+        3) echo "Cause: Temporary error (retry may succeed)" ;;
+        4) echo "Cause: Authentication failure" ;;
+        5) echo "Cause: Not found" ;;
+        6) echo "Cause: Insufficient permissions" ;;
+        *) echo "Cause: Unknown (check rclone documentation)" ;;
+    esac
     SYNC_STATUS="failed"
 fi
 
@@ -133,10 +157,21 @@ fi
 # Send healthcheck ping
 if [[ -f /root/.healthchecks-data-sync-url ]]; then
     HEALTHCHECK_URL=$(cat /root/.healthchecks-data-sync-url)
-    if [[ "${SYNC_STATUS}" == "success" ]]; then
-        curl -fsS -m 10 --retry 5 "${HEALTHCHECK_URL}" > /dev/null || true
+
+    # Validate URL format
+    if [[ ! "${HEALTHCHECK_URL}" =~ ^https?:// ]]; then
+        echo "WARNING: Invalid healthcheck URL format: ${HEALTHCHECK_URL}"
+        echo "Skipping healthcheck ping"
     else
-        curl -fsS -m 10 --retry 5 "${HEALTHCHECK_URL}/fail" > /dev/null || true
+        if [[ "${SYNC_STATUS}" == "success" ]]; then
+            if ! curl -fsS -m 10 --retry 5 "${HEALTHCHECK_URL}" > /dev/null 2>&1; then
+                echo "WARNING: Failed to send healthcheck ping to ${HEALTHCHECK_URL}"
+            fi
+        else
+            if ! curl -fsS -m 10 --retry 5 "${HEALTHCHECK_URL}/fail" > /dev/null 2>&1; then
+                echo "WARNING: Failed to send healthcheck ping to ${HEALTHCHECK_URL}/fail"
+            fi
+        fi
     fi
 fi
 

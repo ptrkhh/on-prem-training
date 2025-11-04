@@ -163,16 +163,17 @@ echo "=== Step 4: Routing DNS ==="
 # Helper function to check if DNS route exists
 check_dns_route() {
     local domain="$1"
+    local list_output
 
-    # Try to list routes. Use -qF for a fast, literal check.
-    # The 'list' command is piped to grep.
-    # If 'list' fails, grep gets no input and fails (returns 1).
-    # If 'list' succeeds but grep finds no match, grep fails (returns 1).
-    # If 'list' succeeds and grep finds a match, grep succeeds (returns 0).
-    if cloudflared tunnel route dns list 2>/dev/null | grep -qF "${domain}"; then
+    if ! list_output=$(cloudflared tunnel route dns list 2>&1); then
+        echo "ERROR: Failed to list DNS routes: ${list_output}" >&2
+        return 2  # Command failed
+    fi
+
+    if echo "${list_output}" | grep -qF "${domain}"; then
         return 0  # Route exists
     else
-        return 1  # Route doesn't exist (or 'list' command failed)
+        return 1  # Route doesn't exist
     fi
 }
 

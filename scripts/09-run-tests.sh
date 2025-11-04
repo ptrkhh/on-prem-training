@@ -67,7 +67,20 @@ else
 fi
 
 # Parse BTRFS RAID level more robustly with awk
+# Try primary method
 ACTUAL_RAID=$(btrfs filesystem df ${MOUNT_POINT} | awk '/^Data/ {gsub(/[,:]/, ""); print tolower($2)}')
+
+# Fallback: check device stats
+if [[ -z "${ACTUAL_RAID}" ]]; then
+    ACTUAL_RAID=$(btrfs fi usage ${MOUNT_POINT} 2>/dev/null | grep -i "Data.*RAID" | sed -E 's/.*RAID([0-9]+).*/raid\1/' | head -1)
+fi
+
+# Fallback: check fi show
+if [[ -z "${ACTUAL_RAID}" ]]; then
+    warn "Could not detect RAID level from 'btrfs filesystem df'"
+    ACTUAL_RAID="unknown"
+fi
+
 EXPECTED_RAID=$(echo "${BTRFS_RAID_LEVEL}" | tr '[:upper:]' '[:lower:]')
 
 if [[ "${ACTUAL_RAID}" == "${EXPECTED_RAID}" ]]; then

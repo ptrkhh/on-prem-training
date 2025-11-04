@@ -249,7 +249,15 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
         # Create bcache partition
         if ! parted -s "${NVME_DEVICE}" mkpart primary ${OS_PARTITION_SIZE_GB}GiB 100%; then
             echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
-            parted -s "${NVME_DEVICE}" print  # Show current state for debugging
+            echo ""
+            echo "Current partition table:"
+            parted -s "${NVME_DEVICE}" print || true
+            echo ""
+            echo "Recovery options:"
+            echo "  1. Check if partition already exists"
+            echo "  2. Verify disk has sufficient free space"
+            echo "  3. Run 'parted ${NVME_DEVICE}' to manually inspect/fix"
+            echo "  4. Check dmesg for disk errors: dmesg | tail -50"
             exit 1
         fi
 
@@ -345,7 +353,15 @@ if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
         # Create storage partition
         if ! parted -s "${NVME_DEVICE}" mkpart primary btrfs ${OS_PARTITION_SIZE_GB}GiB 100%; then
             echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
-            parted -s "${NVME_DEVICE}" print  # Show current state for debugging
+            echo ""
+            echo "Current partition table:"
+            parted -s "${NVME_DEVICE}" print || true
+            echo ""
+            echo "Recovery options:"
+            echo "  1. Check if partition already exists"
+            echo "  2. Verify disk has sufficient free space"
+            echo "  3. Run 'parted ${NVME_DEVICE}' to manually inspect/fix"
+            echo "  4. Check dmesg for disk errors: dmesg | tail -50"
             exit 1
         fi
 

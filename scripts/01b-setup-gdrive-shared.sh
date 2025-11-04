@@ -41,6 +41,19 @@ else
     echo "rclone already installed: $(rclone version | head -n1)"
 fi
 
+# Check network connectivity
+echo ""
+echo "Checking network connectivity..."
+if ping -c 1 -W 5 8.8.8.8 &>/dev/null || \
+   ping -c 1 -W 5 1.1.1.1 &>/dev/null || \
+   getent hosts google.com &>/dev/null; then
+    echo "✓ Network connectivity verified"
+else
+    echo "ERROR: No network connectivity"
+    echo "Please check your internet connection and try again"
+    exit 1
+fi
+
 # Step 2: Configure Google Drive Shared Drive
 echo ""
 echo "=== Step 2: Configuring Google Drive Shared Drive ==="

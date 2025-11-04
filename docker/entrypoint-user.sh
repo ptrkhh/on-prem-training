@@ -32,9 +32,10 @@ fi
 # Validate USER_PASSWORD length for VNC (6-8 chars required)
 PASS_LEN=${#USER_PASSWORD}
 if [[ ${PASS_LEN} -lt 6 ]]; then
-    echo "WARNING: USER_PASSWORD is too short for VNC (min 6 chars). Padding to 6 chars."
-    USER_PASSWORD="${USER_PASSWORD}000000"
-    USER_PASSWORD="${USER_PASSWORD:0:8}"
+    echo "ERROR: USER_PASSWORD must be at least 6 characters for VNC compatibility"
+    echo "Current length: ${PASS_LEN}"
+    echo "Please set a longer password in environment variables"
+    exit 1
 elif [[ ${PASS_LEN} -gt 8 ]]; then
     echo "INFO: Truncating USER_PASSWORD to 8 chars for VNC compatibility"
     USER_PASSWORD="${USER_PASSWORD:0:8}"
@@ -377,19 +378,32 @@ dbus-daemon --system --fork
 # Verify DBUS is running with proper socket check
 echo "Waiting for DBUS socket..."
 DBUS_SOCKET="/var/run/dbus/system_bus_socket"
-for i in {1..10}; do
+MAX_ATTEMPTS=30
+SLEEP_TIME=1
+
+for i in $(seq 1 ${MAX_ATTEMPTS}); do
     if [[ -S "${DBUS_SOCKET}" ]]; then
         echo "DBUS started successfully (socket ready after ${i} attempts)"
         break
     fi
-    if [[ $i -eq 10 ]]; then
-        echo "ERROR: DBUS socket not available after 10 attempts"
-        echo "Check: ls -la /var/run/dbus/"
+
+    if [[ $i -eq ${MAX_ATTEMPTS} ]]; then
+        echo "ERROR: DBUS socket not available after ${MAX_ATTEMPTS} attempts (${MAX_ATTEMPTS}s)"
+        echo "DBUS daemon may have failed to start"
+        echo ""
+        echo "Diagnostics:"
+        echo "  Socket path: ${DBUS_SOCKET}"
+        echo "  Process check:"
+        ps aux | grep dbus || true
+        echo ""
+        echo "  Directory contents:"
         ls -la /var/run/dbus/ || true
+        echo ""
+        echo "Container may need to be restarted to fix DBUS initialization"
         exit 1
     fi
-    echo "Waiting for DBUS socket... (attempt $i/10)"
-    sleep 1
+
+    sleep ${SLEEP_TIME}
 done
 
 # Print access information

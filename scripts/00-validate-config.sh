@@ -31,7 +31,12 @@ if [[ -z "${USERS}" ]]; then
     echo "  ✗ ERROR: USERS is not set"
     ((ERRORS++))
 else
-    USER_COUNT=$(get_user_count)
+    if type -t get_user_count &>/dev/null; then
+        USER_COUNT=$(get_user_count)
+    else
+        # Fallback if function not defined
+        USER_COUNT=$(echo ${USERS} | wc -w)
+    fi
     echo "  ✓ Users configured: ${USERS} (${USER_COUNT} users)"
 
     # Validate each username format (lowercase, start with letter, alphanumeric + hyphens)
@@ -80,7 +85,17 @@ fi
 echo ""
 echo "Checking storage configuration..."
 
-NVME=$(detect_nvme_device)
+if type -t detect_nvme_device &>/dev/null; then
+    NVME=$(detect_nvme_device)
+else
+    # Fallback if function not defined
+    NVME="${NVME_DEVICE:-}"
+    if [[ -z "${NVME}" ]]; then
+        [[ -b "/dev/nvme0n1" ]] && NVME="/dev/nvme0n1"
+        [[ -b "/dev/sda" ]] && NVME="/dev/sda"
+    fi
+fi
+
 if [[ -z "${NVME}" ]]; then
     echo "  ⚠ WARNING: No SSD/NVMe device detected"
     ((WARNINGS++))
@@ -92,7 +107,24 @@ else
     fi
 fi
 
-HDDS=$(detect_hdd_devices)
+if type -t detect_hdd_devices &>/dev/null; then
+    HDDS=$(detect_hdd_devices)
+else
+    # Fallback if function not defined
+    HDDS="${HDD_DEVICES:-}"
+    if [[ -z "${HDDS}" ]]; then
+        local hdds=""
+        for dev in /dev/sd{b..z}; do
+            if [[ -b "${dev}" ]] && [[ "${dev}" != "${NVME}" ]]; then
+                local disk_name=$(basename ${dev})
+                if [[ -f "/sys/block/${disk_name}/queue/rotational" ]]; then
+                    [[ "$(cat /sys/block/${disk_name}/queue/rotational)" == "1" ]] && hdds="${hdds} ${dev}"
+                fi
+            fi
+        done
+        HDDS=${hdds}
+    fi
+fi
 HDD_ARRAY=(${HDDS})
 HDD_COUNT=${#HDD_ARRAY[@]}
 
@@ -203,7 +235,11 @@ else
 fi
 
 # Check if total user quota exceeds expected storage
-TOTAL_USER_QUOTA_GB=$((USER_QUOTA_GB * $(get_user_count)))
+if type -t get_user_count &>/dev/null; then
+    TOTAL_USER_QUOTA_GB=$((USER_QUOTA_GB * $(get_user_count)))
+else
+    TOTAL_USER_QUOTA_GB=$((USER_QUOTA_GB * $(echo ${USERS} | wc -w)))
+fi
 
 # Check if user data + snapshots (50% overhead) exceeds safe limit (80% of disk)
 # Account for BTRFS metadata overhead (5%)
@@ -221,9 +257,15 @@ else
 fi
 
 # Check UID range
-MAX_UID=$((FIRST_UID + $(get_user_count) - 1))
+if type -t get_user_count &>/dev/null; then
+    MAX_UID=$((FIRST_UID + $(get_user_count) - 1))
+    USER_CT=$(get_user_count)
+else
+    USER_CT=$(echo ${USERS} | wc -w)
+    MAX_UID=$((FIRST_UID + ${USER_CT} - 1))
+fi
 if [[ ${MAX_UID} -gt 60000 ]]; then
-    echo "  ✗ ERROR: UID range will exceed 60000 (FIRST_UID: ${FIRST_UID}, users: $(get_user_count), max UID: ${MAX_UID})"
+    echo "  ✗ ERROR: UID range will exceed 60000 (FIRST_UID: ${FIRST_UID}, users: ${USER_CT}, max UID: ${MAX_UID})"
     echo "    Reduce FIRST_UID or number of users"
     ((ERRORS++))
 else
@@ -231,7 +273,11 @@ else
 fi
 
 # Check port ranges
-MAX_USERS=$(get_user_count)
+if type -t get_user_count &>/dev/null; then
+    MAX_USERS=$(get_user_count)
+else
+    MAX_USERS=$(echo ${USERS} | wc -w)
+fi
 SSH_BASE_PORT=${SSH_BASE_PORT:-2222}  # Default: 2222
 VNC_BASE_PORT=${VNC_BASE_PORT:-5900}  # Default: 5900
 RDP_BASE_PORT=${RDP_BASE_PORT:-3389}  # Default: 3389
@@ -240,6 +286,22 @@ MAX_SSH_PORT=$((SSH_BASE_PORT + MAX_USERS))
 MAX_VNC_PORT=$((VNC_BASE_PORT + MAX_USERS))
 MAX_RDP_PORT=$((RDP_BASE_PORT + MAX_USERS))
 MAX_NOVNC_PORT=$((NOVNC_BASE_PORT + MAX_USERS))
+
+# Validate port ranges don't exceed 65535
+for port_range in "SSH:${SSH_BASE_PORT}:${MAX_SSH_PORT}" \
+                   "VNC:${VNC_BASE_PORT}:${MAX_VNC_PORT}" \
+                   "RDP:${RDP_BASE_PORT}:${MAX_RDP_PORT}" \
+                   "noVNC:${NOVNC_BASE_PORT}:${MAX_NOVNC_PORT}"; do
+    NAME=$(echo ${port_range} | cut -d: -f1)
+    BASE=$(echo ${port_range} | cut -d: -f2)
+    MAX=$(echo ${port_range} | cut -d: -f3)
+
+    if [[ ${MAX} -gt 65535 ]]; then
+        echo "  ✗ ERROR: ${NAME} port range exceeds maximum (${MAX} > 65535)"
+        echo "    Reduce number of users or change base port"
+        ((ERRORS++))
+    fi
+done
 
 echo "  ✓ Port ranges: SSH ${SSH_BASE_PORT}-${MAX_SSH_PORT}, VNC ${VNC_BASE_PORT}-${MAX_VNC_PORT}, RDP ${RDP_BASE_PORT}-${MAX_RDP_PORT}, noVNC ${NOVNC_BASE_PORT}-${MAX_NOVNC_PORT}"
 

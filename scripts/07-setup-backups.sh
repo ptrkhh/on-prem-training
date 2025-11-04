@@ -50,6 +50,18 @@ fi
 
 echo "✓ rclone remote '${REMOTE_NAME}' configuration found"
 
+# Check network connectivity
+echo "Checking network connectivity..."
+if ping -c 1 -W 5 8.8.8.8 &>/dev/null || \
+   ping -c 1 -W 5 1.1.1.1 &>/dev/null || \
+   getent hosts google.com &>/dev/null; then
+    echo "✓ Network connectivity verified"
+else
+    echo "ERROR: No network connectivity"
+    echo "Please check your internet connection and try again"
+    exit 1
+fi
+
 # Verify rclone config works by testing connectivity
 echo "Testing remote storage connectivity..."
 if ! rclone lsd ${REMOTE_NAME}: --max-depth 1 &>/dev/null; then
@@ -137,9 +149,16 @@ fi
 # Initialize repository
 if ! restic -r ${RESTIC_REPOSITORY} snapshots &>/dev/null; then
     echo "Initializing Restic repository..."
-    if ! restic -r ${RESTIC_REPOSITORY} init; then
+    if ! restic -r ${RESTIC_REPOSITORY} init 2>&1 | tee /tmp/restic-init-error.log; then
+        ERROR_MSG=\$(cat /tmp/restic-init-error.log)
         echo "ERROR: Failed to initialize Restic repository"
-        echo "Check remote connectivity and permissions"
+        echo "Error details: \${ERROR_MSG}"
+        echo ""
+        echo "Troubleshooting steps:"
+        echo "  1. Verify rclone remote is accessible: rclone lsd \${REMOTE_NAME}:"
+        echo "  2. Check network connectivity"
+        echo "  3. Verify credentials are valid"
+        echo "  4. Check remote storage has sufficient space"
         exit 1
     fi
     echo "Restic repository initialized successfully"
@@ -206,26 +225,25 @@ fi
 
 # Pause all workspace containers to ensure consistency
 echo "Pausing all workspace containers..."
-PAUSED_CONTAINERS=\$(docker ps --format '{{.Names}}' | grep -E 'workspace' || true)
-PAUSE_FAILURES=""
-if [[ -n "\${PAUSED_CONTAINERS}" ]]; then
-    for container in \${PAUSED_CONTAINERS}; do
-        echo "  Pausing \${container}..."
-        if ! docker pause "\${container}" 2>/dev/null; then
-            PAUSE_FAILURES="\${PAUSE_FAILURES} \${container}"
-            echo "    WARNING: Failed to pause \${container}"
-        fi
-    done
-fi
+PAUSED_CONTAINERS=()
+FAILED_CONTAINERS=()
 
-if [[ -n "\${PAUSE_FAILURES}" ]]; then
-    echo "ERROR: Failed to pause containers:\${PAUSE_FAILURES}"
+for container in \$(docker ps --format '{{.Names}}' | grep -E 'workspace'); do
+    echo "  Pausing \${container}..."
+    if docker pause "\${container}" 2>/dev/null; then
+        PAUSED_CONTAINERS+=("\${container}")
+    else
+        FAILED_CONTAINERS+=("\${container}")
+        echo "    WARNING: Failed to pause \${container}"
+    fi
+done
+
+if [[ \${#FAILED_CONTAINERS[@]} -gt 0 ]]; then
+    echo "ERROR: Failed to pause containers: \${FAILED_CONTAINERS[*]}"
     echo "Cannot proceed with backup - inconsistent state may cause data corruption"
     echo "Unpausing containers that were successfully paused..."
-    for container in \${PAUSED_CONTAINERS}; do
-        if ! echo "\${PAUSE_FAILURES}" | grep -q "\${container}"; then
-            docker unpause "\${container}" 2>/dev/null || true
-        fi
+    for container in "\${PAUSED_CONTAINERS[@]}"; do
+        docker unpause "\${container}" 2>/dev/null || true
     done
     exit 1
 fi
@@ -246,9 +264,9 @@ if [[ -n "\${MISSING_DIRS}" ]]; then
     echo "ERROR: Cannot proceed with backup - missing required directories:"
     echo "\${MISSING_DIRS}"
     # Resume containers before exiting
-    if [[ -n "\${PAUSED_CONTAINERS}" ]]; then
+    if [[ \${#PAUSED_CONTAINERS[@]} -gt 0 ]]; then
         echo "Resuming containers..."
-        for container in \${PAUSED_CONTAINERS}; do
+        for container in "\${PAUSED_CONTAINERS[@]}"; do
             docker unpause "\${container}" || true
         done
     fi
@@ -279,8 +297,8 @@ fi
 
 # Resume Docker containers
 echo "Resuming Docker containers..."
-if [[ -n "\${PAUSED_CONTAINERS}" ]]; then
-    for container in \${PAUSED_CONTAINERS}; do
+if [[ \${#PAUSED_CONTAINERS[@]} -gt 0 ]]; then
+    for container in "\${PAUSED_CONTAINERS[@]}"; do
         docker unpause "\${container}" || true
     done
 fi
@@ -300,10 +318,21 @@ fi
 # Send healthcheck ping
 if [[ -f /root/.healthchecks-url ]]; then
     HEALTHCHECK_URL=\$(cat /root/.healthchecks-url)
-    if [[ "\${BACKUP_STATUS}" == "success" ]]; then
-        curl -fsS -m 10 --retry 5 "\${HEALTHCHECK_URL}" > /dev/null || true
+
+    # Validate URL format
+    if [[ ! "\${HEALTHCHECK_URL}" =~ ^https?:// ]]; then
+        echo "WARNING: Invalid healthcheck URL format: \${HEALTHCHECK_URL}"
+        echo "Skipping healthcheck ping"
     else
-        curl -fsS -m 10 --retry 5 "\${HEALTHCHECK_URL}/fail" > /dev/null || true
+        if [[ "\${BACKUP_STATUS}" == "success" ]]; then
+            if ! curl -fsS -m 10 --retry 5 "\${HEALTHCHECK_URL}" > /dev/null 2>&1; then
+                echo "WARNING: Failed to send healthcheck ping to \${HEALTHCHECK_URL}"
+            fi
+        else
+            if ! curl -fsS -m 10 --retry 5 "\${HEALTHCHECK_URL}/fail" > /dev/null 2>&1; then
+                echo "WARNING: Failed to send healthcheck ping to \${HEALTHCHECK_URL}/fail"
+            fi
+        fi
     fi
 fi
 

@@ -18,6 +18,47 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Validate critical passwords are not default
+echo "=== Validating Passwords ==="
+ERRORS=0
+if [[ "${GRAFANA_ADMIN_PASSWORD:-admin}" == "admin" ]]; then
+    echo "ERROR: GRAFANA_ADMIN_PASSWORD is still set to default 'admin'"
+    ((ERRORS++))
+fi
+
+if [[ "${GUACAMOLE_DB_PASSWORD:-guacamole_password}" == "guacamole_password" ]]; then
+    echo "ERROR: GUACAMOLE_DB_PASSWORD is still set to default"
+    ((ERRORS++))
+fi
+
+if [[ ${ERRORS} -gt 0 ]]; then
+    echo ""
+    echo "Please update passwords in config.sh or .env before generating docker-compose.yml"
+    exit 1
+fi
+echo "✓ Password validation passed"
+echo ""
+
+# Check Prometheus config exists
+if [[ ! -f "${SCRIPT_DIR}/prometheus/prometheus.yml" ]]; then
+    echo "ERROR: Prometheus config not found: ${SCRIPT_DIR}/prometheus/prometheus.yml"
+    echo "This file is required for monitoring."
+    echo ""
+    echo "Create it with:"
+    echo "  mkdir -p ${SCRIPT_DIR}/prometheus"
+    echo "  cat > ${SCRIPT_DIR}/prometheus/prometheus.yml <<'EOF'"
+    echo "global:"
+    echo "  scrape_interval: 15s"
+    echo "scrape_configs:"
+    echo "  - job_name: 'node'"
+    echo "    static_configs:"
+    echo "      - targets: ['node-exporter:9100']"
+    echo "EOF"
+    exit 1
+fi
+echo "✓ Prometheus configuration found"
+echo ""
+
 # Auto-generate .env file from config.sh
 GENERATE_ENV_SCRIPT="${SCRIPT_DIR}/../scripts/generate-env.sh"
 if [[ -f "${GENERATE_ENV_SCRIPT}" ]]; then
@@ -607,13 +648,6 @@ echo "  - Faster pip installs (10-50x for cached wheels)"
 echo "  - Faster Docker builds (shared build cache)"
 echo "  - Reduced bandwidth (no redundant downloads)"
 echo ""
-
-# Validate prometheus config
-if [[ ! -f "${SCRIPT_DIR}/prometheus/prometheus.yml" ]]; then
-    echo "ERROR: Prometheus config not found: ${SCRIPT_DIR}/prometheus/prometheus.yml"
-    echo "Prometheus is required for monitoring. Create this file before continuing."
-    exit 1
-fi
 
 # Validate generated docker-compose.yml
 if command -v docker &>/dev/null; then

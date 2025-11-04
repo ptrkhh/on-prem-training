@@ -119,6 +119,11 @@ if [[ -n "${LOCAL_NETWORK_CIDR:-}" ]]; then
 else
     if validate_yes_no "Allow local network access?"; then
         read -p "Enter local network CIDR (e.g., 192.168.1.0/24): " local_cidr
+        # Validate CIDR format
+        if [[ ! "${local_cidr}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+            echo "ERROR: Invalid CIDR format"
+            exit 1
+        fi
         ufw allow from ${local_cidr} comment 'Local network'
     fi
 fi
@@ -149,12 +154,13 @@ else
 fi
 
 # Test HTTP (Docker services) - use curl as primary method since it's more reliable
-if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://localhost:80 >/dev/null 2>&1; then
-    echo "✓ HTTP port 80 is accessible"
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://localhost:80 2>&1)
+if [[ "${HTTP_CODE}" =~ ^[0-9]+$ ]] && [[ ${HTTP_CODE} -lt 600 ]]; then
+    echo "✓ HTTP port 80 is accessible (HTTP ${HTTP_CODE})"
 elif command -v nc &>/dev/null && nc -z -w5 localhost 80 2>/dev/null; then
-    echo "✓ HTTP port 80 is accessible"
+    echo "✓ HTTP port 80 is accessible (verified via netcat)"
 else
-    echo "✗ WARNING: HTTP port 80 not accessible"
+    echo "✗ WARNING: HTTP port 80 not accessible. Curl error: ${HTTP_CODE}"
     SERVICES_OK=false
 fi
 

@@ -184,7 +184,19 @@ fi
 EOF
 
 # Update the threshold value in the generated script
-sed -i "s/TEMP_THRESHOLD=85/TEMP_THRESHOLD=${GPU_TEMP_THRESHOLD}/" ${SCRIPTS_DIR}/check-gpu-temperature.sh
+if ! sed -i "s/TEMP_THRESHOLD=85/TEMP_THRESHOLD=${GPU_TEMP_THRESHOLD}/" ${SCRIPTS_DIR}/check-gpu-temperature.sh; then
+    echo "ERROR: Failed to update GPU temperature threshold"
+    exit 1
+fi
+
+# Verify the change took effect
+if ! grep -q "TEMP_THRESHOLD=${GPU_TEMP_THRESHOLD}" ${SCRIPTS_DIR}/check-gpu-temperature.sh; then
+    echo "ERROR: Temperature threshold not properly updated in ${SCRIPTS_DIR}/check-gpu-temperature.sh"
+    echo "Expected: TEMP_THRESHOLD=${GPU_TEMP_THRESHOLD}"
+    exit 1
+fi
+
+echo "✓ GPU temperature threshold set to ${GPU_TEMP_THRESHOLD}°C"
 
 chmod +x ${SCRIPTS_DIR}/check-gpu-temperature.sh
 
@@ -365,6 +377,11 @@ if [[ -n "${TELEGRAM_BOT_TOKEN}" ]] && [[ -n "${TELEGRAM_CHAT_ID}" ]]; then
     ${SCRIPTS_DIR}/send-telegram-alert.sh "success" "Monitoring setup complete on ML Training Server"
 else
     read -p "Do you want to configure Telegram alerts? (y/n): " setup_telegram
+    # Validate y/n input
+    if [[ ! "${setup_telegram}" =~ ^[yn]$ ]]; then
+        echo "ERROR: Invalid input. Please enter 'y' or 'n'"
+        exit 1
+    fi
 
     if [[ "$setup_telegram" == "y" ]]; then
         echo ""
@@ -376,7 +393,19 @@ else
         echo "5. Start a chat with your bot (search for it by name)"
         echo ""
         read -p "Bot Token: " telegram_bot_token
+        # Validate bot token format (should be numbers:alphanumeric)
+        if [[ ! "${telegram_bot_token}" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; then
+            echo "ERROR: Invalid Telegram bot token format"
+            echo "Expected format: 123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+            exit 1
+        fi
+
         read -p "Chat ID: " telegram_chat_id
+        # Validate chat ID is numeric (can be negative for group chats)
+        if [[ ! "${telegram_chat_id}" =~ ^-?[0-9]+$ ]]; then
+            echo "ERROR: Invalid Chat ID. Must be numeric (e.g., 123456789 or -123456789)"
+            exit 1
+        fi
 
         echo "${telegram_bot_token}" > /root/.telegram-bot-token
         echo "${telegram_chat_id}" > /root/.telegram-chat-id
@@ -438,6 +467,11 @@ echo "Monitoring cron jobs configured"
 # Step 5: Configure UPS monitoring (if applicable)
 echo ""
 read -p "Do you have a UPS connected via USB? (y/n): " has_ups
+# Validate y/n input
+if [[ ! "${has_ups}" =~ ^[yn]$ ]]; then
+    echo "ERROR: Invalid input. Please enter 'y' or 'n'"
+    exit 1
+fi
 
 if [[ "$has_ups" == "y" ]]; then
     echo "Installing NUT (Network UPS Tools)..."
