@@ -240,8 +240,8 @@ GDRIVE_CHUNK_SIZE="256M"
 # Files smaller than this are uploaded in one request
 GDRIVE_UPLOAD_CUTOFF="256M"
 
-# Number of parallel transfers and checkers
-GDRIVE_TRANSFERS=8
+# Number of parallel transfers and checkers (increased for better performance)
+GDRIVE_TRANSFERS=16  # Increased from 8 to 16 for faster sync
 GDRIVE_CHECKERS=16
 
 # Logging
@@ -329,9 +329,6 @@ ENABLE_GPU_TIMESLICING=true
 # Example: CUDA_VERSION="12.4.1"
 CUDA_VERSION=""
 
-# Enable automatic security updates (unattended-upgrades)
-ENABLE_AUTO_UPDATES=true
-
 # Docker Compose project name (prefix for all containers)
 COMPOSE_PROJECT_NAME="ml-train-server"
 
@@ -407,5 +404,5 @@ export GRAFANA_ADMIN_PASSWORD GUACAMOLE_DB_PASSWORD GPU_TEMP_THRESHOLD FS_USAGE_
 export TRAEFIK_PORT NETDATA_PORT PROMETHEUS_PORT GRAFANA_PORT PORTAINER_PORT
 export FILEBROWSER_PORT DOZZLE_PORT TENSORBOARD_PORT SSH_BASE_PORT
 export VNC_BASE_PORT RDP_BASE_PORT NOVNC_BASE_PORT GUACAMOLE_PORT KASM_PORT
-export ENABLE_AUDITD ENABLE_UPS_MONITORING ENABLE_GPU_TIMESLICING ENABLE_AUTO_UPDATES CUDA_VERSION
+export ENABLE_AUDITD ENABLE_UPS_MONITORING ENABLE_GPU_TIMESLICING CUDA_VERSION
 export COMPOSE_PROJECT_NAME

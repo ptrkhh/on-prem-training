@@ -162,6 +162,53 @@ case "${BTRFS_RAID_LEVEL}" in
         ;;
 esac
 
+# Pre-check: Verify sufficient disk space before destructive operations
+echo ""
+echo "=== Pre-flight Disk Space Check ==="
+TOTAL_SPACE_REQUIRED_GB=10  # Minimum space needed for OS partition and setup
+
+if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
+    # Check NVMe has enough space
+    NVME_SIZE_GB=$(lsblk -bndo SIZE ${NVME_DEVICE} 2>/dev/null | awk '{print int($1/1024/1024/1024)}' || echo "0")
+    REQUIRED_SIZE=$((OS_PARTITION_SIZE_GB + 50))  # OS partition + minimum 50GB for storage
+
+    if [[ ${NVME_SIZE_GB} -lt ${REQUIRED_SIZE} ]]; then
+        echo "ERROR: Insufficient disk space on ${NVME_DEVICE}"
+        echo "  Available: ${NVME_SIZE_GB}GB"
+        echo "  Required: ${REQUIRED_SIZE}GB (${OS_PARTITION_SIZE_GB}GB OS + 50GB minimum storage)"
+        exit 1
+    fi
+    echo "✓ ${NVME_DEVICE}: ${NVME_SIZE_GB}GB available"
+elif [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
+    # Check NVMe has enough space for OS and bcache
+    NVME_SIZE_GB=$(lsblk -bndo SIZE ${NVME_DEVICE} 2>/dev/null | awk '{print int($1/1024/1024/1024)}' || echo "0")
+    REQUIRED_SIZE=$((OS_PARTITION_SIZE_GB + 20))  # OS partition + minimum 20GB for bcache
+
+    if [[ ${NVME_SIZE_GB} -lt ${REQUIRED_SIZE} ]]; then
+        echo "ERROR: Insufficient disk space on ${NVME_DEVICE}"
+        echo "  Available: ${NVME_SIZE_GB}GB"
+        echo "  Required: ${REQUIRED_SIZE}GB (${OS_PARTITION_SIZE_GB}GB OS + 20GB minimum bcache)"
+        exit 1
+    fi
+    echo "✓ ${NVME_DEVICE}: ${NVME_SIZE_GB}GB available (${OS_PARTITION_SIZE_GB}GB OS + bcache)"
+fi
+
+# Check HDDs have sufficient space
+if [[ ${#HDD_ARRAY[@]} -gt 0 ]]; then
+    MIN_HDD_SIZE_GB=100  # Minimum 100GB per HDD for meaningful storage
+    for hdd in "${HDD_ARRAY[@]}"; do
+        HDD_SIZE_GB=$(lsblk -bndo SIZE ${hdd} 2>/dev/null | awk '{print int($1/1024/1024/1024)}' || echo "0")
+        if [[ ${HDD_SIZE_GB} -lt ${MIN_HDD_SIZE_GB} ]]; then
+            echo "ERROR: HDD ${hdd} is too small: ${HDD_SIZE_GB}GB (minimum: ${MIN_HDD_SIZE_GB}GB)"
+            exit 1
+        fi
+        echo "✓ ${hdd}: ${HDD_SIZE_GB}GB available"
+    done
+fi
+
+echo "✓ Disk space pre-check passed!"
+echo ""
+
 echo ""
 echo "WARNING: This will DESTROY all data on:"
 if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then

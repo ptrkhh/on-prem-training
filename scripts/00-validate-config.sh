@@ -381,7 +381,106 @@ if ! nvidia-smi &>/dev/null; then
     echo "  ⚠ WARNING: No NVIDIA GPU detected"
     ((WARNINGS++))
 else
-    echo "  ✓ NVIDIA GPU detected"
+    GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n1)
+    GPU_MEM=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n1)
+    echo "  ✓ NVIDIA GPU detected: ${GPU_NAME} (${GPU_MEM}MB VRAM)"
+fi
+
+# System Prerequisites Check
+echo ""
+echo "Checking system prerequisites..."
+
+# Check Docker
+if ! command -v docker &>/dev/null; then
+    echo "  ✗ ERROR: Docker not installed"
+    echo "    Install Docker: https://docs.docker.com/engine/install/ubuntu/"
+    ((ERRORS++))
+else
+    DOCKER_VERSION=$(docker --version | awk '{print $3}' | sed 's/,//')
+    echo "  ✓ Docker installed: ${DOCKER_VERSION}"
+
+    # Check Docker Compose
+    if docker compose version &>/dev/null; then
+        COMPOSE_VERSION=$(docker compose version --short 2>/dev/null || echo "unknown")
+        echo "  ✓ Docker Compose v2: ${COMPOSE_VERSION}"
+    else
+        echo "  ✗ ERROR: Docker Compose v2 not available"
+        echo "    Upgrade Docker to get Compose v2"
+        ((ERRORS++))
+    fi
+
+    # Check Docker daemon is running
+    if ! docker ps &>/dev/null; then
+        echo "  ✗ ERROR: Docker daemon not running"
+        echo "    Start Docker: sudo systemctl start docker"
+        ((ERRORS++))
+    else
+        echo "  ✓ Docker daemon is running"
+    fi
+fi
+
+# Check required system commands
+REQUIRED_COMMANDS="btrfs jq curl wget git bash awk sed grep"
+MISSING_COMMANDS=()
+
+for cmd in $REQUIRED_COMMANDS; do
+    if ! command -v "$cmd" &>/dev/null; then
+        MISSING_COMMANDS+=("$cmd")
+    fi
+done
+
+if [[ ${#MISSING_COMMANDS[@]} -gt 0 ]]; then
+    echo "  ✗ ERROR: Missing required commands: ${MISSING_COMMANDS[*]}"
+    echo "    Install with: apt install btrfs-progs jq curl wget git"
+    ((ERRORS++))
+else
+    echo "  ✓ All required commands available"
+fi
+
+# Check system memory
+TOTAL_MEM_GB=$(free -g | awk '/^Mem:/{print $2}')
+MIN_MEM_GB=32
+
+if [[ ${TOTAL_MEM_GB} -lt ${MIN_MEM_GB} ]]; then
+    echo "  ⚠ WARNING: Low system memory: ${TOTAL_MEM_GB}GB (recommended: ${MIN_MEM_GB}GB+)"
+    echo "    System may struggle with multiple user containers"
+    ((WARNINGS++))
+else
+    echo "  ✓ System memory: ${TOTAL_MEM_GB}GB"
+fi
+
+# Check disk I/O scheduler (for SSD/NVMe performance)
+if [[ -n "${NVME_DEVICE}" ]] && [[ -b "${NVME_DEVICE}" ]]; then
+    DEVICE_NAME=$(basename "${NVME_DEVICE}")
+    if [[ -f "/sys/block/${DEVICE_NAME}/queue/scheduler" ]]; then
+        SCHEDULER=$(cat "/sys/block/${DEVICE_NAME}/queue/scheduler" | grep -o '\[.*\]' | tr -d '[]')
+        if [[ "${SCHEDULER}" == "none" ]] || [[ "${SCHEDULER}" == "noop" ]] || [[ "${SCHEDULER}" == "mq-deadline" ]]; then
+            echo "  ✓ Disk scheduler for ${NVME_DEVICE}: ${SCHEDULER} (good for SSD/NVMe)"
+        else
+            echo "  ⚠ WARNING: Disk scheduler for ${NVME_DEVICE}: ${SCHEDULER}"
+            echo "    Recommended for SSD/NVMe: none, noop, or mq-deadline"
+            echo "    Change with: echo noop | sudo tee /sys/block/${DEVICE_NAME}/queue/scheduler"
+            ((WARNINGS++))
+        fi
+    fi
+fi
+
+# Check network bandwidth (if possible)
+if command -v ethtool &>/dev/null; then
+    # Get primary network interface
+    PRIMARY_IF=$(ip route | grep default | awk '{print $5}' | head -n1)
+    if [[ -n "${PRIMARY_IF}" ]]; then
+        LINK_SPEED=$(ethtool "${PRIMARY_IF}" 2>/dev/null | grep "Speed:" | awk '{print $2}')
+        if [[ -n "${LINK_SPEED}" ]]; then
+            echo "  ✓ Network interface ${PRIMARY_IF}: ${LINK_SPEED}"
+
+            # Warn if less than 1Gbps
+            if [[ "${LINK_SPEED}" != *"10000"* ]] && [[ "${LINK_SPEED}" != *"1000"* ]]; then
+                echo "    ⚠ WARNING: Network speed may be slow for multi-user ML training"
+                ((WARNINGS++))
+            fi
+        fi
+    fi
 fi
 
 # Check rclone remotes if configured

@@ -245,41 +245,32 @@ if [[ -n "\${MISSING_DIRS}" ]]; then
 fi
 echo "All backup directories verified"
 
-# Pause all workspace containers to ensure consistency
-echo "Pausing all workspace containers..."
-PAUSED_CONTAINERS=()
-FAILED_CONTAINERS=()
+# Create BTRFS snapshot for consistent backup (read-only snapshot, no service interruption)
+echo "Creating BTRFS snapshot for backup..."
+SNAPSHOT_DIR="\${MOUNT_POINT}/snapshots"
+SNAPSHOT_NAME="backup_\$(date +%Y%m%d_%H%M%S)"
+SNAPSHOT_PATH="\${SNAPSHOT_DIR}/\${SNAPSHOT_NAME}"
 
-for container in \$(docker ps --format '{{.Names}}' | grep -E 'workspace'); do
-    echo "  Pausing \${container}..."
-    if docker pause "\${container}" 2>/dev/null; then
-        PAUSED_CONTAINERS+=("\${container}")
-    else
-        FAILED_CONTAINERS+=("\${container}")
-        echo "    WARNING: Failed to pause \${container}"
+if ! btrfs subvolume snapshot -r "\${MOUNT_POINT}" "\${SNAPSHOT_PATH}"; then
+    echo "ERROR: Failed to create BTRFS snapshot!"
+    if [[ -x "\${ALERT_SCRIPT}" ]]; then
+        "\${ALERT_SCRIPT}" "critical" "Backup failed: Could not create BTRFS snapshot"
     fi
-done
-
-if [[ \${#FAILED_CONTAINERS[@]} -gt 0 ]]; then
-    echo "ERROR: Failed to pause containers: \${FAILED_CONTAINERS[*]}"
-    echo "Cannot proceed with backup - inconsistent state may cause data corruption"
-    echo "Unpausing containers that were successfully paused..."
-    for container in "\${PAUSED_CONTAINERS[@]}"; do
-        docker unpause "\${container}" 2>/dev/null || true
-    done
     exit 1
 fi
+echo "Created snapshot: \${SNAPSHOT_NAME}"
 
-# Run backup with bandwidth limit
+# Run backup from snapshot (no need to pause containers)
+# Backup runs from read-only snapshot, containers continue running normally
 BANDWIDTH_LIMIT_KBPS=\$((${BACKUP_BANDWIDTH_LIMIT_MBPS} * 1000 / 8))
-echo "Running backup (${BACKUP_BANDWIDTH_LIMIT_MBPS} Mbps limit)..."
+echo "Running backup from snapshot (${BACKUP_BANDWIDTH_LIMIT_MBPS} Mbps limit)..."
 if restic -r \${RESTIC_REPOSITORY} backup \
     --verbose \
     --tag daily \
     --limit-upload \${BANDWIDTH_LIMIT_KBPS} \
-    \${MOUNT_POINT}/homes \
-    \${MOUNT_POINT}/docker-volumes \
-    \${MOUNT_POINT}/shared/tensorboard; then
+    \${SNAPSHOT_PATH}/homes \
+    \${SNAPSHOT_PATH}/docker-volumes \
+    \${SNAPSHOT_PATH}/shared/tensorboard; then
 
     echo "Backup completed successfully"
     BACKUP_STATUS="success"
@@ -288,13 +279,9 @@ else
     BACKUP_STATUS="failed"
 fi
 
-# Resume Docker containers
-echo "Resuming Docker containers..."
-if [[ \${#PAUSED_CONTAINERS[@]} -gt 0 ]]; then
-    for container in "\${PAUSED_CONTAINERS[@]}"; do
-        docker unpause "\${container}" || true
-    done
-fi
+# Cleanup backup snapshot (free space after backup)
+echo "Cleaning up backup snapshot..."
+btrfs subvolume delete "\${SNAPSHOT_PATH}" || echo "WARNING: Failed to delete snapshot, manual cleanup may be needed"
 
 # Cleanup old backups (keep 7 daily, 52 weekly)
 echo "Pruning old backups..."
@@ -303,9 +290,25 @@ restic -r \${RESTIC_REPOSITORY} forget \
     --keep-weekly 52 \
     --prune
 
-# Send alert if backup failed
-if [[ "\${BACKUP_STATUS}" == "failed" ]] && [[ -x "\${ALERT_SCRIPT}" ]]; then
-    \${ALERT_SCRIPT} "critical" "Restic backup failed! Check \${LOG_FILE}"
+# Run integrity check after backup (quick check, runs in seconds)
+echo "Running backup integrity check..."
+if restic -r \${RESTIC_REPOSITORY} check --read-data-subset=5%; then
+    echo "Backup integrity check passed"
+else
+    echo "WARNING: Backup integrity check failed!"
+    BACKUP_STATUS="failed"
+fi
+
+# Send alert based on backup status
+if [[ "\${BACKUP_STATUS}" == "failed" ]]; then
+    if [[ -x "\${ALERT_SCRIPT}" ]]; then
+        \${ALERT_SCRIPT} "critical" "Restic backup failed! Check \${LOG_FILE}"
+    fi
+else
+    # Send success notification (dead man's switch pattern)
+    if [[ -x "\${ALERT_SCRIPT}" ]]; then
+        \${ALERT_SCRIPT} "success" "Restic backup completed successfully"
+    fi
 fi
 
 # Send healthcheck ping
@@ -410,6 +413,69 @@ echo ""
 echo "=== Step 3: Initializing Restic repository ==="
 ${SCRIPTS_DIR}/init-restic.sh
 
+# Step 3.5: Validate backup retention policy against available storage
+echo ""
+echo "=== Validating Backup Retention Policy ==="
+
+# Calculate estimated backup storage requirements
+# Retention: 7 daily + 52 weekly backups
+DAILY_RETENTION=7
+WEEKLY_RETENTION=52
+TOTAL_SNAPSHOTS=$((DAILY_RETENTION + WEEKLY_RETENTION))
+
+# Estimate backup size (assume compressed size is 30% of uncompressed)
+# Include homes, docker-volumes, and shared/tensorboard
+BACKUP_DIRS="${MOUNT_POINT}/homes ${MOUNT_POINT}/docker-volumes ${MOUNT_POINT}/shared/tensorboard"
+TOTAL_SIZE_GB=0
+
+for dir in ${BACKUP_DIRS}; do
+    if [[ -d "${dir}" ]]; then
+        DIR_SIZE_GB=$(du -sb "${dir}" 2>/dev/null | awk '{print int($1/1024/1024/1024)}')
+        TOTAL_SIZE_GB=$((TOTAL_SIZE_GB + DIR_SIZE_GB))
+    fi
+done
+
+echo "Current backup source size: ${TOTAL_SIZE_GB}GB"
+
+# Account for compression (30% of original) and deduplication (save ~20%)
+COMPRESSED_SIZE=$(awk "BEGIN {printf \"%.0f\", ${TOTAL_SIZE_GB} * 0.3}")
+WITH_DEDUP=$(awk "BEGIN {printf \"%.0f\", ${COMPRESSED_SIZE} * 0.8}")
+
+# Estimate total storage with retention (daily snapshots + weekly)
+# Daily snapshots: mostly incremental (assume 10% change per day)
+# Weekly snapshots: more significant (assume full backup equivalent)
+DAILY_INCREMENTAL=$(awk "BEGIN {printf \"%.0f\", ${WITH_DEDUP} * 0.1 * ${DAILY_RETENTION}}")
+WEEKLY_FULL=$(awk "BEGIN {printf \"%.0f\", ${WITH_DEDUP} * ${WEEKLY_RETENTION}}")
+ESTIMATED_TOTAL=$((DAILY_INCREMENTAL + WEEKLY_FULL))
+
+echo ""
+echo "Backup retention policy:"
+echo "  Daily snapshots: ${DAILY_RETENTION} (at 6 AM)"
+echo "  Weekly snapshots: ${WEEKLY_RETENTION} (Sunday 3 AM)"
+echo ""
+echo "Estimated storage requirements:"
+echo "  Base backup size: ${WITH_DEDUP}GB (compressed + deduplicated)"
+echo "  Daily incrementals: ${DAILY_INCREMENTAL}GB (${DAILY_RETENTION} days)"
+echo "  Weekly fulls: ${WEEKLY_FULL}GB (${WEEKLY_RETENTION} weeks)"
+echo "  Total estimated: ${ESTIMATED_TOTAL}GB"
+echo ""
+
+# Warn if retention might be excessive
+MOUNT_SIZE_GB=$(df -BG "${MOUNT_POINT}" | tail -1 | awk '{print $2}' | sed 's/G//')
+RETENTION_PERCENT=$(awk "BEGIN {printf \"%.0f\", ${ESTIMATED_TOTAL} * 100.0 / ${MOUNT_SIZE_GB}}")
+
+if [[ ${RETENTION_PERCENT} -gt 50 ]]; then
+    echo "⚠️  WARNING: Backup retention may consume ${RETENTION_PERCENT}% of local storage!"
+    echo "   Consider:"
+    echo "   - Reducing retention periods"
+    echo "   - Using remote-only backups (S3, Google Drive)"
+    echo "   - Increasing storage capacity"
+    echo ""
+fi
+
+echo "✓ Backup retention validation complete"
+echo ""
+
 # Step 4: Setup cron jobs
 echo ""
 echo "=== Step 4: Setting up cron jobs ==="
@@ -474,8 +540,9 @@ echo ""
 echo "Restic password: /root/.restic-password"
 echo ""
 echo "=========================================="
-echo "IMPORTANT: Restic password is: $(cat /root/.restic-password)"
+echo "IMPORTANT: Restic password is stored in /root/.restic-password"
 echo "Store this securely - it's required to restore backups!"
+echo "To view: cat /root/.restic-password"
 echo "=========================================="
 echo ""
 echo "Manual commands:"

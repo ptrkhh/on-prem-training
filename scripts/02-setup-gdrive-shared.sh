@@ -357,9 +357,10 @@ if [[ -d "\${CACHE_DIR}" ]]; then
     CACHE_SIZE=\$(du -sh "\${CACHE_DIR}" | awk '{print \$1}')
     echo "Current size: \${CACHE_SIZE}"
 
-    # File count
-    FILE_COUNT=\$(find "\${CACHE_DIR}" -type f 2>/dev/null | wc -l)
-    echo "Cached files: \${FILE_COUNT}"
+    # File count (limited depth to avoid slow traversal on large caches)
+    # Only count files in top 3 levels to avoid performance issues with millions of files
+    FILE_COUNT=\$(find "\${CACHE_DIR}" -maxdepth 3 -type f 2>/dev/null | wc -l)
+    echo "Cached files (top 3 levels): \${FILE_COUNT}+"
 
     # Disk usage
     echo ""

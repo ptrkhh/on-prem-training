@@ -376,36 +376,59 @@ chown -R ${USER_NAME}:${USER_NAME} /home/${USER_NAME}
 mkdir -p /run/dbus
 dbus-daemon --system --fork
 
-# Verify DBUS is running with proper socket check
+# Verify DBUS is running with proper socket check (increased timeout for slow systems)
 echo "Waiting for DBUS socket..."
 DBUS_SOCKET="/var/run/dbus/system_bus_socket"
-MAX_ATTEMPTS=30
+MAX_ATTEMPTS=60  # Increased from 30 to 60 seconds for slower systems
 SLEEP_TIME=1
+RETRY_COUNT=3
 
-for i in $(seq 1 ${MAX_ATTEMPTS}); do
-    if [[ -S "${DBUS_SOCKET}" ]]; then
-        echo "DBUS started successfully (socket ready after ${i} attempts)"
-        break
+for attempt in $(seq 1 ${RETRY_COUNT}); do
+    echo "  Attempt ${attempt}/${RETRY_COUNT}..."
+
+    for i in $(seq 1 ${MAX_ATTEMPTS}); do
+        if [[ -S "${DBUS_SOCKET}" ]]; then
+            echo "DBUS started successfully (socket ready after ${i} seconds, attempt ${attempt})"
+            break 2
+        fi
+
+        # Check if DBUS process is still running
+        if [[ $i -eq 10 ]] || [[ $i -eq 30 ]]; then
+            if ! pgrep -x dbus-daemon > /dev/null; then
+                echo "  WARNING: DBUS daemon process not found, attempting restart..."
+                dbus-daemon --system --fork || true
+            fi
+        fi
+
+        sleep ${SLEEP_TIME}
+    done
+
+    # If we reached max attempts, try restarting DBUS
+    if [[ $attempt -lt ${RETRY_COUNT} ]]; then
+        echo "  Timeout reached, restarting DBUS (attempt ${attempt}/${RETRY_COUNT})..."
+        pkill -x dbus-daemon || true
+        sleep 2
+        dbus-daemon --system --fork
+        sleep 2
     fi
-
-    if [[ $i -eq ${MAX_ATTEMPTS} ]]; then
-        echo "ERROR: DBUS socket not available after ${MAX_ATTEMPTS} attempts (${MAX_ATTEMPTS}s)"
-        echo "DBUS daemon may have failed to start"
-        echo ""
-        echo "Diagnostics:"
-        echo "  Socket path: ${DBUS_SOCKET}"
-        echo "  Process check:"
-        ps aux | grep dbus || true
-        echo ""
-        echo "  Directory contents:"
-        ls -la /var/run/dbus/ || true
-        echo ""
-        echo "Container may need to be restarted to fix DBUS initialization"
-        exit 1
-    fi
-
-    sleep ${SLEEP_TIME}
 done
+
+# Final check after all retries
+if [[ ! -S "${DBUS_SOCKET}" ]]; then
+    echo "ERROR: DBUS socket not available after ${RETRY_COUNT} retry attempts"
+    echo "DBUS daemon may have failed to start"
+    echo ""
+    echo "Diagnostics:"
+    echo "  Socket path: ${DBUS_SOCKET}"
+    echo "  Process check:"
+    ps aux | grep dbus || true
+    echo ""
+    echo "  Directory contents:"
+    ls -la /var/run/dbus/ || true
+    echo ""
+    echo "Container may need to be restarted to fix DBUS initialization"
+    exit 1
+fi
 
 # Print access information
 echo ""

@@ -584,8 +584,10 @@ for USERNAME in ${USER_ARRAY[@]}; do
       resources:
         limits:
           memory: ${MEMORY_LIMIT_GB:-100}G
+          cpus: '${CPU_LIMIT:-32}'  # Maximum CPU cores per container (prevents monopolization)
         reservations:
           memory: ${MEMORY_GUARANTEE_GB:-32}G
+          cpus: '${CPU_GUARANTEE:-8}'  # Guaranteed CPU cores per container
           devices:
             - driver: nvidia
               count: all
@@ -724,6 +726,8 @@ GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}
 # Resource limits
 MEMORY_LIMIT_GB=${MEMORY_LIMIT_GB:-100}
 MEMORY_GUARANTEE_GB=${MEMORY_GUARANTEE_GB:-32}
+CPU_LIMIT=${CPU_LIMIT:-32}
+CPU_GUARANTEE=${CPU_GUARANTEE:-8}
 EOF
     echo "✅ Generated: ${ENV_FILE}"
     echo "⚠️  IMPORTANT: Update passwords in .env file before deployment!"
@@ -735,7 +739,10 @@ fi
 
 echo "Next steps:"
 echo "  1. Review and update passwords in .env file"
-echo "  2. Build image: docker compose build"
+echo "  2. Build images (with parallel builds for faster execution):"
+echo "     export DOCKER_BUILDKIT=1"
+echo "     export COMPOSE_DOCKER_CLI_BUILD=1"
+echo "     docker compose build --parallel"
 echo "  3. Start services: docker compose up -d"
 echo "  4. Setup Cloudflare Tunnel (for remote access)"
 echo ""
