@@ -246,19 +246,45 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
         TOTAL_SIZE_GB=$(lsblk -bndo SIZE ${NVME_DEVICE} | awk '{print int($1/1024/1024/1024)}')
         BCACHE_SIZE_GB=$((TOTAL_SIZE_GB - OS_PARTITION_SIZE_GB))
 
-        # Create bcache partition
-        if ! parted -s "${NVME_DEVICE}" mkpart primary ${OS_PARTITION_SIZE_GB}GiB 100%; then
-            echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
-            echo ""
-            echo "Current partition table:"
-            parted -s "${NVME_DEVICE}" print || true
-            echo ""
-            echo "Recovery options:"
-            echo "  1. Check if partition already exists"
-            echo "  2. Verify disk has sufficient free space"
-            echo "  3. Run 'parted ${NVME_DEVICE}' to manually inspect/fix"
-            echo "  4. Check dmesg for disk errors: dmesg | tail -50"
-            exit 1
+        # Check if bcache partition already exists
+        if [[ -b "${BCACHE_PARTITION}" ]]; then
+            echo "Partition ${BCACHE_PARTITION} already exists."
+            read -p "Do you want to recreate it? This will DESTROY all data on this partition! (yes/no): " RECREATE_PARTITION
+            if [[ "${RECREATE_PARTITION}" != "yes" ]]; then
+                echo "Skipping partition creation. Using existing partition ${BCACHE_PARTITION}"
+            else
+                echo "Removing existing partition..."
+                # Get partition number (e.g., 3 from nvme0n1p3 or sda3)
+                PART_NUM=$(echo "${BCACHE_PARTITION}" | grep -o '[0-9]*$')
+                if ! parted -s "${NVME_DEVICE}" rm ${PART_NUM}; then
+                    echo "ERROR: Failed to remove existing partition"
+                    exit 1
+                fi
+                echo "Creating new bcache partition..."
+                if ! parted -s "${NVME_DEVICE}" mkpart primary ${OS_PARTITION_SIZE_GB}GiB 100%; then
+                    echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
+                    echo ""
+                    echo "Current partition table:"
+                    parted -s "${NVME_DEVICE}" print || true
+                    exit 1
+                fi
+            fi
+        else
+            # Create bcache partition
+            echo "Creating bcache partition..."
+            if ! parted -s "${NVME_DEVICE}" mkpart primary ${OS_PARTITION_SIZE_GB}GiB 100%; then
+                echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
+                echo ""
+                echo "Current partition table:"
+                parted -s "${NVME_DEVICE}" print || true
+                echo ""
+                echo "Recovery options:"
+                echo "  1. Check if partition already exists"
+                echo "  2. Verify disk has sufficient free space"
+                echo "  3. Run 'parted ${NVME_DEVICE}' to manually inspect/fix"
+                echo "  4. Check dmesg for disk errors: dmesg | tail -50"
+                exit 1
+            fi
         fi
 
         # Wait for partition to appear

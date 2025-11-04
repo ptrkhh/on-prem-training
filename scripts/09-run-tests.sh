@@ -94,11 +94,18 @@ BCACHE_DEVICES=($(ls -d /sys/block/bcache* 2>/dev/null || true))
 if [[ ${#BCACHE_DEVICES[@]} -gt 0 ]]; then
     # Get first bcache device name
     FIRST_BCACHE=$(basename "${BCACHE_DEVICES[0]}")
-    BCACHE_MODE=$(cat /sys/block/${FIRST_BCACHE}/bcache/cache_mode 2>/dev/null || echo "unknown")
-    if [[ "${BCACHE_MODE}" == *"writeback"* ]]; then
-        pass "bcache is in writeback mode (${FIRST_BCACHE})"
+    ACTUAL_BCACHE_MODE=$(cat /sys/block/${FIRST_BCACHE}/bcache/cache_mode 2>/dev/null || echo "unknown")
+
+    # Get configured bcache mode from config.sh (default to writeback if not set)
+    EXPECTED_BCACHE_MODE="${BCACHE_MODE:-writeback}"
+
+    # Extract the actual mode from the format "[writeback] writethrough writearound none"
+    CURRENT_MODE=$(echo "${ACTUAL_BCACHE_MODE}" | grep -o '\[.*\]' | tr -d '[]')
+
+    if [[ "${CURRENT_MODE}" == "${EXPECTED_BCACHE_MODE}" ]]; then
+        pass "bcache is in ${EXPECTED_BCACHE_MODE} mode (${FIRST_BCACHE})"
     else
-        warn "bcache mode: ${BCACHE_MODE} on ${FIRST_BCACHE} (expected: writeback)"
+        warn "bcache mode: ${CURRENT_MODE} on ${FIRST_BCACHE} (expected: ${EXPECTED_BCACHE_MODE})"
     fi
 else
     warn "bcache devices not found"

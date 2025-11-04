@@ -68,9 +68,22 @@ if ufw status &>/dev/null; then
     BACKUP_DIR="/root/ufw-backup-$(date +%Y%m%d_%H%M%S)"
     mkdir -p "${BACKUP_DIR}"
     if [[ -d /etc/ufw ]]; then
-        cp -r /etc/ufw "${BACKUP_DIR}/"
-        echo "✓ Existing UFW rules backed up to ${BACKUP_DIR}"
-        echo "  To restore: cp -r ${BACKUP_DIR}/ufw/* /etc/ufw/ && ufw reload"
+        if cp -r /etc/ufw "${BACKUP_DIR}/"; then
+            # Verify backup was created successfully
+            if [[ -d "${BACKUP_DIR}/ufw" ]] && [[ -f "${BACKUP_DIR}/ufw/ufw.conf" ]]; then
+                echo "✓ Existing UFW rules backed up to ${BACKUP_DIR}"
+                echo "  To restore: cp -r ${BACKUP_DIR}/ufw/* /etc/ufw/ && ufw reload"
+            else
+                echo "✗ ERROR: UFW backup verification failed"
+                echo "  Backup directory exists but contents are incomplete"
+                echo "  Aborting to prevent data loss"
+                exit 1
+            fi
+        else
+            echo "✗ ERROR: Failed to backup UFW rules to ${BACKUP_DIR}"
+            echo "  Cannot proceed without successful backup"
+            exit 1
+        fi
     fi
 fi
 echo ""
@@ -154,13 +167,17 @@ else
 fi
 
 # Test HTTP (Docker services) - use curl as primary method since it's more reliable
-HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://localhost:80 2>&1)
+HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 http://localhost:80 2>/dev/null)
 if [[ "${HTTP_CODE}" =~ ^[0-9]+$ ]] && [[ ${HTTP_CODE} -lt 600 ]]; then
     echo "✓ HTTP port 80 is accessible (HTTP ${HTTP_CODE})"
 elif command -v nc &>/dev/null && nc -z -w5 localhost 80 2>/dev/null; then
     echo "✓ HTTP port 80 is accessible (verified via netcat)"
 else
-    echo "✗ WARNING: HTTP port 80 not accessible. Curl error: ${HTTP_CODE}"
+    if [[ -z "${HTTP_CODE}" ]]; then
+        echo "✗ WARNING: HTTP port 80 not accessible. Curl failed (connection refused or timeout)"
+    else
+        echo "✗ WARNING: HTTP port 80 not accessible. Response: ${HTTP_CODE}"
+    fi
     SERVICES_OK=false
 fi
 

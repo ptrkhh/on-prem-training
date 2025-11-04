@@ -97,14 +97,20 @@ else
     echo ""
 fi
 
-# Auto-detect CUDA version from host
-if command -v nvidia-smi &>/dev/null; then
+# Determine CUDA version (manual override or auto-detect)
+if [[ -n "${CUDA_VERSION}" ]]; then
+    # Manual override from config.sh
+    CUDA_BUILD_VERSION="${CUDA_VERSION}"
+    echo "Using manually configured CUDA version: ${CUDA_BUILD_VERSION}"
+    echo "  (Set in config.sh CUDA_VERSION variable)"
+elif command -v nvidia-smi &>/dev/null; then
     # Query maximum supported CUDA version directly from nvidia-smi
     DETECTED_CUDA=$(nvidia-smi --query-gpu=cuda_version --format=csv,noheader | head -n1)
 
     if [[ -n "${DETECTED_CUDA}" ]]; then
         CUDA_BUILD_VERSION="${DETECTED_CUDA}"
-        echo "Detected maximum supported CUDA version: ${CUDA_BUILD_VERSION}"
+        echo "Auto-detected maximum supported CUDA version: ${CUDA_BUILD_VERSION}"
+        echo "  (Source: nvidia-smi --query-gpu=cuda_version)"
     else
         # Fallback: Query driver version
         DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n1)
@@ -112,14 +118,22 @@ if command -v nvidia-smi &>/dev/null; then
             echo "Could not detect CUDA version directly, detected driver: ${DRIVER_VERSION}"
             CUDA_BUILD_VERSION="12.4.1"
             echo "Using fallback CUDA version: ${CUDA_BUILD_VERSION}"
+            echo "  (Fallback method: driver detected, using default CUDA version)"
+            echo "  (To override, set CUDA_VERSION in config.sh)"
         else
             CUDA_BUILD_VERSION="12.4.1"
-            echo "Could not detect CUDA or driver version, defaulting to: ${CUDA_BUILD_VERSION}"
+            echo "Could not detect CUDA or driver version"
+            echo "Using default CUDA version: ${CUDA_BUILD_VERSION}"
+            echo "  (Fallback method: no NVIDIA driver found)"
+            echo "  (To override, set CUDA_VERSION in config.sh)"
         fi
     fi
 else
     CUDA_BUILD_VERSION="12.4.1"
-    echo "nvidia-smi not found, defaulting to CUDA: ${CUDA_BUILD_VERSION}"
+    echo "nvidia-smi not found"
+    echo "Using default CUDA version: ${CUDA_BUILD_VERSION}"
+    echo "  (Fallback method: nvidia-smi command not available)"
+    echo "  (To override, set CUDA_VERSION in config.sh)"
 fi
 
 # Validate required configuration

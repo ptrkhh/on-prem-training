@@ -87,9 +87,22 @@ echo ""
 # Generate Cloudflare Tunnel configuration (idempotent - regenerate entire file)
 # Backup existing config if present
 if [[ -f /root/.cloudflared/config.yml ]]; then
-    echo "Backing up existing configuration..."
-    cp /root/.cloudflared/config.yml /root/.cloudflared/config.yml.backup.$(date +%Y%m%d_%H%M%S)
+    echo "Existing Cloudflare Tunnel configuration found."
+    echo "This script will completely regenerate config.yml, which will overwrite any manual customizations."
+    read -p "Do you want to proceed? (yes/no): " OVERWRITE_CONFIG
+    if [[ "${OVERWRITE_CONFIG}" != "yes" ]]; then
+        echo "Skipping configuration generation. Using existing config.yml"
+        echo "To manually update, edit: /root/.cloudflared/config.yml"
+    else
+        echo "Backing up existing configuration..."
+        cp /root/.cloudflared/config.yml /root/.cloudflared/config.yml.backup.$(date +%Y%m%d_%H%M%S)
+        REGENERATE_CONFIG=true
+    fi
+else
+    REGENERATE_CONFIG=true
 fi
+
+if [[ "${REGENERATE_CONFIG}" == "true" ]]; then
 
 # Build the configuration file completely
 CONFIG_CONTENT="tunnel: ${TUNNEL_ID}
@@ -160,6 +173,7 @@ CONFIG_CONTENT="${CONFIG_CONTENT}
 echo "${CONFIG_CONTENT}" > /root/.cloudflared/config.yml
 
 echo "Tunnel configuration created"
+fi
 
 # Step 4: Route DNS to tunnel
 echo ""
@@ -183,9 +197,12 @@ check_dns_route() {
 }
 
 # Check if route already exists (idempotent)
-if check_dns_route "*.${DOMAIN}"; then
+check_dns_route "*.${DOMAIN}"
+ROUTE_CHECK_RESULT=$?
+
+if [[ ${ROUTE_CHECK_RESULT} -eq 0 ]]; then
     echo "DNS route for *.${DOMAIN} already exists, skipping..."
-else
+elif [[ ${ROUTE_CHECK_RESULT} -eq 1 ]]; then
     echo "Creating DNS route for *.${DOMAIN}..."
     if cloudflared tunnel route dns ${TUNNEL_NAME} "*.${DOMAIN}"; then
         echo "✓ DNS route created for *.${DOMAIN}"
@@ -193,6 +210,9 @@ else
         echo "ERROR: Failed to create DNS route"
         exit 1
     fi
+elif [[ ${ROUTE_CHECK_RESULT} -eq 2 ]]; then
+    echo "ERROR: Failed to check DNS routes. Cannot proceed."
+    exit 1
 fi
 
 # Step 5: Install as service

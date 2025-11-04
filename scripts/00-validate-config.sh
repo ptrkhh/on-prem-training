@@ -305,6 +305,31 @@ done
 
 echo "  ✓ Port ranges: SSH ${SSH_BASE_PORT}-${MAX_SSH_PORT}, VNC ${VNC_BASE_PORT}-${MAX_VNC_PORT}, RDP ${RDP_BASE_PORT}-${MAX_RDP_PORT}, noVNC ${NOVNC_BASE_PORT}-${MAX_NOVNC_PORT}"
 
+# Check for port conflicts
+echo ""
+echo "Checking for port conflicts..."
+PORTS_TO_CHECK="${SSH_BASE_PORT} ${VNC_BASE_PORT} ${RDP_BASE_PORT} ${NOVNC_BASE_PORT}"
+PORTS_TO_CHECK="${PORTS_TO_CHECK} ${TRAEFIK_PORT:-80} ${GRAFANA_PORT:-3000} ${PROMETHEUS_PORT:-9090}"
+
+PORT_CONFLICTS=false
+if command -v ss &>/dev/null; then
+    for PORT in ${PORTS_TO_CHECK}; do
+        if ss -tuln | grep -q ":${PORT} "; then
+            LISTENING_PROCESS=$(ss -tulnp | grep ":${PORT} " | head -n1 | awk '{print $7}' | cut -d'"' -f2 || echo "unknown")
+            echo "  ⚠ WARNING: Port ${PORT} is already in use by ${LISTENING_PROCESS}"
+            PORT_CONFLICTS=true
+            ((WARNINGS++))
+        fi
+    done
+    if [[ "${PORT_CONFLICTS}" == "false" ]]; then
+        echo "  ✓ No port conflicts detected"
+    fi
+else
+    echo "  ⚠ WARNING: 'ss' command not available, cannot check for port conflicts"
+    echo "    Install iproute2 package to enable port conflict detection"
+    ((WARNINGS++))
+fi
+
 if [[ ${MAX_USERS} -gt 50 ]]; then
     echo "  ⚠ WARNING: ${MAX_USERS} users may strain resources"
     ((WARNINGS++))
@@ -317,6 +342,26 @@ echo "Checking password security..."
 if [[ "${GRAFANA_ADMIN_PASSWORD:-admin}" == "admin" ]]; then
     echo "  ⚠ WARNING: Grafana using default password 'admin'"
     echo "    Set GRAFANA_ADMIN_PASSWORD in config.sh or .env"
+    ((WARNINGS++))
+fi
+
+if [[ -z "${USER_DEFAULT_PASSWORD}" ]]; then
+    echo "  ⚠ WARNING: USER_DEFAULT_PASSWORD is not set"
+    echo "    Set USER_DEFAULT_PASSWORD in config.sh or .env"
+    ((WARNINGS++))
+elif [[ "${USER_DEFAULT_PASSWORD}" == "password" ]] || [[ "${USER_DEFAULT_PASSWORD}" == "changeme" ]]; then
+    echo "  ⚠ WARNING: USER_DEFAULT_PASSWORD uses weak default value"
+    echo "    Use a stronger password in config.sh or .env"
+    ((WARNINGS++))
+fi
+
+if [[ -z "${GUACAMOLE_DB_PASSWORD}" ]]; then
+    echo "  ⚠ WARNING: GUACAMOLE_DB_PASSWORD is not set"
+    echo "    Set GUACAMOLE_DB_PASSWORD in config.sh or .env"
+    ((WARNINGS++))
+elif [[ "${GUACAMOLE_DB_PASSWORD}" == "password" ]] || [[ "${GUACAMOLE_DB_PASSWORD}" == "changeme" ]]; then
+    echo "  ⚠ WARNING: GUACAMOLE_DB_PASSWORD uses weak default value"
+    echo "    Use a stronger password in config.sh or .env"
     ((WARNINGS++))
 fi
 

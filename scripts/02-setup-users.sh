@@ -78,6 +78,18 @@ for USERNAME in "${USER_ARRAY[@]}"; do
     # Create user if doesn't exist
     if id "${USERNAME}" &>/dev/null; then
         echo "  User ${USERNAME} already exists, skipping creation"
+
+        # Verify existing user has correct UID
+        EXISTING_UID=$(id -u "${USERNAME}")
+        if [[ "${EXISTING_UID}" -ne "${UID}" ]]; then
+            echo "  ⚠ WARNING: User ${USERNAME} has UID ${EXISTING_UID}, expected ${UID}"
+            echo "    This may cause permission issues. Consider:"
+            echo "    1. Using the existing UID (update FIRST_UID in config.sh)"
+            echo "    2. Deleting and recreating the user: userdel ${USERNAME} && re-run script"
+            echo "    3. Manually changing the UID: usermod -u ${UID} ${USERNAME}"
+        else
+            echo "  ✓ User ${USERNAME} has correct UID: ${UID}"
+        fi
     else
         # Create user with specific UID
         useradd -m -u ${UID} -s /bin/bash -d ${MOUNT_POINT}/homes/${USERNAME} ${USERNAME}
