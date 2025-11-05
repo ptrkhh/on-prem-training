@@ -203,10 +203,10 @@ esac
 
 # Validate bcache mode for single NVMe
 if [[ "${SINGLE_NVME_MODE}" == "true" && "${BCACHE_MODE}" != "none" ]]; then
-    echo "  ⚠ WARNING: bcache mode should be 'none' for single NVMe setups"
+    echo "  ✗ ERROR: bcache mode must be 'none' for single NVMe setups"
     echo "    Current setting: ${BCACHE_MODE}"
-    echo "    bcache will be automatically disabled during setup"
-    ((WARNINGS++))
+    echo "    Set BCACHE_MODE=\"none\" in config.sh to avoid partition conflicts"
+    ((ERRORS++))
 fi
 
 # Check numeric values
@@ -339,30 +339,46 @@ fi
 echo ""
 echo "Checking password security..."
 
-if [[ "${GRAFANA_ADMIN_PASSWORD:-admin}" == "admin" ]]; then
-    echo "  ⚠ WARNING: Grafana using default password 'admin'"
-    echo "    Set GRAFANA_ADMIN_PASSWORD in config.sh or .env"
-    ((WARNINGS++))
+# Check GRAFANA_ADMIN_PASSWORD
+if [[ -z "${GRAFANA_ADMIN_PASSWORD}" ]]; then
+    echo "  ✗ ERROR: GRAFANA_ADMIN_PASSWORD is not set"
+    echo "    Set GRAFANA_ADMIN_PASSWORD in config.sh"
+    ((ERRORS++))
+elif [[ "${GRAFANA_ADMIN_PASSWORD}" == *"changeme"* ]] || [[ "${GRAFANA_ADMIN_PASSWORD}" == "admin" ]]; then
+    echo "  ✗ ERROR: GRAFANA_ADMIN_PASSWORD contains default/weak value"
+    echo "    Current value contains: 'changeme' or 'admin'"
+    echo "    Use a strong, unique password in config.sh"
+    ((ERRORS++))
+else
+    echo "  ✓ GRAFANA_ADMIN_PASSWORD is set"
 fi
 
+# Check USER_DEFAULT_PASSWORD
 if [[ -z "${USER_DEFAULT_PASSWORD}" ]]; then
-    echo "  ⚠ WARNING: USER_DEFAULT_PASSWORD is not set"
-    echo "    Set USER_DEFAULT_PASSWORD in config.sh or .env"
-    ((WARNINGS++))
-elif [[ "${USER_DEFAULT_PASSWORD}" == "password" ]] || [[ "${USER_DEFAULT_PASSWORD}" == "changeme" ]]; then
-    echo "  ⚠ WARNING: USER_DEFAULT_PASSWORD uses weak default value"
-    echo "    Use a stronger password in config.sh or .env"
-    ((WARNINGS++))
+    echo "  ✗ ERROR: USER_DEFAULT_PASSWORD is not set"
+    echo "    Set USER_DEFAULT_PASSWORD in config.sh"
+    ((ERRORS++))
+elif [[ "${USER_DEFAULT_PASSWORD}" == *"changeme"* ]] || [[ "${USER_DEFAULT_PASSWORD}" == "password" ]]; then
+    echo "  ✗ ERROR: USER_DEFAULT_PASSWORD contains default/weak value"
+    echo "    Current value contains: 'changeme' or 'password'"
+    echo "    Use a strong password in config.sh"
+    ((ERRORS++))
+else
+    echo "  ✓ USER_DEFAULT_PASSWORD is set"
 fi
 
+# Check GUACAMOLE_DB_PASSWORD
 if [[ -z "${GUACAMOLE_DB_PASSWORD}" ]]; then
-    echo "  ⚠ WARNING: GUACAMOLE_DB_PASSWORD is not set"
-    echo "    Set GUACAMOLE_DB_PASSWORD in config.sh or .env"
-    ((WARNINGS++))
-elif [[ "${GUACAMOLE_DB_PASSWORD}" == "password" ]] || [[ "${GUACAMOLE_DB_PASSWORD}" == "changeme" ]]; then
-    echo "  ⚠ WARNING: GUACAMOLE_DB_PASSWORD uses weak default value"
-    echo "    Use a stronger password in config.sh or .env"
-    ((WARNINGS++))
+    echo "  ✗ ERROR: GUACAMOLE_DB_PASSWORD is not set"
+    echo "    Set GUACAMOLE_DB_PASSWORD in config.sh"
+    ((ERRORS++))
+elif [[ "${GUACAMOLE_DB_PASSWORD}" == *"changeme"* ]] || [[ "${GUACAMOLE_DB_PASSWORD}" == "password" ]]; then
+    echo "  ✗ ERROR: GUACAMOLE_DB_PASSWORD contains default/weak value"
+    echo "    Current value contains: 'changeme' or 'password'"
+    echo "    Use a strong password in config.sh"
+    ((ERRORS++))
+else
+    echo "  ✓ GUACAMOLE_DB_PASSWORD is set"
 fi
 
 # Check domain if Cloudflare is being used
@@ -376,14 +392,32 @@ else
     echo "  ✓ Domain: ${DOMAIN}"
 fi
 
-# Check GPU
+# Check GPU and CUDA version
 if ! nvidia-smi &>/dev/null; then
     echo "  ⚠ WARNING: No NVIDIA GPU detected"
     ((WARNINGS++))
+    # If no GPU, manual CUDA_VERSION is required
+    if [[ -z "${CUDA_VERSION}" ]]; then
+        echo "  ✗ ERROR: CUDA_VERSION must be manually specified in config.sh when nvidia-smi is not available"
+        echo "    Example: CUDA_VERSION=\"12.4.1\""
+        ((ERRORS++))
+    fi
 else
     GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n1)
     GPU_MEM=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n1)
     echo "  ✓ NVIDIA GPU detected: ${GPU_NAME} (${GPU_MEM}MB VRAM)"
+
+    # Check if CUDA version can be detected
+    DETECTED_CUDA=$(nvidia-smi --query-gpu=cuda_version --format=csv,noheader | head -n1 2>/dev/null)
+    if [[ -z "${DETECTED_CUDA}" ]] && [[ -z "${CUDA_VERSION}" ]]; then
+        echo "  ✗ ERROR: Cannot auto-detect CUDA version and CUDA_VERSION is not set in config.sh"
+        echo "    Set CUDA_VERSION in config.sh (e.g., CUDA_VERSION=\"12.4.1\")"
+        ((ERRORS++))
+    elif [[ -n "${CUDA_VERSION}" ]]; then
+        echo "  ✓ CUDA version (manual): ${CUDA_VERSION}"
+    elif [[ -n "${DETECTED_CUDA}" ]]; then
+        echo "  ✓ CUDA version (auto-detected): ${DETECTED_CUDA}"
+    fi
 fi
 
 # System Prerequisites Check

@@ -39,31 +39,29 @@ fi
 echo "✓ Password validation passed"
 echo ""
 
-# Check Docker Compose version
+# Check Docker Compose version (v2 only)
 echo "=== Checking Docker Compose Version ==="
 if ! command -v docker &> /dev/null; then
     echo "ERROR: docker command not found. Please install Docker first."
     exit 1
 fi
 
-# Try docker compose (v2) command
-if docker compose version &> /dev/null; then
-    COMPOSE_VERSION=$(docker compose version --short 2>/dev/null || echo "unknown")
-    echo "✓ Docker Compose v2 detected: ${COMPOSE_VERSION}"
-elif command -v docker-compose &> /dev/null; then
-    COMPOSE_VERSION=$(docker-compose version --short 2>/dev/null || echo "unknown")
-    if [[ "${COMPOSE_VERSION}" =~ ^1\. ]]; then
-        echo "WARNING: Docker Compose v1 (docker-compose) detected: ${COMPOSE_VERSION}"
-        echo "This configuration uses v2 syntax. Please upgrade to Docker Compose v2."
-        echo "See: https://docs.docker.com/compose/install/"
-        exit 1
-    fi
-    echo "✓ Docker Compose detected: ${COMPOSE_VERSION}"
-else
-    echo "ERROR: Docker Compose not found. Please install Docker Compose v2."
-    echo "See: https://docs.docker.com/compose/install/"
+# Check for Docker Compose v2 only
+if ! docker compose version &> /dev/null; then
+    echo "ERROR: Docker Compose v2 not found"
+    echo ""
+    echo "This setup requires Docker Compose v2 (integrated with Docker CLI)."
+    echo "Docker Compose v1 (standalone docker-compose) is no longer supported."
+    echo ""
+    echo "To install Docker Compose v2:"
+    echo "  - On Ubuntu/Debian: apt-get update && apt-get install docker-compose-plugin"
+    echo "  - Or follow: https://docs.docker.com/compose/install/"
+    echo ""
     exit 1
 fi
+
+COMPOSE_VERSION=$(docker compose version --short 2>/dev/null || echo "unknown")
+echo "✓ Docker Compose v2 detected: ${COMPOSE_VERSION}"
 echo ""
 
 # Check Prometheus config exists
@@ -112,28 +110,30 @@ elif command -v nvidia-smi &>/dev/null; then
         echo "Auto-detected maximum supported CUDA version: ${CUDA_BUILD_VERSION}"
         echo "  (Source: nvidia-smi --query-gpu=cuda_version)"
     else
-        # Fallback: Query driver version
-        DRIVER_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n1)
-        if [[ -n "${DRIVER_VERSION}" ]]; then
-            echo "Could not detect CUDA version directly, detected driver: ${DRIVER_VERSION}"
-            CUDA_BUILD_VERSION="12.4.1"
-            echo "Using fallback CUDA version: ${CUDA_BUILD_VERSION}"
-            echo "  (Fallback method: driver detected, using default CUDA version)"
-            echo "  (To override, set CUDA_VERSION in config.sh)"
-        else
-            CUDA_BUILD_VERSION="12.4.1"
-            echo "Could not detect CUDA or driver version"
-            echo "Using default CUDA version: ${CUDA_BUILD_VERSION}"
-            echo "  (Fallback method: no NVIDIA driver found)"
-            echo "  (To override, set CUDA_VERSION in config.sh)"
-        fi
+        # Cannot detect CUDA version - require manual specification
+        echo "ERROR: Could not auto-detect CUDA version from nvidia-smi"
+        echo ""
+        echo "Please manually specify CUDA_VERSION in config.sh"
+        echo "Example: CUDA_VERSION=\"12.4.1\""
+        echo ""
+        echo "To determine your CUDA version:"
+        echo "  1. Check your NVIDIA driver version: nvidia-smi"
+        echo "  2. Find compatible CUDA version: https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/"
+        echo "  3. Set CUDA_VERSION in config.sh to match your driver"
+        exit 1
     fi
 else
-    CUDA_BUILD_VERSION="12.4.1"
-    echo "nvidia-smi not found"
-    echo "Using default CUDA version: ${CUDA_BUILD_VERSION}"
-    echo "  (Fallback method: nvidia-smi command not available)"
-    echo "  (To override, set CUDA_VERSION in config.sh)"
+    echo "ERROR: nvidia-smi not found - cannot detect CUDA version"
+    echo ""
+    echo "Please manually specify CUDA_VERSION in config.sh"
+    echo "Example: CUDA_VERSION=\"12.4.1\""
+    echo ""
+    echo "To determine your CUDA version:"
+    echo "  1. Install NVIDIA drivers if not already installed"
+    echo "  2. Run: nvidia-smi"
+    echo "  3. Find compatible CUDA version: https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/"
+    echo "  4. Set CUDA_VERSION in config.sh to match your driver"
+    exit 1
 fi
 
 # Validate required configuration
@@ -272,10 +272,33 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
+        # Check if Guacamole schema is already initialized
+        echo "Checking if Guacamole schema exists..."
+        SCHEMA_EXISTS=\$(PGPASSWORD="${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}" psql -h guacamole-db -U guacamole_user -d guacamole_db -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='guacamole_user';" 2>/dev/null || echo "0")
+
+        if [ "\$SCHEMA_EXISTS" != "0" ]; then
+          echo "Guacamole schema already exists, skipping initialization"
+          exit 0
+        fi
+
         # Generate and apply Guacamole schema
+        echo "Initializing Guacamole database schema..."
         /opt/guacamole/bin/initdb.sh --postgresql > /tmp/initdb.sql
-        PGPASSWORD="${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}" psql -h guacamole-db -U guacamole_user -d guacamole_db -f /tmp/initdb.sql 2>&1 | grep -v "already exists" || true
-        echo "Guacamole database initialized"
+
+        if [ ! -s /tmp/initdb.sql ]; then
+          echo "ERROR: Failed to generate Guacamole schema"
+          exit 1
+        fi
+
+        # Apply schema and log all output
+        if ! PGPASSWORD="${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}" psql -h guacamole-db -U guacamole_user -d guacamole_db -f /tmp/initdb.sql > /tmp/initdb.log 2>&1; then
+          echo "ERROR: Failed to apply Guacamole schema"
+          cat /tmp/initdb.log
+          exit 1
+        fi
+
+        echo "Guacamole database schema initialized successfully"
+        cat /tmp/initdb.log
     restart: "no"
 
   guacamole:
@@ -592,6 +615,12 @@ for USERNAME in ${USER_ARRAY[@]}; do
             - driver: nvidia
               count: all
               capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "Xvnc"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     networks:
       - ml-net
     labels:
@@ -674,7 +703,7 @@ echo ""
 echo "Cloudflare Tunnel (internet access):"
 echo "  - Routes *.${DOMAIN} through Cloudflare to Traefik on port 80"
 echo "  - Local users automatically bypass internet (same network)"
-echo "  - Run: ./04-setup-cloudflare-tunnel.sh to configure"
+echo "  - Run: ./06-setup-cloudflare-tunnel.sh to configure"
 echo ""
 echo "Cache directories mounted (shared across all users):"
 echo "  - ML Models: /cache/ml-models (HuggingFace, PyTorch Hub, TensorFlow Hub)"

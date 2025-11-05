@@ -46,6 +46,29 @@ if ! mountpoint -q "${MOUNT_POINT}"; then
     exit 1
 fi
 
+# Validate BTRFS filesystem with expected mount options
+echo "Validating BTRFS mount..."
+MOUNT_INFO=$(mount | grep "${MOUNT_POINT}" | grep btrfs)
+if [[ -z "${MOUNT_INFO}" ]]; then
+    echo "ERROR: ${MOUNT_POINT} is not mounted as BTRFS filesystem"
+    echo "Please run 01-setup-storage.sh and reboot before continuing."
+    exit 1
+fi
+
+# Check if expected mount options are present
+if ! echo "${MOUNT_INFO}" | grep -q "compress"; then
+    echo "WARNING: ${MOUNT_POINT} is not mounted with compression enabled"
+    echo "Expected mount options may be missing. Did you reboot after running 01-setup-storage.sh?"
+fi
+
+# Verify mount is from fstab (not temporary)
+if ! grep -q "^[^#].*${MOUNT_POINT}.*btrfs" /etc/fstab; then
+    echo "WARNING: ${MOUNT_POINT} not found in /etc/fstab"
+    echo "Mount may not persist after reboot. Please check 01-setup-storage.sh setup."
+fi
+
+echo "✓ BTRFS filesystem validation passed"
+
 # Validate all required directories exist before creating users
 echo "Validating required directories..."
 if [[ ! -d "${MOUNT_POINT}/shared" ]]; then
@@ -56,7 +79,7 @@ fi
 
 if [[ ! -d "${MOUNT_POINT}/cache" ]]; then
     echo "ERROR: ${MOUNT_POINT}/cache does not exist!"
-    echo "Please run 01c-setup-shared-caches.sh first."
+    echo "Please run 03-setup-shared-caches.sh first."
     exit 1
 fi
 
@@ -146,7 +169,8 @@ cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)
 # Update sshd_config for security (keep password auth enabled until SSH keys are added)
 cat > /etc/ssh/sshd_config.d/ml-train-server.conf <<EOF
 # ML Training Server SSH Configuration
-PermitRootLogin no
+# Allow root login with SSH keys only (no password-based root login)
+PermitRootLogin prohibit-password
 PasswordAuthentication yes
 PubkeyAuthentication yes
 UsePAM yes
@@ -339,5 +363,5 @@ echo ""
 echo "Next steps:"
 echo "  1. Add SSH keys for each user"
 echo "  2. Test SSH login: ssh alice@localhost"
-echo "  3. Run 03-setup-docker.sh to install Docker"
+echo "  3. Run 05-setup-docker.sh to install Docker"
 echo ""

@@ -26,6 +26,12 @@ source "${CONFIG_FILE}"
 
 SCRIPTS_DIR="/opt/scripts/data"
 
+# Load common functions
+COMMON_LIB="${SCRIPT_DIR}/lib/common.sh"
+if [[ -f "${COMMON_LIB}" ]]; then
+    source "${COMMON_LIB}"
+fi
+
 # Use config variables with defaults
 GCS_BUCKET="${GCS_BUCKET:-gcs:customer-daily-bucket}"
 GDRIVE_CUSTOMER_DATA="${GDRIVE_CUSTOMER_DATA:-gdrive:customer-daily}"
@@ -36,16 +42,13 @@ if ! command -v rclone &> /dev/null; then
     curl https://rclone.org/install.sh | bash
 fi
 
-# Check network connectivity
+# Check network connectivity (required for GCS and GDrive access)
 echo ""
-echo "Checking network connectivity..."
-if ping -c 1 -W 5 8.8.8.8 &>/dev/null || \
-   ping -c 1 -W 5 1.1.1.1 &>/dev/null || \
-   getent hosts google.com &>/dev/null; then
-    echo "✓ Network connectivity verified"
-else
-    echo "ERROR: No network connectivity"
-    echo "Please check your internet connection and try again"
+if ! check_network 3; then
+    echo "ERROR: This script requires internet connectivity to:"
+    echo "  - Access Google Cloud Storage (GCS)"
+    echo "  - Access Google Drive"
+    echo "  - Configure data sync pipeline"
     exit 1
 fi
 

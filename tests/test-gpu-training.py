@@ -21,6 +21,18 @@ except ImportError:
 
 import time
 
+# Cleanup function to ensure GPU memory is freed
+def cleanup_gpu(model=None):
+    """Clean up GPU resources"""
+    try:
+        if model is not None:
+            del model
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+    except Exception as e:
+        print(f"Warning: Cleanup failed: {e}")
+
 print("=" * 60)
 print("GPU Training Test")
 print("=" * 60)
@@ -64,6 +76,7 @@ class SimpleNet(nn.Module):
 
 # Create model and move to GPU
 print("Creating model...")
+model = None
 try:
     model = SimpleNet().cuda()
 except RuntimeError as e:
@@ -72,6 +85,7 @@ except RuntimeError as e:
     print("  - Insufficient GPU memory")
     print("  - CUDA runtime error")
     print("  - GPU driver mismatch")
+    cleanup_gpu(model)
     sys.exit(1)
 
 try:
@@ -79,6 +93,7 @@ try:
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 except Exception as e:
     print(f"ERROR: Failed to create optimizer/criterion: {e}")
+    cleanup_gpu(model)
     sys.exit(1)
 
 # Generate random training data
@@ -91,44 +106,52 @@ print()
 start_time = time.time()
 
 try:
-    for batch_idx in range(num_batches):
-        # Generate random input and target
-        inputs = torch.randn(batch_size, 1024).cuda()
-        targets = torch.randint(0, 10, (batch_size,)).cuda()
+    try:
+        for batch_idx in range(num_batches):
+            # Generate random input and target
+            inputs = torch.randn(batch_size, 1024).cuda()
+            targets = torch.randint(0, 10, (batch_size,)).cuda()
 
-        # Forward pass
-        optimizer.zero_grad()
-        outputs = model(inputs)
-        loss = criterion(outputs, targets)
+            # Forward pass
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, targets)
 
-        # Backward pass
-        loss.backward()
-        optimizer.step()
+            # Backward pass
+            loss.backward()
+            optimizer.step()
 
-        if (batch_idx + 1) % 10 == 0:
-            print(f"Batch {batch_idx + 1}/{num_batches}, Loss: {loss.item():.4f}")
-except RuntimeError as e:
-    print(f"\nERROR: Training failed with CUDA error: {e}")
-    print("Possible causes:")
-    print("  - Out of GPU memory")
-    print("  - CUDA kernel launch failure")
-    print("  - Invalid tensor operation")
-    sys.exit(1)
+            if (batch_idx + 1) % 10 == 0:
+                print(f"Batch {batch_idx + 1}/{num_batches}, Loss: {loss.item():.4f}")
+    except RuntimeError as e:
+        print(f"\nERROR: Training failed with CUDA error: {e}")
+        print("Possible causes:")
+        print("  - Out of GPU memory")
+        print("  - CUDA kernel launch failure")
+        print("  - Invalid tensor operation")
+        cleanup_gpu(model)
+        sys.exit(1)
+    finally:
+        # Always clean up GPU memory after training
+        torch.cuda.empty_cache()
 
-end_time = time.time()
-elapsed = end_time - start_time
+    end_time = time.time()
+    elapsed = end_time - start_time
 
-print()
-print(f"Training completed in {elapsed:.2f} seconds")
-print(f"Throughput: {num_batches / elapsed:.2f} batches/sec")
-print()
+    print()
+    print(f"Training completed in {elapsed:.2f} seconds")
+    print(f"Throughput: {num_batches / elapsed:.2f} batches/sec")
+    print()
 
-# Check GPU memory usage
-print("GPU Memory:")
-print(f"  Allocated: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
-print(f"  Reserved: {torch.cuda.memory_reserved(0) / 1e9:.2f} GB")
-print()
+    # Check GPU memory usage
+    print("GPU Memory:")
+    print(f"  Allocated: {torch.cuda.memory_allocated(0) / 1e9:.2f} GB")
+    print(f"  Reserved: {torch.cuda.memory_reserved(0) / 1e9:.2f} GB")
+    print()
 
-print("=" * 60)
-print("GPU Test PASSED ✓")
-print("=" * 60)
+    print("=" * 60)
+    print("GPU Test PASSED ✓")
+    print("=" * 60)
+finally:
+    # Final cleanup to ensure GPU resources are freed
+    cleanup_gpu(model)

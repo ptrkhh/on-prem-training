@@ -16,6 +16,12 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Load common functions
+COMMON_LIB="${SCRIPT_DIR}/lib/common.sh"
+if [[ -f "${COMMON_LIB}" ]]; then
+    source "${COMMON_LIB}"
+fi
+
 echo "=== Google Drive Shared Drive Setup ==="
 echo ""
 echo "This script will:"
@@ -32,6 +38,31 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Validate BTRFS storage is properly mounted
+echo "Validating BTRFS storage..."
+if ! mountpoint -q "${MOUNT_POINT}"; then
+    echo "ERROR: ${MOUNT_POINT} is not mounted."
+    echo "Please run 01-setup-storage.sh and reboot before continuing."
+    exit 1
+fi
+
+# Validate it's a BTRFS filesystem
+if ! mount | grep "${MOUNT_POINT}" | grep -q btrfs; then
+    echo "ERROR: ${MOUNT_POINT} is not mounted as BTRFS filesystem"
+    echo "Please run 01-setup-storage.sh and reboot before continuing."
+    exit 1
+fi
+
+# Verify mount is from fstab (persistent across reboots)
+if ! grep -q "^[^#].*${MOUNT_POINT}.*btrfs" /etc/fstab; then
+    echo "ERROR: ${MOUNT_POINT} not found in /etc/fstab"
+    echo "Please run 01-setup-storage.sh and reboot to ensure persistent mounts."
+    exit 1
+fi
+
+echo "✓ BTRFS storage validation passed"
+echo ""
+
 # Step 1: Install rclone
 echo "=== Step 1: Installing rclone ==="
 if ! command -v rclone &> /dev/null; then
@@ -41,16 +72,13 @@ else
     echo "rclone already installed: $(rclone version | head -n1)"
 fi
 
-# Check network connectivity
+# Check network connectivity (required for rclone and Google Drive)
 echo ""
-echo "Checking network connectivity..."
-if ping -c 1 -W 5 8.8.8.8 &>/dev/null || \
-   ping -c 1 -W 5 1.1.1.1 &>/dev/null || \
-   getent hosts google.com &>/dev/null; then
-    echo "✓ Network connectivity verified"
-else
-    echo "ERROR: No network connectivity"
-    echo "Please check your internet connection and try again"
+if ! check_network 3; then
+    echo "ERROR: This script requires internet connectivity to:"
+    echo "  - Install/update rclone"
+    echo "  - Access Google Drive Shared Drive"
+    echo "  - Configure remote mounts"
     exit 1
 fi
 
@@ -155,6 +183,14 @@ SNAPSHOT_OVERHEAD_GB=$(awk "BEGIN {printf \"%.0f\", ${TOTAL_USER_DATA_GB} * 0.5}
 
 # Total reserved space for user data and snapshots
 RESERVED_GB=$((TOTAL_USER_DATA_GB + SNAPSHOT_OVERHEAD_GB))
+
+# Validate that RESERVED_GB is positive
+if [[ ${RESERVED_GB} -le 0 ]]; then
+    echo "❌ ERROR: Invalid storage reservation calculation"
+    echo "RESERVED_GB: ${RESERVED_GB}GB"
+    echo "This indicates a configuration error. Please check USER_QUOTA_GB and user count."
+    exit 1
+fi
 
 # Calculate safe limit with safety margin
 SAFE_LIMIT_GB=$(awk "BEGIN {printf \"%.0f\", ${TOTAL_BTRFS_GB} * (1 - ${STORAGE_SAFETY_MARGIN_PERCENT}/100.0)}")

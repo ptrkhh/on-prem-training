@@ -256,7 +256,7 @@ echo "=== Step 5: Verifying SSH hardening ==="
 if [[ -f /etc/ssh/sshd_config.d/ml-train-server.conf ]]; then
     echo "SSH already hardened in previous step"
 else
-    echo "WARNING: SSH not hardened. Run 02-setup-users.sh first."
+    echo "WARNING: SSH not hardened. Run 04-setup-users.sh first."
 fi
 
 # Step 6: Install and configure auditd (optional)

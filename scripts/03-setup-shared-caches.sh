@@ -36,6 +36,31 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
+# Validate BTRFS storage is properly mounted
+echo "Validating BTRFS storage..."
+if ! mountpoint -q "${MOUNT_POINT}"; then
+    echo "ERROR: ${MOUNT_POINT} is not mounted."
+    echo "Please run 01-setup-storage.sh and reboot before continuing."
+    exit 1
+fi
+
+# Validate it's a BTRFS filesystem
+if ! mount | grep "${MOUNT_POINT}" | grep -q btrfs; then
+    echo "ERROR: ${MOUNT_POINT} is not mounted as BTRFS filesystem"
+    echo "Please run 01-setup-storage.sh and reboot before continuing."
+    exit 1
+fi
+
+# Verify mount is from fstab (persistent across reboots)
+if ! grep -q "^[^#].*${MOUNT_POINT}.*btrfs" /etc/fstab; then
+    echo "ERROR: ${MOUNT_POINT} not found in /etc/fstab"
+    echo "Please run 01-setup-storage.sh and reboot to ensure persistent mounts."
+    exit 1
+fi
+
+echo "✓ BTRFS storage validation passed"
+echo ""
+
 CACHE_ROOT="${MOUNT_POINT}/cache"
 
 # Create cache directory structure

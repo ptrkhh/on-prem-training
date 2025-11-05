@@ -129,21 +129,44 @@ require_vars() {
     fi
 }
 
-# Check network connectivity
-# Usage: check_network
+# Check network connectivity with retry and exponential backoff
+# Usage: check_network [max_retries]
+# Returns: 0 on success, 1 on failure
 check_network() {
+    local max_retries=${1:-3}
+    local retry_count=0
+    local wait_time=2
+
     log_info "Checking network connectivity..."
 
-    if ping -c 1 -W 5 8.8.8.8 &>/dev/null || \
-       ping -c 1 -W 5 1.1.1.1 &>/dev/null || \
-       getent hosts google.com &>/dev/null; then
-        log_success "Network connectivity verified"
-        return 0
-    else
-        log_error "No network connectivity"
-        log_info "Please check your internet connection and try again"
-        return 1
-    fi
+    while [[ $retry_count -lt $max_retries ]]; do
+        if ping -c 1 -W 5 8.8.8.8 &>/dev/null || \
+           ping -c 1 -W 5 1.1.1.1 &>/dev/null || \
+           getent hosts google.com &>/dev/null; then
+            log_success "Network connectivity verified"
+            return 0
+        fi
+
+        retry_count=$((retry_count + 1))
+        if [[ $retry_count -lt $max_retries ]]; then
+            log_info "Network check failed (attempt $retry_count/$max_retries), retrying in ${wait_time}s..."
+            sleep $wait_time
+            wait_time=$((wait_time * 2))  # Exponential backoff
+        fi
+    done
+
+    # All retries failed
+    log_error "No network connectivity after $max_retries attempts"
+    echo ""
+    echo "Troubleshooting steps:"
+    echo "  1. Check physical network connection (cable/WiFi)"
+    echo "  2. Verify network interface is up: ip link show"
+    echo "  3. Check IP address assignment: ip addr show"
+    echo "  4. Test DNS resolution: nslookup google.com"
+    echo "  5. Check firewall settings: ufw status"
+    echo "  6. Verify default gateway: ip route show"
+    echo ""
+    return 1
 }
 
 # Cleanup trap for temporary files and directories

@@ -26,6 +26,12 @@ source "${CONFIG_FILE}"
 SNAPSHOT_DIR="${MOUNT_POINT}/snapshots"
 SCRIPTS_DIR="/opt/scripts/backup"
 
+# Load common functions
+COMMON_LIB="${SCRIPT_DIR}/lib/common.sh"
+if [[ -f "${COMMON_LIB}" ]]; then
+    source "${COMMON_LIB}"
+fi
+
 # Install required packages
 echo "Installing required packages..."
 apt update
@@ -50,15 +56,12 @@ fi
 
 echo "✓ rclone remote '${REMOTE_NAME}' configuration found"
 
-# Check network connectivity
-echo "Checking network connectivity..."
-if ping -c 1 -W 5 8.8.8.8 &>/dev/null || \
-   ping -c 1 -W 5 1.1.1.1 &>/dev/null || \
-   getent hosts google.com &>/dev/null; then
-    echo "✓ Network connectivity verified"
-else
-    echo "ERROR: No network connectivity"
-    echo "Please check your internet connection and try again"
+# Check network connectivity (required for remote backups)
+if ! check_network 3; then
+    echo "ERROR: This script requires internet connectivity to:"
+    echo "  - Access remote backup storage"
+    echo "  - Initialize restic repository"
+    echo "  - Verify rclone remote access"
     exit 1
 fi
 
@@ -101,16 +104,16 @@ echo "Created snapshot: \${SNAPSHOT_NAME}"
 # Cleanup old snapshots
 case "\${SNAPSHOT_TYPE}" in
     hourly)
-        # Keep last 24 hourly snapshots
-        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'hourly_*' -type d | sort -r | tail -n +25 | xargs -r rm -rf
+        # Keep last ${SNAPSHOT_KEEP_HOURLY} hourly snapshots
+        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'hourly_*' -type d | sort -r | tail -n +$((${SNAPSHOT_KEEP_HOURLY} + 1)) | xargs -r rm -rf
         ;;
     daily)
-        # Keep last 7 daily snapshots
-        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'daily_*' -type d | sort -r | tail -n +8 | xargs -r rm -rf
+        # Keep last ${SNAPSHOT_KEEP_DAILY} daily snapshots
+        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'daily_*' -type d | sort -r | tail -n +$((${SNAPSHOT_KEEP_DAILY} + 1)) | xargs -r rm -rf
         ;;
     weekly)
-        # Keep last 4 weekly snapshots
-        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'weekly_*' -type d | sort -r | tail -n +5 | xargs -r rm -rf
+        # Keep last ${SNAPSHOT_KEEP_WEEKLY} weekly snapshots
+        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'weekly_*' -type d | sort -r | tail -n +$((${SNAPSHOT_KEEP_WEEKLY} + 1)) | xargs -r rm -rf
         ;;
 esac
 
@@ -188,18 +191,47 @@ export RESTIC_PASSWORD_FILE
 
 # Check disk space before backup
 echo "Checking disk space..."
-AVAILABLE_GB=\$(df -BG "\${MOUNT_POINT}" | tail -1 | awk '{print \$4}' | sed 's/G//')
-MIN_SPACE_GB=10
 
-if [[ \${AVAILABLE_GB} -lt \${MIN_SPACE_GB} ]]; then
-    echo "ERROR: Insufficient disk space for backup!"
-    echo "Available: \${AVAILABLE_GB}GB, Required: \${MIN_SPACE_GB}GB"
+# Calculate source data size
+echo "Calculating backup size requirements..."
+SOURCE_SIZE_GB=\$(du -sb ${BACKUP_SOURCES[@]} 2>/dev/null | awk '{sum+=\$1} END {print int(sum/1024/1024/1024)+1}')
+
+# Determine if this is initial or incremental backup
+if [ ! -d "\${BACKUP_CACHE_DIR}/snapshots" ]; then
+    # First backup needs more space (compression ratio ~0.6)
+    REQUIRED_GB=\$((SOURCE_SIZE_GB * 60 / 100 + 5))  # 60% + 5GB safety margin
+    BACKUP_TYPE="initial"
+else
+    # Incremental backups need less space due to deduplication
+    REQUIRED_GB=\$((SOURCE_SIZE_GB * 10 / 100 + 2))  # 10% + 2GB for incremental
+    BACKUP_TYPE="incremental"
+fi
+
+# Check available space
+AVAILABLE_GB=\$(df -BG "\${BACKUP_CACHE_DIR}" | tail -1 | awk '{print \$4}' | sed 's/G//')
+
+if [[ \${AVAILABLE_GB} -lt \${REQUIRED_GB} ]]; then
+    echo "ERROR: Insufficient space for \${BACKUP_TYPE} backup!"
+    echo "  Source data: \${SOURCE_SIZE_GB}GB"
+    echo "  Required: \${REQUIRED_GB}GB"
+    echo "  Available: \${AVAILABLE_GB}GB"
+    echo "  Shortfall: \$((REQUIRED_GB - AVAILABLE_GB))GB"
     if [[ -x "\${ALERT_SCRIPT}" ]]; then
-        "\${ALERT_SCRIPT}" "critical" "Backup failed: Low disk space (\${AVAILABLE_GB}GB available)"
+        "\${ALERT_SCRIPT}" "critical" "Backup failed: Insufficient space (\${AVAILABLE_GB}GB available, \${REQUIRED_GB}GB required)"
     fi
     exit 1
 fi
-echo "Disk space check passed: \${AVAILABLE_GB}GB available"
+
+echo "Disk space check passed: \${AVAILABLE_GB}GB available, \${REQUIRED_GB}GB required for \${BACKUP_TYPE} backup"
+
+# Warn if available space is less than 2x required (helps predict future failures)
+if [[ \${AVAILABLE_GB} -lt \$((REQUIRED_GB * 2)) ]]; then
+    echo "WARNING: Available space (\${AVAILABLE_GB}GB) is less than 2x required (\${REQUIRED_GB}GB)"
+    echo "  Consider freeing up space to avoid future backup failures"
+    if [[ -x "\${ALERT_SCRIPT}" ]]; then
+        "\${ALERT_SCRIPT}" "warning" "Backup space low: \${AVAILABLE_GB}GB available, consider cleanup"
+    fi
+fi
 
 # Cleanup trap to unlock on failure
 cleanup() {
@@ -548,6 +580,6 @@ echo ""
 echo "Manual commands:"
 echo "  Create snapshot: ${SCRIPTS_DIR}/create-snapshot.sh daily"
 echo "  Run backup: ${SCRIPTS_DIR}/restic-backup.sh"
-echo "  List snapshots: restic -r ${BACKUP_REMOTE} snapshots"
+echo "  List snapshots: restic -r rclone:${BACKUP_REMOTE} snapshots"
 echo "  Verify restore: ${SCRIPTS_DIR}/verify-restore.sh"
 echo ""

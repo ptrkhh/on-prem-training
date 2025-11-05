@@ -392,15 +392,15 @@ fi
 section "Service Tests"
 
 SERVICES=(
-    "traefik:8080"
-    "netdata:19999"
-    "prometheus:9090"
-    "grafana:3000"
-    "portainer:9000"
-    "filebrowser:8081"
-    "dozzle:8082"
-    "tensorboard:6006"
-    "guacamole:8083"
+    "traefik:${TRAEFIK_PORT:-8080}"
+    "netdata:${NETDATA_PORT:-19999}"
+    "prometheus:${PROMETHEUS_PORT:-9090}"
+    "grafana:${GRAFANA_PORT:-3000}"
+    "portainer:${PORTAINER_PORT:-9000}"
+    "filebrowser:${FILEBROWSER_PORT:-8081}"
+    "dozzle:${DOZZLE_PORT:-8082}"
+    "tensorboard:${TENSORBOARD_PORT:-6006}"
+    "guacamole:${GUACAMOLE_PORT:-8083}"
 )
 
 for service in "${SERVICES[@]}"; do

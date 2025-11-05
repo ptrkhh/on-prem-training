@@ -800,37 +800,37 @@ All setup and maintenance scripts are in the `scripts/` directory.
    Features: VFS cache, auto-recovery, health monitoring
    **Note**: Skip if you prefer local storage for /shared
 
-3. **02-setup-users.sh** - Create user accounts
+3. **04-setup-users.sh** - Create user accounts
    ```bash
    sudo ./scripts/04-setup-users.sh
    ```
    Creates: Linux users, home directories, SSH key-based authentication
 
-4. **03-setup-docker.sh** - Install Docker and NVIDIA runtime
+4. **05-setup-docker.sh** - Install Docker and NVIDIA runtime
    ```bash
    sudo ./scripts/05-setup-docker.sh
    ```
    Installs: Docker Engine, docker-compose, nvidia-container-toolkit
 
-5. **04-setup-cloudflare-tunnel.sh** - Configure Cloudflare Tunnel
+5. **06-setup-cloudflare-tunnel.sh** - Configure Cloudflare Tunnel
    ```bash
    sudo ./scripts/06-setup-cloudflare-tunnel.sh
    ```
    Creates: Cloudflare Tunnel, DNS records, systemd service
 
-6. **05-setup-firewall.sh** - Configure firewall and security
+6. **07-setup-firewall.sh** - Configure firewall and security
    ```bash
    sudo ./scripts/07-setup-firewall.sh
    ```
    Configures: UFW firewall, fail2ban, automatic updates
 
-7. **06-setup-monitoring.sh** - Set up monitoring and alerts
+7. **08-setup-monitoring.sh** - Set up monitoring and alerts
    ```bash
    sudo ./scripts/08-setup-monitoring.sh
    ```
    Creates: Monitoring scripts, Telegram alerts, cron jobs
 
-8. **07-setup-backups.sh** - Configure backup system
+8. **09-setup-backups.sh** - Configure backup system
    ```bash
    sudo ./scripts/09-setup-backups.sh
    ```

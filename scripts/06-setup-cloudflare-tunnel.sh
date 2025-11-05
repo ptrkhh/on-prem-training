@@ -77,6 +77,31 @@ fi
 
 echo "Tunnel ID: ${TUNNEL_ID}"
 
+# Validate tunnel credentials file
+echo "Validating tunnel credentials..."
+CREDENTIALS_FILE="/root/.cloudflared/${TUNNEL_ID}.json"
+if [[ ! -f "${CREDENTIALS_FILE}" ]]; then
+    echo "ERROR: Tunnel credentials file not found: ${CREDENTIALS_FILE}"
+    echo ""
+    echo "Troubleshooting:"
+    echo "  1. Check if cloudflared tunnel create succeeded"
+    echo "  2. Verify /root/.cloudflared/ directory exists and is writable"
+    echo "  3. Try running: cloudflared tunnel delete ${TUNNEL_NAME} && cloudflared tunnel create ${TUNNEL_NAME}"
+    exit 1
+fi
+
+# Validate credentials file is well-formed JSON
+if ! jq empty "${CREDENTIALS_FILE}" 2>/dev/null; then
+    echo "ERROR: Tunnel credentials file is not valid JSON: ${CREDENTIALS_FILE}"
+    echo ""
+    echo "Troubleshooting:"
+    echo "  1. The credentials file may be corrupted"
+    echo "  2. Try recreating the tunnel: cloudflared tunnel delete ${TUNNEL_NAME} && cloudflared tunnel create ${TUNNEL_NAME}"
+    exit 1
+fi
+
+echo "✓ Tunnel credentials validated"
+
 # Step 3: Configure tunnel
 echo ""
 echo "=== Step 3: Configuring tunnel ==="
@@ -234,17 +259,27 @@ fi
 
 # Verify tunnel connection
 echo ""
-echo "Waiting for tunnel to connect..."
-for i in {1..30}; do
+echo "Waiting for tunnel to connect (timeout: 60s)..."
+CONNECTED=false
+for i in {1..60}; do
     if journalctl -u cloudflared -n 20 | grep -q "Connection .* registered"; then
-        echo "✓ Tunnel connected successfully"
+        echo "✓ Tunnel connected successfully (after ${i}s)"
+        CONNECTED=true
         break
-    fi
-    if [[ $i -eq 30 ]]; then
-        echo "⚠️  WARNING: Tunnel may not be connected. Check: journalctl -u cloudflared"
     fi
     sleep 1
 done
+
+if [[ "${CONNECTED}" == "false" ]]; then
+    echo "⚠️  WARNING: Tunnel did not connect within 60 seconds"
+    echo ""
+    echo "Troubleshooting:"
+    echo "  1. Check tunnel status: systemctl status cloudflared"
+    echo "  2. View logs: journalctl -u cloudflared -f"
+    echo "  3. Verify credentials file: ${CREDENTIALS_FILE}"
+    echo "  4. Check network connectivity to Cloudflare"
+    echo "  5. Restart tunnel: systemctl restart cloudflared"
+fi
 
 # Step 6: Display status
 echo ""
