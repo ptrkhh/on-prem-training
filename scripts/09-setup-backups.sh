@@ -26,6 +26,18 @@ source "${CONFIG_FILE}"
 SNAPSHOT_DIR="${MOUNT_POINT}/snapshots"
 SCRIPTS_DIR="/opt/scripts/backup"
 
+# Define restic cache directory (for deduplication and performance)
+BACKUP_CACHE_DIR="${MOUNT_POINT}/cache/restic"
+mkdir -p "${BACKUP_CACHE_DIR}"
+
+# Define directories to include in backups
+BACKUP_SOURCES=(
+    "${MOUNT_POINT}/homes"
+    "${MOUNT_POINT}/docker-volumes"
+    "${MOUNT_POINT}/shared/tensorboard"
+    "${MOUNT_POINT}/shared/datasets"
+)
+
 # Load common functions
 COMMON_LIB="${SCRIPT_DIR}/lib/common.sh"
 if [[ -f "${COMMON_LIB}" ]]; then
@@ -233,14 +245,20 @@ if [[ \${AVAILABLE_GB} -lt \$((REQUIRED_GB * 2)) ]]; then
     fi
 fi
 
-# Cleanup trap to unlock on failure
+# Initialize backup status and repository lock tracking
+BACKUP_STATUS="not_started"
+REPO_LOCKED=false
+
+# Cleanup trap to unlock on failure or interruption
 cleanup() {
-    if [[ "\${BACKUP_STATUS}" == "failed" ]]; then
+    if [[ "\${BACKUP_STATUS}" != "success" && "\${REPO_LOCKED}" == "true" ]]; then
         echo "Attempting to unlock repository..."
-        restic -r \${RESTIC_REPOSITORY} unlock || true
+        restic -r \${RESTIC_REPOSITORY} unlock 2>&1 | tee -a "\${LOG_FILE}" || true
     fi
 }
-trap cleanup EXIT
+
+# Register cleanup for all exit scenarios
+trap cleanup EXIT INT TERM
 
 # Redirect all output to log file
 exec > >(tee -a \${LOG_FILE}) 2>&1
@@ -296,6 +314,10 @@ echo "Created snapshot: \${SNAPSHOT_NAME}"
 # Backup runs from read-only snapshot, containers continue running normally
 BANDWIDTH_LIMIT_KBPS=\$((${BACKUP_BANDWIDTH_LIMIT_MBPS} * 1000 / 8))
 echo "Running backup from snapshot (${BACKUP_BANDWIDTH_LIMIT_MBPS} Mbps limit)..."
+
+# Mark repository as locked before backup starts
+REPO_LOCKED=true
+
 if restic -r \${RESTIC_REPOSITORY} backup \
     --verbose \
     --tag daily \
@@ -306,6 +328,7 @@ if restic -r \${RESTIC_REPOSITORY} backup \
 
     echo "Backup completed successfully"
     BACKUP_STATUS="success"
+    REPO_LOCKED=false
 else
     echo "ERROR: Backup failed!"
     BACKUP_STATUS="failed"

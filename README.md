@@ -342,6 +342,7 @@ Your workspace runs in a Docker container, not a traditional VM. Here's what you
     - **Syncing:** Automatic background sync with Google Drive
     - **TensorBoard:** Each user has `/shared/tensorboard/${USERNAME}` for training logs
 
+
 **Your Total Quota: 1000GB**
 
 - Combined across `/home/${USERNAME}` + `/workspace` + docker volumes
@@ -510,3 +511,41 @@ sudo systemctl status cloudflared
 - **Setup Time**: 30-60 minutes
 - **Break-even**: 1.5 months
 - **5-Year Savings**: $240,000
+
+
+TODO INTEGRATE TO README:
+
+
+
+### Storage Architecture Explained
+
+The system uses a two-tier storage strategy for each user:
+
+**Tier 1: `/home/${USERNAME}` (Backed Up Daily)**
+- **Purpose:** Precious, irreplaceable files
+- **Contents:** Code repositories, configs, dotfiles, papers, virtual environments, small datasets
+- **Size limit:** ~100GB per user (soft limit, users get reminders)
+- **Backup:** Daily to GDrive via Restic (7 daily + 52 weekly snapshots)
+- **Performance:** Fast (bcache-accelerated BTRFS)
+- **Mounted in container as:** `/home/${USERNAME}`
+
+**Tier 2: `/workspace` (NOT Backed Up)**
+- **Purpose:** Fast scratch space for expendable/reproducible data
+- **Contents:** Training data, model checkpoints, experiment outputs, large datasets
+- **Size limit:** ~1TB per user (soft limit, users get reminders)
+- **Backup:** NOT backed up (too large, data is reproducible or re-downloadable)
+- **Performance:** Fastest (bcache-accelerated BTRFS, same as home but no backup overhead)
+- **Mounted in container as:** `/workspace`
+
+**Why Separate Them?**
+
+1. **Backup Efficiency:** Only back up what matters (code/configs), not multi-TB datasets
+2. **Clear Mental Model:** Users know what's safe vs what needs re-downloading
+3. **Cost Savings:** GDrive storage costs based on backed-up data
+4. **Faster Restores:** Restoring 100GB of code is fast; restoring 5TB of checkpoints is slow
+
+**User Guidance:**
+- "Put your code in `~` (home), put your data in `/workspace`"
+- "If the server dies, your code is safe. Your training checkpoints? Re-train or re-download."
+- "Store final model weights in `~` after training completes"
+

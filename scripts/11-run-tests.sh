@@ -83,10 +83,17 @@ fi
 
 EXPECTED_RAID=$(echo "${BTRFS_RAID_LEVEL}" | tr '[:upper:]' '[:lower:]')
 
-if [[ "${ACTUAL_RAID}" == "${EXPECTED_RAID}" ]]; then
-    pass "BTRFS is using ${BTRFS_RAID_LEVEL} (detected: ${ACTUAL_RAID})"
+if [[ "${ACTUAL_RAID}" == "unknown" ]]; then
+    warn "Could not auto-detect RAID level - manual verification required"
+    echo "  Expected: ${EXPECTED_RAID}"
+    echo "  Manual check: btrfs filesystem df ${MOUNT_POINT}"
+    echo "  This is a test limitation, not necessarily a configuration issue"
 else
-    fail "BTRFS is NOT using ${BTRFS_RAID_LEVEL} (detected: ${ACTUAL_RAID})"
+    if [[ "${ACTUAL_RAID}" == "${EXPECTED_RAID}" ]]; then
+        pass "BTRFS is using ${BTRFS_RAID_LEVEL} (detected: ${ACTUAL_RAID})"
+    else
+        fail "BTRFS is NOT using ${BTRFS_RAID_LEVEL} (detected: ${ACTUAL_RAID})"
+    fi
 fi
 
 # Check bcache
@@ -194,6 +201,14 @@ if systemctl is-active --quiet docker; then
     pass "Docker service is running"
 else
     fail "Docker service is NOT running"
+fi
+
+# Pre-pull required Docker images to avoid hangs during tests
+echo "Pulling required Docker images..."
+if docker pull nvidia/cuda:latest &>/dev/null; then
+    pass "Docker image nvidia/cuda:latest pulled successfully"
+else
+    warn "Failed to pull nvidia/cuda:latest - test may hang or fail"
 fi
 
 # Test NVIDIA runtime

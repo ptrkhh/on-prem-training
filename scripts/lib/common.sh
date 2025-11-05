@@ -1,4 +1,6 @@
 #!/bin/bash
+set -euo pipefail
+
 # Common functions library for ML Training Server setup scripts
 # Source this file in other scripts: source "${SCRIPT_DIR}/lib/common.sh"
 

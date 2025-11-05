@@ -57,8 +57,18 @@ SINGLE_NVME_MODE=false
 if [[ -n "${NVME_DEVICE}" && ${#HDD_ARRAY[@]} -eq 0 ]]; then
     echo "Single NVMe mode detected (no HDDs)"
     SINGLE_NVME_MODE=true
-    # Force bcache to none for single NVMe mode
-    BCACHE_MODE="none"
+
+    # Validate bcache mode is compatible with single NVMe setup
+    if [[ "${BCACHE_MODE}" != "none" ]]; then
+        echo "ERROR: Cannot use bcache mode with single NVMe setup"
+        echo "Set BCACHE_MODE='none' in config.sh for single NVMe configurations"
+        echo ""
+        echo "Current configuration:"
+        echo "  NVME_DEVICE: ${NVME_DEVICE}"
+        echo "  HDD_DEVICES: (none detected)"
+        echo "  BCACHE_MODE: ${BCACHE_MODE} (must be 'none')"
+        exit 1
+    fi
 fi
 
 echo "Detected configuration:"

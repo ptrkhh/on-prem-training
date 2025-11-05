@@ -19,90 +19,7 @@ Complete guide for setting up a 5-user on-premise ML training server replacing G
 
 ---
 
-## Hardware Assembly
-
-### Components Checklist
-- [ ] CPU: AMD Threadripper (already owned)
-- [ ] RAM: 200GB DDR5 (upgrade from 64GB)
-- [ ] GPU: RTX 5080 (already owned)
-- [ ] Storage: 1TB NVMe + 4x 20TB HDD
-- [ ] UPS: 1500VA
-- [ ] Adequate cooling in air-conditioned room
-
-### Assembly Steps
-
-1. **Install CPU and RAM**
-   - Install Threadripper according to manufacturer instructions
-   - Install all 200GB DDR5 RAM modules
-   - Enable XMP/DOCP in BIOS if applicable
-
-2. **Install Storage**
-   - Install 1TB NVMe in primary M.2 slot
-   - Install 4x 20TB HDDs in SATA ports
-   - Note device names (will be /dev/nvme0n1, /dev/sda, /dev/sdb, /dev/sdc, /dev/sdd)
-
-3. **Install GPU**
-   - Install RTX 5080 in PCIe x16 slot with best airflow
-   - Connect power cables from PSU
-
-4. **Connect UPS**
-   - Connect UPS to wall outlet
-   - Connect server PSU to UPS
-   - Install UPS monitoring software later
-
-5. **BIOS Configuration**
-   - Enable IOMMU/VT-d for GPU passthrough support
-   - Set boot priority to NVMe
-   - Enable fan curves for optimal cooling
-   - Enable resume after power loss
-
----
-
-## Initial OS Installation
-
-### Prerequisites
-- Ubuntu 24.04 LTS ISO on USB drive
-- Keyboard, monitor temporarily connected
-- Network cable connected
-
-### Installation Steps
-
-1. **Boot from USB**
-   - Select "Install Ubuntu Server" or "Install Ubuntu Desktop" (Server recommended)
-
-2. **Disk Partitioning**
-   - Select manual partitioning
-   - Use only the 1TB NVMe for now:
-     - 1GB EFI System Partition (/boot/efi)
-     - Remaining space as single partition (will split later)
-   - DO NOT format the 4x 20TB HDDs yet
-
-3. **Basic Configuration**
-   - Hostname: `ml-train-server`
-   - Admin user: `admin` (temporary, for setup only)
-   - Enable OpenSSH server
-   - No additional packages yet
-
-4. **First Boot**
-   ```bash
-   sudo apt update && sudo apt upgrade -y
-   sudo apt install -y git curl wget vim tmux htop
-   ```
-
-5. **Clone this repository**
-   ```bash
-   cd ~
-   git clone <your-repo-url> train-server
-   cd train-server
-   ```
-
----
-
 ## Storage Setup
-
-The storage architecture uses:
-- **NVMe**: 100GB for OS, 900GB for bcache (writeback mode)
-- **4x20TB HDD**: BTRFS RAID10 with zstd:3 compression
 
 ### Automated Setup
 
@@ -114,8 +31,8 @@ sudo ./01-setup-storage.sh
 ```
 
 This script will:
-1. Partition the NVMe (100GB OS, 900GB bcache)
-2. Create BTRFS RAID10 across 4x 20TB HDDs
+1. Partition the NVMe (100GB OS, the rest for bcache)
+2. Create BTRFS RAID10 across all HDD
 3. Configure bcache in writeback mode
 4. Create directory structure
 5. Configure mount points in /etc/fstab
@@ -151,7 +68,7 @@ After setup, you should have:
 └── snapshots/          # BTRFS snapshots (local only)
 ```
 
-### Google Drive Shared Drive Setup (Recommended)
+### Google Drive Shared Drive Setup
 
 The `/shared` directory should be mounted from a Google Workspace Shared Drive with local caching for near-disk performance.
 
@@ -204,47 +121,9 @@ sudo systemctl restart gdrive-shared.service
 /opt/scripts/monitoring/check-gdrive-mount.sh
 ```
 
-See `/root/GDRIVE-SHARED-GUIDE.md` for detailed usage and troubleshooting.
-
-### Storage Architecture Explained
-
-The system uses a two-tier storage strategy for each user:
-
-**Tier 1: `/home/${USERNAME}` (Backed Up Daily)**
-- **Purpose:** Precious, irreplaceable files
-- **Contents:** Code repositories, configs, dotfiles, papers, virtual environments, small datasets
-- **Size limit:** ~100GB per user (soft limit, users get reminders)
-- **Backup:** Daily to GDrive via Restic (7 daily + 52 weekly snapshots)
-- **Performance:** Fast (bcache-accelerated BTRFS)
-- **Mounted in container as:** `/home/${USERNAME}`
-
-**Tier 2: `/workspace` (NOT Backed Up)**
-- **Purpose:** Fast scratch space for expendable/reproducible data
-- **Contents:** Training data, model checkpoints, experiment outputs, large datasets
-- **Size limit:** ~1TB per user (soft limit, users get reminders)
-- **Backup:** NOT backed up (too large, data is reproducible or re-downloadable)
-- **Performance:** Fastest (bcache-accelerated BTRFS, same as home but no backup overhead)
-- **Mounted in container as:** `/workspace`
-
-**Why Separate Them?**
-
-1. **Backup Efficiency:** Only back up what matters (code/configs), not multi-TB datasets
-2. **Clear Mental Model:** Users know what's safe vs what needs re-downloading
-3. **Cost Savings:** GDrive storage costs based on backed-up data
-4. **Faster Restores:** Restoring 100GB of code is fast; restoring 5TB of checkpoints is slow
-
-**User Guidance:**
-- "Put your code in `~` (home), put your data in `/workspace`"
-- "If the server dies, your code is safe. Your training checkpoints? Re-train or re-download."
-- "Store final model weights in `~` after training completes"
-
 ---
 
 ## User Account Setup
-
-Create 5 user accounts: alice, bob, charlie, dave, eve
-
-Run the user setup script:
 
 ```bash
 cd ~/train-server/scripts
@@ -665,7 +544,7 @@ Run the comprehensive test suite:
 
 ```bash
 cd ~/train-server/scripts
-sudo ./10-run-tests.sh
+sudo ./11-run-tests.sh
 ```
 
 This tests:
@@ -677,22 +556,6 @@ This tests:
 - [ ] Backups: BTRFS snapshots, Restic repository
 - [ ] Alerts: Test Telegram bot delivery
 - [ ] Per-user services: SSH, code-server, Jupyter access
-
-### Load Testing
-
-Simulate 5 concurrent users:
-
-```bash
-cd ~/train-server/tests
-./test-concurrent-load.sh
-```
-
-Monitors:
-- GPU memory allocation
-- System RAM usage
-- Disk I/O performance
-- Network bandwidth
-- Container CPU limits
 
 ---
 
@@ -722,187 +585,7 @@ Monitors:
 - Review access logs for security
 - Plan hardware upgrades if needed
 
-### Emergency Procedures
-
-**Disk Failure:**
-1. Check BTRFS status: `sudo btrfs device stats /mnt/storage`
-2. If degraded, replace disk and balance: `sudo btrfs replace start /dev/sdX /dev/sdY /mnt/storage`
-3. Alert users of potential slowdown during rebuild
-
-**GPU Failure:**
-1. Check dmesg and nvidia-smi logs
-2. Restart nvidia drivers: `sudo systemctl restart nvidia-persistenced`
-3. If hardware failure, schedule downtime for replacement
-
-**Complete System Failure:**
-1. Boot from Ubuntu USB
-2. Mount BTRFS RAID: `sudo mount -o degraded /dev/sda /mnt/recovery`
-3. Copy critical data to external storage
-4. Restore from GDrive backup using Restic
-5. Rebuild system using this guide
-
 ---
-
-## Migration Timeline
-
-### Month 1-2: Setup and Stabilization
-- [ ] Assemble hardware
-- [ ] Install OS and configure storage
-- [ ] Deploy all services
-- [ ] Configure networking and security
-- [ ] Set up monitoring and backups
-- [ ] Begin 50TB GCS → GDrive migration
-
-### Month 3-6: Parallel Operation
-- [ ] Train from GDrive data
-- [ ] Customer still uploads to GCS
-- [ ] Daily sync GCS → GDrive
-- [ ] Monitor system stability and performance
-- [ ] Optimize GPU utilization
-
-### Month 6-11: Transition Customer Upload
-- [ ] Customer uploads directly to GDrive
-- [ ] Keep GCS as backup
-- [ ] Reduce GCS costs by deleting old data
-- [ ] Validate end-to-end pipeline
-
-### Month 12+: Full On-Premise
-- [ ] GCS only stores serving/inference data
-- [ ] Training fully on-premise
-- [ ] $3650+/month savings achieved
-
----
-
-## Scripts Reference
-
-All setup and maintenance scripts are in the `scripts/` directory.
-
-### Setup Scripts (Run in Order)
-
-1. **00-validate-config.sh** - Validate configuration before setup
-   ```bash
-   ./scripts/00-validate-config.sh
-   ```
-   Checks: Required settings, disk existence, RAID level compatibility, numeric values
-
-2. **01-setup-storage.sh** - Configure BTRFS RAID + bcache
-   ```bash
-   sudo ./scripts/01-setup-storage.sh
-   ```
-   Creates: BTRFS RAID10, bcache, directory structure, fstab entries
-   **REBOOT REQUIRED AFTER THIS STEP**
-
-2b. **02-setup-gdrive-shared.sh** - Mount Google Drive Shared Drive (Recommended)
-   ```bash
-   sudo ./scripts/02-setup-gdrive-shared.sh
-   ```
-   Configures: Google Workspace Shared Drive mount /shared, cached locally
-   Features: VFS cache, auto-recovery, health monitoring
-   **Note**: Skip if you prefer local storage for /shared
-
-3. **04-setup-users.sh** - Create user accounts
-   ```bash
-   sudo ./scripts/04-setup-users.sh
-   ```
-   Creates: Linux users, home directories, SSH key-based authentication
-
-4. **05-setup-docker.sh** - Install Docker and NVIDIA runtime
-   ```bash
-   sudo ./scripts/05-setup-docker.sh
-   ```
-   Installs: Docker Engine, docker-compose, nvidia-container-toolkit
-
-5. **06-setup-cloudflare-tunnel.sh** - Configure Cloudflare Tunnel
-   ```bash
-   sudo ./scripts/06-setup-cloudflare-tunnel.sh
-   ```
-   Creates: Cloudflare Tunnel, DNS records, systemd service
-
-6. **07-setup-firewall.sh** - Configure firewall and security
-   ```bash
-   sudo ./scripts/07-setup-firewall.sh
-   ```
-   Configures: UFW firewall, fail2ban, automatic updates
-
-7. **08-setup-monitoring.sh** - Set up monitoring and alerts
-   ```bash
-   sudo ./scripts/08-setup-monitoring.sh
-   ```
-   Creates: Monitoring scripts, Telegram alerts, cron jobs
-
-8. **09-setup-backups.sh** - Configure backup system
-   ```bash
-   sudo ./scripts/09-setup-backups.sh
-   ```
-   Configures: Restic, BTRFS snapshots, backup schedules
-
-9. **09-setup-data-pipeline.sh** - Set up data sync pipeline
-   ```bash
-   sudo ./scripts/09-setup-data-pipeline.sh
-   ```
-   Configures: GCS sync, GDrive sync, daily schedules
-
-10. **10-run-tests.sh** - Validate complete system
-    ```bash
-    sudo ./scripts/10-run-tests.sh
-    ```
-    Tests: Storage, GPU, Docker, networking, services
-
-### Maintenance Scripts
-
-Located in `/opt/scripts/` after installation:
-
-**Backup Scripts** (`/opt/scripts/backup/`):
-- `create-snapshot.sh` - Create BTRFS snapshot (hourly/daily/weekly)
-- `restic-backup.sh` - Backup to GDrive via Restic
-- `verify-restore.sh` - Test backup restore (monthly)
-
-**Monitoring Scripts** (`/opt/scripts/monitoring/`):
-- `send-telegram-alert.sh` - Send Telegram notification
-- `check-disk-smart.sh` - Monitor disk health (daily)
-- `check-gpu-temperature.sh` - Monitor GPU temp (every 15 min)
-- `check-btrfs-health.sh` - Check filesystem health (every 6 hours)
-- `check-oom-kills.sh` - Detect OOM kills (every 30 min)
-- `check-user-quotas.sh` - Check disk usage (daily)
-
-**Data Pipeline Scripts** (`/opt/scripts/data/`):
-- `sync-customer-data.sh` - Daily GCS/GDrive sync
-- `manual-sync.sh` - Manual sync (no bandwidth limit)
-- `cleanup-old-data.sh` - Delete old data (90+ days)
-
-### Manual Operations
-
-**Create snapshot:**
-```bash
-sudo /opt/scripts/backup/create-snapshot.sh daily
-```
-
-**Run backup manually:**
-```bash
-sudo /opt/scripts/backup/restic-backup.sh
-```
-
-**List Restic snapshots:**
-```bash
-export RESTIC_PASSWORD_FILE=/root/.restic-password
-restic -r rclone:gdrive:backups/ml-train-server snapshots
-```
-
-**Restore from backup:**
-```bash
-export RESTIC_PASSWORD_FILE=/root/.restic-password
-restic -r rclone:gdrive:backups/ml-train-server restore latest --target /tmp/restore
-```
-
-**Manual data sync:**
-```bash
-sudo /opt/scripts/data/manual-sync.sh
-```
-
-**Send test alert:**
-```bash
-sudo /opt/scripts/monitoring/send-telegram-alert.sh info "Test message"
-```
 
 ### Automated Schedules
 
@@ -1010,15 +693,3 @@ sudo restic -r rclone:gdrive:backups/ml-train-server unlock
 # Rebuild index if corrupted
 sudo restic -r rclone:gdrive:backups/ml-train-server rebuild-index
 ```
-
----
-
-## Support and Resources
-
-- **This Repository**: All scripts and configs
-- **Ubuntu Documentation**: https://ubuntu.com/server/docs
-- **Docker Documentation**: https://docs.docker.com/
-- **BTRFS Wiki**: https://btrfs.wiki.kernel.org/
-- **Restic Documentation**: https://restic.readthedocs.io/
-
-For issues or questions, contact the system administrator or refer to the scripts in this repository.

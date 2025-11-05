@@ -100,6 +100,29 @@ if ! jq empty "${CREDENTIALS_FILE}" 2>/dev/null; then
     exit 1
 fi
 
+# Check and fix file permissions
+CURRENT_PERMS=$(stat -c "%a" "${CREDENTIALS_FILE}" 2>/dev/null || stat -f "%Lp" "${CREDENTIALS_FILE}" 2>/dev/null)
+if [[ "${CURRENT_PERMS}" != "600" ]]; then
+    echo "WARNING: Credentials file has insecure permissions: ${CURRENT_PERMS}"
+    echo "   Fixing permissions to 600 (owner read/write only)..."
+    chmod 600 "${CREDENTIALS_FILE}"
+
+    if [[ $? -eq 0 ]]; then
+        echo "   Permissions fixed"
+    else
+        echo "ERROR: Could not fix permissions"
+        echo "   Run: chmod 600 ${CREDENTIALS_FILE}"
+        exit 1
+    fi
+fi
+
+# Validate ownership (should be root or service user)
+CURRENT_OWNER=$(stat -c "%U" "${CREDENTIALS_FILE}" 2>/dev/null || stat -f "%Su" "${CREDENTIALS_FILE}" 2>/dev/null)
+if [[ "${CURRENT_OWNER}" != "root" && "${CURRENT_OWNER}" != "cloudflared" ]]; then
+    echo "WARNING: Credentials file owned by ${CURRENT_OWNER}"
+    echo "   Consider: chown root:root ${CREDENTIALS_FILE}"
+fi
+
 echo "✓ Tunnel credentials validated"
 
 # Step 3: Configure tunnel

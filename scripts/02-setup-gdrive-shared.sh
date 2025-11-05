@@ -238,7 +238,22 @@ echo ""
 
 # Calculate VFS cache size using remaining free space
 
+# Validate free space is available
+if [[ ${FREE_GB} -le 0 ]]; then
+    echo "ERROR: No free space available for VFS cache"
+    echo "Available: ${FREE_GB}GB"
+    exit 1
+fi
+
 CACHE_SIZE_GB=$(awk "BEGIN {printf \"%.0f\", ${FREE_GB} * (1 - ${STORAGE_SAFETY_MARGIN_PERCENT}/100.0)}")
+
+# Validate cache size meets minimum requirements
+if [[ ${CACHE_SIZE_GB} -lt 10 ]]; then
+    echo "ERROR: VFS cache size too small (${CACHE_SIZE_GB}GB < 10GB minimum)"
+    echo "Free up space or adjust STORAGE_SAFETY_MARGIN_PERCENT"
+    exit 1
+fi
+
 SAFETY_BUFFER_GB=$(awk "BEGIN {printf \"%.0f\", ${FREE_GB} - ${CACHE_SIZE_GB}}")
 CACHE_PERCENT=$(awk "BEGIN {printf \"%.0f\", ${CACHE_SIZE_GB} * 100.0 / ${TOTAL_BTRFS_GB}}")
 
@@ -469,15 +484,16 @@ if ! mountpoint -q "${MOUNT_POINT}/shared"; then
     exit 1
 fi
 
-# Test read access
+# Validate mount is responsive
 echo ""
-echo "Testing read access..."
-if timeout 30 ls "${MOUNT_POINT}/shared" > /dev/null; then
-    echo "✅ Read access verified"
-else
-    echo "⚠️  WARNING: Mount succeeded but ls timed out"
-    echo "This may be normal for large directories on first access"
+echo "Validating mount is responsive..."
+if ! timeout 30 ls "${MOUNT_POINT}/shared" > /dev/null 2>&1; then
+    echo "ERROR: Mount point exists but is not responding to ls"
+    echo "Check: journalctl -u gdrive-shared.service -n 50"
+    exit 1
 fi
+
+echo "✅ Mount is functional and responsive"
 
 # Display cache stats
 echo ""

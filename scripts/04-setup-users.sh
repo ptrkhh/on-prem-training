@@ -120,7 +120,10 @@ for USERNAME in "${USER_ARRAY[@]}"; do
     fi
 
     # Set password from config
-    echo "${USERNAME}:${USER_DEFAULT_PASSWORD}" | chpasswd
+    # Use heredoc to avoid command-line exposure
+    chpasswd <<EOF
+${USERNAME}:${USER_DEFAULT_PASSWORD}
+EOF
     echo "  Password set from USER_DEFAULT_PASSWORD"
 
     # Create home directory on BTRFS storage
