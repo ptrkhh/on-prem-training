@@ -146,7 +146,7 @@ for USERNAME in "${USER_ARRAY[@]}"; do
         fi
     else
         # Create user with specific UID
-        useradd -m -u ${UID} -s /bin/bash -d ${MOUNT_POINT}/homes/${USERNAME} ${USERNAME}
+        useradd -m -u "${UID}" -s /bin/bash -d "${MOUNT_POINT}/homes/${USERNAME}" "${USERNAME}"
         echo "  Created user ${USERNAME}"
     fi
 
@@ -168,35 +168,35 @@ EOF
     fi
 
     # Create home directory on BTRFS storage
-    mkdir -p ${MOUNT_POINT}/homes/${USERNAME}
-    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/homes/${USERNAME}
-    chmod 700 ${MOUNT_POINT}/homes/${USERNAME}
+    mkdir -p "${MOUNT_POINT}/homes/${USERNAME}"
+    chown "${USERNAME}:${USERNAME}" "${MOUNT_POINT}/homes/${USERNAME}"
+    chmod 700 "${MOUNT_POINT}/homes/${USERNAME}"
 
     # Create workspace directory
-    mkdir -p ${MOUNT_POINT}/workspaces/${USERNAME}
-    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/workspaces/${USERNAME}
-    chmod 755 ${MOUNT_POINT}/workspaces/${USERNAME}
+    mkdir -p "${MOUNT_POINT}/workspaces/${USERNAME}"
+    chown "${USERNAME}:${USERNAME}" "${MOUNT_POINT}/workspaces/${USERNAME}"
+    chmod 755 "${MOUNT_POINT}/workspaces/${USERNAME}"
 
     # Create docker-volumes directory
-    mkdir -p ${MOUNT_POINT}/docker-volumes/${USERNAME}-state
-    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/docker-volumes/${USERNAME}-state
-    chmod 755 ${MOUNT_POINT}/docker-volumes/${USERNAME}-state
+    mkdir -p "${MOUNT_POINT}/docker-volumes/${USERNAME}-state"
+    chown "${USERNAME}:${USERNAME}" "${MOUNT_POINT}/docker-volumes/${USERNAME}-state"
+    chmod 755 "${MOUNT_POINT}/docker-volumes/${USERNAME}-state"
 
     # Create tensorboard directory
 
-    mkdir -p ${MOUNT_POINT}/shared/tensorboard/${USERNAME}
-    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/shared/tensorboard/${USERNAME}
-    chmod 755 ${MOUNT_POINT}/shared/tensorboard/${USERNAME}
+    mkdir -p "${MOUNT_POINT}/shared/tensorboard/${USERNAME}"
+    chown "${USERNAME}:${USERNAME}" "${MOUNT_POINT}/shared/tensorboard/${USERNAME}"
+    chmod 755 "${MOUNT_POINT}/shared/tensorboard/${USERNAME}"
 
     # Create .ssh directory
-    mkdir -p ${MOUNT_POINT}/homes/${USERNAME}/.ssh
-    chmod 700 ${MOUNT_POINT}/homes/${USERNAME}/.ssh
-    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/homes/${USERNAME}/.ssh
+    mkdir -p "${MOUNT_POINT}/homes/${USERNAME}/.ssh"
+    chmod 700 "${MOUNT_POINT}/homes/${USERNAME}/.ssh"
+    chown "${USERNAME}:${USERNAME}" "${MOUNT_POINT}/homes/${USERNAME}/.ssh"
 
     # Create placeholder for authorized_keys
-    touch ${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys
-    chmod 600 ${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys
-    chown ${USERNAME}:${USERNAME} ${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys
+    touch "${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys"
+    chmod 600 "${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys"
+    chown "${USERNAME}:${USERNAME}" "${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys"
 
     echo "  Directory structure created for ${USERNAME}"
     echo ""

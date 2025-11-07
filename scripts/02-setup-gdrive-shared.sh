@@ -66,8 +66,9 @@ echo ""
 # Step 1: Install rclone
 echo "=== Step 1: Installing rclone ==="
 if ! command -v rclone &> /dev/null; then
-    echo "Installing rclone..."
-    curl https://rclone.org/install.sh | bash
+    echo "Installing rclone via apt..."
+    apt-get update
+    apt-get install -y rclone
 else
     echo "rclone already installed: $(rclone version | head -n1)"
 fi
@@ -494,6 +495,63 @@ if ! timeout 30 ls "${MOUNT_POINT}/shared" > /dev/null 2>&1; then
 fi
 
 echo "✅ Mount is functional and responsive"
+
+# Read/write probe to catch read-only or stale mounts
+echo ""
+echo "Performing read/write probe on ${MOUNT_POINT}/shared..."
+TEST_FILE="${MOUNT_POINT}/shared/.rw-test-$$"
+if ! echo "ok" > "${TEST_FILE}" 2>/dev/null; then
+    echo "❌ ERROR: ${MOUNT_POINT}/shared is not writable. Check Google Drive quota and rclone credentials."
+    exit 1
+fi
+
+if ! rm -f "${TEST_FILE}" 2>/dev/null; then
+    echo "❌ ERROR: Unable to remove test file ${TEST_FILE}. Mount may be unhealthy."
+    exit 1
+fi
+
+echo "✅ Mount passed write probe"
+
+# Optional quota visibility (best effort)
+if command -v jq &>/dev/null; then
+    echo ""
+    echo "Checking Google Drive quota usage..."
+    QUOTA_JSON=$(rclone about "${GDRIVE_SHARED_REMOTE}:" --json 2>/dev/null || echo "")
+
+    if [[ -n "${QUOTA_JSON}" ]]; then
+        QUOTA_TOTAL=$(echo "${QUOTA_JSON}" | jq -r '.quota.total // empty')
+        QUOTA_USED=$(echo "${QUOTA_JSON}" | jq -r '.quota.used // 0')
+
+        if [[ -n "${QUOTA_TOTAL}" && "${QUOTA_TOTAL}" != "null" && "${QUOTA_TOTAL}" != "0" ]]; then
+            format_bytes() {
+                local bytes="$1"
+                if command -v numfmt &>/dev/null; then
+                    numfmt --to=iec --suffix=B "${bytes}"
+                else
+                    echo "${bytes} bytes"
+                fi
+            }
+
+            USAGE_PERCENT=$(( QUOTA_USED * 100 / QUOTA_TOTAL ))
+            READABLE_USED=$(format_bytes "${QUOTA_USED}")
+            READABLE_TOTAL=$(format_bytes "${QUOTA_TOTAL}")
+
+            if (( USAGE_PERCENT >= 90 )); then
+                echo "⚠️  WARNING: Google Drive usage at ${USAGE_PERCENT}% (${READABLE_USED} of ${READABLE_TOTAL} used)"
+                echo "    Free up space or increase quota to avoid backup failures."
+            else
+                echo "Quota usage: ${USAGE_PERCENT}% (${READABLE_USED} of ${READABLE_TOTAL} used)"
+            fi
+        else
+            echo "Quota information unavailable: backend did not return totals."
+        fi
+    else
+        echo "Quota check skipped: rclone about did not return data."
+    fi
+else
+    echo ""
+    echo "Skipping quota check (jq not installed). Install jq for detailed quota reporting."
+fi
 
 # Display cache stats
 echo ""

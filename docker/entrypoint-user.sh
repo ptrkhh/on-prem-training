@@ -12,7 +12,6 @@ USER_UID="${USER_UID:-1000}"
 USER_GID="${USER_GID:-1000}"
 USER_PASSWORD="${USER_PASSWORD:-changeme}"
 USER_GROUPS="${USER_GROUPS:-sudo docker}"
-USER_VNC_PASSWORD="${USER_VNC_PASSWORD:-}"
 
 # Validate username format
 if [[ ! "${USER_NAME}" =~ ^[a-z][-a-z0-9]*$ ]]; then
@@ -31,28 +30,43 @@ if [[ ${USER_GID} -lt 1000 ]] || [[ ${USER_GID} -gt 60000 ]]; then
     exit 1
 fi
 
+echo "Checking GPU availability..."
+REQUIRE_GPU="${REQUIRE_GPU:-false}"
 
-# Validate VNC password (6-8 chars required)
-if [[ -z "${USER_VNC_PASSWORD}" ]]; then
-    echo "ERROR: USER_VNC_PASSWORD is not set. Provide a 6-8 character password."
-    exit 1
+if command -v nvidia-smi &> /dev/null; then
+    if nvidia-smi &> /dev/null; then
+        GPU_NAME=$(nvidia-smi --query-gpu=name --format=csv,noheader | head -n1)
+        GPU_MEMORY=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -n1)
+        echo "✓ GPU detected: ${GPU_NAME} (${GPU_MEMORY}MB)"
+    else
+        echo "⚠️  WARNING: nvidia-smi found but GPU not accessible"
+        echo "   Ensure nvidia-container-toolkit is configured and container is started with GPU access."
+        if [[ "${REQUIRE_GPU}" == "true" ]]; then
+            echo "ERROR: REQUIRE_GPU=true but GPU is not accessible"
+            exit 1
+        else
+            echo "   Continuing without GPU (set REQUIRE_GPU=true to enforce availability)."
+        fi
+    fi
+else
+    echo "⚠️  WARNING: nvidia-smi not found inside container"
+    if [[ "${REQUIRE_GPU}" == "true" ]]; then
+        echo "ERROR: REQUIRE_GPU=true but nvidia-smi is unavailable"
+        exit 1
+    fi
 fi
+echo ""
 
-VNC_PASS_LEN=${#USER_VNC_PASSWORD}
-if [[ ${VNC_PASS_LEN} -lt 6 ]] || [[ ${VNC_PASS_LEN} -gt 8 ]]; then
-    echo "ERROR: USER_VNC_PASSWORD must be between 6 and 8 characters (current length: ${VNC_PASS_LEN})."
-    exit 1
-fi
 
 echo "Initializing user: ${USER_NAME} (UID: ${USER_UID}, GID: ${USER_GID})"
 
 # Create user and group if they don't exist
-if ! getent group ${USER_GID} > /dev/null 2>&1; then
-    groupadd -g ${USER_GID} ${USER_NAME}
+if ! getent group "${USER_GID}" > /dev/null 2>&1; then
+    groupadd -g "${USER_GID}" "${USER_NAME}"
 fi
 
-if ! id -u ${USER_NAME} > /dev/null 2>&1; then
-    useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash ${USER_NAME}
+if ! id -u "${USER_NAME}" > /dev/null 2>&1; then
+    useradd -m -u "${USER_UID}" -g "${USER_GID}" -s /bin/bash "${USER_NAME}"
     echo "${USER_NAME}:${USER_PASSWORD}" | chpasswd
 fi
 
@@ -70,7 +84,7 @@ done
 
 if [[ ${#VALID_GROUPS[@]} -gt 0 ]]; then
     GROUP_CSV=$(IFS=,; echo "${VALID_GROUPS[*]}")
-    usermod -aG "${GROUP_CSV}" ${USER_NAME}
+    usermod -aG "${GROUP_CSV}" "${USER_NAME}"
     echo "Added ${USER_NAME} to supplementary groups: ${VALID_GROUPS[*]}"
 else
     echo "No supplementary groups assigned to ${USER_NAME}"
@@ -78,7 +92,7 @@ fi
 
 # Setup home directory structure
 echo "Setting up home directory..."
-su - ${USER_NAME} << 'EOF'
+su - "${USER_NAME}" << 'EOF'
 mkdir -p ~/workspace
 mkdir -p ~/projects
 mkdir -p ~/data
@@ -96,11 +110,12 @@ EOF
 
 # Configure VNC server for user
 echo "Configuring VNC server..."
-su - ${USER_NAME} << EOF
+su - "${USER_NAME}" << EOF
 mkdir -p ~/.vnc
 
-# Create VNC password file
-echo "${USER_VNC_PASSWORD}" | vncpasswd -f > ~/.vnc/passwd
+# Create VNC password file using SHA256 format (matches USER_PASSWORD)
+VNC_PASSWORD="${USER_PASSWORD}"
+vncpasswd -type=sha256 -f <<<"\${VNC_PASSWORD}" > ~/.vnc/passwd
 chmod 600 ~/.vnc/passwd
 
 # Create VNC startup script
@@ -136,7 +151,7 @@ chmod +x /etc/xrdp/startwm.sh
 
 # Configure code-server
 echo "Configuring code-server..."
-su - ${USER_NAME} << EOF
+su - "${USER_NAME}" << EOF
 mkdir -p ~/.config/code-server
 cat > ~/.config/code-server/config.yaml << CODECONF
 bind-addr: 0.0.0.0:8080
@@ -152,7 +167,7 @@ echo "Configuring Jupyter..."
 # Generate Jupyter password hash
 JUPYTER_PASSWORD_HASH=$(python3 -c "from jupyter_server.auth import passwd; print(passwd('${USER_PASSWORD}'))")
 
-su - ${USER_NAME} << EOF
+su - "${USER_NAME}" << EOF
 mkdir -p ~/.jupyter
 
 cat > ~/.jupyter/jupyter_lab_config.py << JUPCONF
@@ -178,7 +193,7 @@ EOF
 
 # Install Rust for user
 echo "Installing Rust for user..."
-su - ${USER_NAME} << EOF
+su - "${USER_NAME}" << EOF
 if [ ! -d ~/.cargo ]; then
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
 fi
@@ -264,7 +279,7 @@ stderr_logfile_maxbytes=0
 exitcodes=0
 
 [program:vncserver]
-command=/bin/bash -c 'su - ${USER_NAME} -c "vncserver :0 -fg -localhost no -PasswordFile ~/.vnc/passwd -SecurityTypes VncAuth"'
+command=/bin/bash -c 'su - ${USER_NAME} -c "vncserver :0 -fg -localhost no -PasswordFile ~/.vnc/passwd -SecurityTypes TLSVnc,VNC"'
 autostart=true
 autorestart=true
 startsecs=10
@@ -391,8 +406,8 @@ files = /etc/supervisor/conf.d/*.conf
 SUPERMAIN
 
 # Fix permissions
-mkdir -p /home/${USER_NAME}
-chown -R ${USER_NAME}:${USER_NAME} /home/${USER_NAME}
+mkdir -p "/home/${USER_NAME}"
+chown -R "${USER_NAME}:${USER_NAME}" "/home/${USER_NAME}"
 
 # Start DBUS (needed for KDE)
 mkdir -p /run/dbus

@@ -26,6 +26,39 @@ source "${CONFIG_FILE}"
 SNAPSHOT_DIR="${MOUNT_POINT}/snapshots"
 SCRIPTS_DIR="/opt/scripts/backup"
 
+# Ensure Restic password is configured
+if [[ -z "${RESTIC_PASSWORD:-}" ]]; then
+    echo "ERROR: RESTIC_PASSWORD is not set in config.sh"
+    echo "Set RESTIC_PASSWORD to a strong value and re-run this script."
+    exit 1
+fi
+
+RESTIC_PASSWORD_FILE="/root/.restic-password"
+
+# Write Restic password file from configuration (idempotent)
+ensure_restic_password_file() {
+    local password_file="$1"
+    local desired_password="$2"
+
+    if [[ -f "${password_file}" ]]; then
+        local current_password
+        current_password="$(cat "${password_file}")"
+        if [[ "${current_password}" != "${desired_password}" ]]; then
+            echo "Updating Restic password file at ${password_file}"
+            umask 077
+            printf '%s\n' "${desired_password}" > "${password_file}"
+        fi
+    else
+        echo "Creating Restic password file at ${password_file}"
+        umask 077
+        printf '%s\n' "${desired_password}" > "${password_file}"
+    fi
+
+    chmod 600 "${password_file}"
+}
+
+ensure_restic_password_file "${RESTIC_PASSWORD_FILE}" "${RESTIC_PASSWORD}"
+
 # Define restic cache directory (for deduplication and performance)
 BACKUP_CACHE_DIR="${MOUNT_POINT}/cache/restic"
 mkdir -p "${BACKUP_CACHE_DIR}"
@@ -57,6 +90,56 @@ if [[ "${SHARED_FSTYPE}" != "fuse.rclone" ]]; then
     echo "ERROR: ${SHARED_DIR} must be mounted via rclone (fuse.rclone), found '${SHARED_FSTYPE:-unknown}'."
     echo "Re-run scripts/02-setup-gdrive-shared.sh to configure the Google Drive mount."
     exit 1
+fi
+
+format_bytes() {
+    local bytes="$1"
+    if command -v numfmt &>/dev/null; then
+        numfmt --to=iec --suffix=B "${bytes}"
+    else
+        echo "${bytes} bytes"
+    fi
+}
+
+echo "Performing health check on ${SHARED_DIR}..."
+TEST_FILE="${SHARED_DIR}/.rw-test-$$"
+if ! echo "ok" > "${TEST_FILE}" 2>/dev/null; then
+    echo "ERROR: ${SHARED_DIR} is mounted but not writable. Check Google Drive quota or mount permissions."
+    exit 1
+fi
+
+if ! rm -f "${TEST_FILE}" 2>/dev/null; then
+    echo "ERROR: Failed to remove test file ${TEST_FILE}. Mount may be read-only."
+    exit 1
+fi
+
+echo "✓ ${SHARED_DIR} write probe succeeded"
+
+if command -v jq &>/dev/null; then
+    QUOTA_JSON=$(rclone about "${GDRIVE_SHARED_REMOTE}:" --json 2>/dev/null || echo "")
+    if [[ -n "${QUOTA_JSON}" ]]; then
+        QUOTA_TOTAL=$(echo "${QUOTA_JSON}" | jq -r '.quota.total // empty')
+        QUOTA_USED=$(echo "${QUOTA_JSON}" | jq -r '.quota.used // 0')
+
+        if [[ -n "${QUOTA_TOTAL}" && "${QUOTA_TOTAL}" != "null" && "${QUOTA_TOTAL}" != "0" ]]; then
+            USAGE_PERCENT=$(( QUOTA_USED * 100 / QUOTA_TOTAL ))
+            READABLE_USED=$(format_bytes "${QUOTA_USED}")
+            READABLE_TOTAL=$(format_bytes "${QUOTA_TOTAL}")
+
+            if (( USAGE_PERCENT >= 90 )); then
+                echo "WARNING: Google Drive usage at ${USAGE_PERCENT}% (${READABLE_USED} of ${READABLE_TOTAL} used)"
+                echo "         Free space before running backups to avoid failures."
+            else
+                echo "Google Drive usage: ${USAGE_PERCENT}% (${READABLE_USED} of ${READABLE_TOTAL} used)"
+            fi
+        else
+            echo "Google Drive quota information unavailable (backend did not report totals)."
+        fi
+    else
+        echo "Google Drive quota check skipped: rclone about returned no data."
+    fi
+else
+    echo "Skipping quota check (jq not installed). install jq for quota visibility."
 fi
 
 # Load common functions
@@ -130,23 +213,52 @@ SNAPSHOT_TYPE="\$1"  # hourly, daily, weekly
 
 # Create snapshot
 SNAPSHOT_NAME="\${SNAPSHOT_TYPE}_\${TIMESTAMP}"
-btrfs subvolume snapshot -r \${MOUNT_POINT} \${SNAPSHOT_DIR}/\${SNAPSHOT_NAME}
+btrfs subvolume snapshot -r "\${MOUNT_POINT}" "\${SNAPSHOT_DIR}/\${SNAPSHOT_NAME}"
 
 echo "Created snapshot: \${SNAPSHOT_NAME}"
+
+prune_snapshots() {
+    local tier="\$1"
+    local keep_count="\$2"
+
+    if [[ -z "\${keep_count}" ]]; then
+        keep_count=0
+    fi
+
+    # Delete snapshots exceeding retention using btrfs-aware deletion
+    find "\${SNAPSHOT_DIR}" -maxdepth 1 -name "\${tier}_*" -type d \\
+        | sort -r \\
+        | tail -n +\$((keep_count + 1)) \\
+        | while IFS= read -r snapshot; do
+            [[ -z "\${snapshot}" ]] && continue
+            if ! btrfs subvolume delete "\${snapshot}"; then
+                echo "WARNING: Failed to delete snapshot: \${snapshot}"
+            else
+                echo "Deleted snapshot: \${snapshot}"
+            fi
+        done
+}
 
 # Cleanup old snapshots
 case "\${SNAPSHOT_TYPE}" in
     hourly)
-        # Keep last ${SNAPSHOT_KEEP_HOURLY} hourly snapshots
-        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'hourly_*' -type d | sort -r | tail -n +$((${SNAPSHOT_KEEP_HOURLY} + 1)) | xargs -r rm -rf
+        prune_snapshots "hourly" ${SNAPSHOT_KEEP_HOURLY}
         ;;
     daily)
-        # Keep last ${SNAPSHOT_KEEP_DAILY} daily snapshots
-        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'daily_*' -type d | sort -r | tail -n +$((${SNAPSHOT_KEEP_DAILY} + 1)) | xargs -r rm -rf
+        prune_snapshots "daily" ${SNAPSHOT_KEEP_DAILY}
         ;;
     weekly)
-        # Keep last ${SNAPSHOT_KEEP_WEEKLY} weekly snapshots
-        find \${SNAPSHOT_DIR} -maxdepth 1 -name 'weekly_*' -type d | sort -r | tail -n +$((${SNAPSHOT_KEEP_WEEKLY} + 1)) | xargs -r rm -rf
+        prune_snapshots "weekly" ${SNAPSHOT_KEEP_WEEKLY}
+        ;;
+    monthly)
+        prune_snapshots "monthly" ${SNAPSHOT_KEEP_MONTHLY}
+        ;;
+    yearly)
+        prune_snapshots "yearly" ${SNAPSHOT_KEEP_YEARLY}
+        ;;
+    *)
+        echo "WARNING: Unknown snapshot tier: \${SNAPSHOT_TYPE}"
+        exit 1
         ;;
 esac
 
@@ -163,12 +275,10 @@ set -euo pipefail
 RESTIC_REPOSITORY="rclone:${BACKUP_REMOTE}"
 RESTIC_PASSWORD_FILE="/root/.restic-password"
 
-# Generate random password if doesn't exist
-if [[ ! -f "${RESTIC_PASSWORD_FILE}" ]]; then
-    openssl rand -base64 32 > ${RESTIC_PASSWORD_FILE}
-    chmod 600 ${RESTIC_PASSWORD_FILE}
-    echo "Generated Restic password: ${RESTIC_PASSWORD_FILE}"
-    echo "IMPORTANT: Back up this password file!"
+if [[ ! -s "${RESTIC_PASSWORD_FILE}" ]]; then
+    echo "ERROR: Restic password file missing at ${RESTIC_PASSWORD_FILE}"
+    echo "Run scripts/09-setup-backups.sh again after setting RESTIC_PASSWORD in config.sh."
+    exit 1
 fi
 
 export RESTIC_PASSWORD_FILE
@@ -219,8 +329,85 @@ MOUNT_POINT="${MOUNT_POINT}"
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 LOG_FILE="/var/log/restic-backup.log"
 BACKUP_STATUS="success"
+SHARED_DIR="\${MOUNT_POINT}/shared"
+GDRIVE_SHARED_REMOTE="${GDRIVE_SHARED_REMOTE}"
+
+if [[ ! -s "${RESTIC_PASSWORD_FILE}" ]]; then
+    echo "ERROR: Restic password file missing at ${RESTIC_PASSWORD_FILE}"
+    echo "Run scripts/09-setup-backups.sh again after setting RESTIC_PASSWORD in config.sh."
+    exit 1
+fi
 
 export RESTIC_PASSWORD_FILE
+
+format_bytes() {
+    local bytes="\$1"
+    if command -v numfmt &>/dev/null; then
+        numfmt --to=iec --suffix=B "\${bytes}"
+    else
+        echo "\${bytes} bytes"
+    fi
+}
+
+check_mount_health() {
+    local mount_path="\$1"
+    local remote_name="\$2"
+
+    if ! mountpoint -q "\${mount_path}"; then
+        echo "ERROR: \${mount_path} is not mounted."
+        if [[ -x "\${ALERT_SCRIPT}" ]]; then
+            "\${ALERT_SCRIPT}" "critical" "Backup aborted: \${mount_path} not mounted"
+        fi
+        exit 1
+    fi
+
+    local test_file="\${mount_path}/.rw-test-\$\$"
+    if ! echo "ok" > "\${test_file}" 2>/dev/null; then
+        echo "ERROR: \${mount_path} is not writable."
+        if [[ -x "\${ALERT_SCRIPT}" ]]; then
+            "\${ALERT_SCRIPT}" "critical" "Backup aborted: \${mount_path} is read-only"
+        fi
+        exit 1
+    fi
+
+    if ! rm -f "\${test_file}" 2>/dev/null; then
+        echo "ERROR: Failed to remove test file \${test_file}."
+        if [[ -x "\${ALERT_SCRIPT}" ]]; then
+            "\${ALERT_SCRIPT}" "warning" "Backup warning: could not clean mount probe file"
+        fi
+        exit 1
+    fi
+
+    if command -v jq &>/dev/null && [[ -n "\${remote_name}" ]]; then
+        local quota_json
+        quota_json=\$(rclone about "\${remote_name}:" --json 2>/dev/null || echo "")
+        if [[ -n "\${quota_json}" ]]; then
+            local quota_total
+            quota_total=\$(echo "\${quota_json}" | jq -r '.quota.total // empty')
+            if [[ -n "\${quota_total}" && "\${quota_total}" != "null" && "\${quota_total}" != "0" ]]; then
+                local quota_used
+                quota_used=\$(echo "\${quota_json}" | jq -r '.quota.used // 0')
+                local usage_percent=\$(( quota_used * 100 / quota_total ))
+                local readable_used
+                readable_used=\$(format_bytes "\${quota_used}")
+                local readable_total
+                readable_total=\$(format_bytes "\${quota_total}")
+                if (( usage_percent >= 90 )); then
+                    echo "WARNING: Google Drive usage at \${usage_percent}% (\${readable_used} of \${readable_total} used)"
+                    if [[ -x "\${ALERT_SCRIPT}" ]]; then
+                        "\${ALERT_SCRIPT}" "warning" "Google Drive usage high: \${usage_percent}% used"
+                    fi
+                else
+                    echo "Google Drive usage: \${usage_percent}% (\${readable_used} of \${readable_total} used)"
+                fi
+            else
+                echo "Google Drive quota information unavailable."
+            fi
+        fi
+    fi
+}
+
+check_mount_health "\${SHARED_DIR}" "${GDRIVE_SHARED_REMOTE}"
 
 # Check disk space before backup
 echo "Checking disk space..."
@@ -436,6 +623,12 @@ RESTIC_REPOSITORY="rclone:${BACKUP_REMOTE}"
 RESTIC_PASSWORD_FILE="/root/.restic-password"
 RESTORE_DIR="/tmp/restore-test"
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
+
+if [[ ! -s "${RESTIC_PASSWORD_FILE}" ]]; then
+    echo "ERROR: Restic password file missing at ${RESTIC_PASSWORD_FILE}"
+    echo "Run scripts/09-setup-backups.sh again after setting RESTIC_PASSWORD in config.sh."
+    exit 1
+fi
 
 export RESTIC_PASSWORD_FILE
 

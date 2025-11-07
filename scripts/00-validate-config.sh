@@ -367,12 +367,20 @@ else
     echo "  ✓ USER_DEFAULT_PASSWORD is set"
 fi
 
-# Check USER_VNC_PASSWORD
-if [[ ${#USER_VNC_PASSWORD} -lt 6 ]] || [[ ${#USER_VNC_PASSWORD} -gt 8 ]]; then
-    echo "  ✗ ERROR: USER_VNC_PASSWORD must be between 6 and 8 characters (current length: ${#USER_VNC_PASSWORD})"
+# Check RESTIC_PASSWORD
+if [[ -z "${RESTIC_PASSWORD:-}" ]]; then
+    echo "  ✗ ERROR: RESTIC_PASSWORD is not set"
+    echo "    Set RESTIC_PASSWORD in config.sh to the password of your Restic repository"
+    ((ERRORS++))
+elif [[ ${#RESTIC_PASSWORD} -lt 12 ]]; then
+    echo "  ✗ ERROR: RESTIC_PASSWORD is too short (minimum 12 characters recommended)"
+    ((ERRORS++))
+elif [[ "${RESTIC_PASSWORD}" == *"changeme"* ]]; then
+    echo "  ✗ ERROR: RESTIC_PASSWORD contains default/weak value"
+    echo "    Replace with a strong, random string in config.sh"
     ((ERRORS++))
 else
-    echo "  ✓ USER_VNC_PASSWORD is set"
+    echo "  ✓ RESTIC_PASSWORD is set"
 fi
 
 # Check GUACAMOLE_DB_PASSWORD
@@ -400,10 +408,40 @@ else
     echo "  ✓ Domain: ${DOMAIN}"
 fi
 
+# Validate Docker subnet
+if [[ -z "${DOCKER_SUBNET:-}" ]]; then
+    echo "  ✗ ERROR: DOCKER_SUBNET is not set"
+    echo "    Set DOCKER_SUBNET in config.sh (example: 172.28.0.0/16)"
+    ((ERRORS++))
+elif [[ ! "${DOCKER_SUBNET}" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}$ ]]; then
+    echo "  ✗ ERROR: DOCKER_SUBNET has invalid format: ${DOCKER_SUBNET}"
+    echo "    Expected CIDR notation, e.g., 172.28.0.0/16"
+    ((ERRORS++))
+else
+    echo "  ✓ Docker subnet: ${DOCKER_SUBNET}"
+
+    # Check for overlap with existing routes (best-effort)
+    if ip route | grep -q "$(echo "${DOCKER_SUBNET}" | cut -d/ -f1)"; then
+    echo "  ✗ ERROR: DOCKER_SUBNET conflicts with an existing network route"
+    ((ERRORS++))
+    fi
+fi
+
+# Validate REQUIRE_GPU toggle
+if [[ "${REQUIRE_GPU}" != "true" && "${REQUIRE_GPU}" != "false" ]]; then
+    echo "  ✗ ERROR: REQUIRE_GPU must be 'true' or 'false' (current: ${REQUIRE_GPU})"
+    ((ERRORS++))
+fi
+
 # Check GPU and CUDA version
 if ! nvidia-smi &>/dev/null; then
-    echo "  ⚠ WARNING: No NVIDIA GPU detected"
-    ((WARNINGS++))
+    if [[ "${REQUIRE_GPU}" == "true" ]]; then
+        echo "  ✗ ERROR: REQUIRE_GPU=true but no NVIDIA GPU detected"
+        ((ERRORS++))
+    else
+        echo "  ⚠ WARNING: No NVIDIA GPU detected"
+        ((WARNINGS++))
+    fi
     # If no GPU, manual CUDA_VERSION is required
     if [[ -z "${CUDA_VERSION}" ]]; then
         echo "  ✗ ERROR: CUDA_VERSION must be manually specified in config.sh when nvidia-smi is not available"

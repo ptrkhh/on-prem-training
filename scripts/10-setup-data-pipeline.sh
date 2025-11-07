@@ -38,8 +38,9 @@ GDRIVE_CUSTOMER_DATA="${GDRIVE_CUSTOMER_DATA:-gdrive:customer-daily}"
 
 # Install rclone if not already installed
 if ! command -v rclone &> /dev/null; then
-    echo "Installing rclone..."
-    curl https://rclone.org/install.sh | bash
+    echo "Installing rclone via apt..."
+    apt-get update
+    apt-get install -y rclone
 fi
 
 # Check network connectivity (required for GCS and GDrive access)

@@ -34,17 +34,6 @@ if [[ "${USER_DEFAULT_PASSWORD}" == "changeme_default_password" ]]; then
     WARNINGS=$((WARNINGS + 1))
 fi
 
-if [[ -z "${USER_VNC_PASSWORD}" ]]; then
-    echo "✗ ERROR: USER_VNC_PASSWORD is not set"
-    echo "  Set USER_VNC_PASSWORD in config.sh to a 6-8 character value"
-    exit 1
-fi
-
-if [[ ${#USER_VNC_PASSWORD} -lt 6 ]] || [[ ${#USER_VNC_PASSWORD} -gt 8 ]]; then
-    echo "✗ ERROR: USER_VNC_PASSWORD must be between 6 and 8 characters (current length: ${#USER_VNC_PASSWORD})"
-    exit 1
-fi
-
 # Generate .env file
 cat > "${ENV_FILE}" << 'HEADER'
 # ML Training Server - Docker Compose Environment Variables
@@ -77,11 +66,6 @@ for username in "${USER_ARRAY[@]}"; do
 done
 echo "" >> "${ENV_FILE}"
 
-# Shared VNC password (must be 6-8 characters)
-echo "# Shared VNC password (must be 6-8 characters)" >> "${ENV_FILE}"
-echo "USER_VNC_PASSWORD=${USER_VNC_PASSWORD:-}" >> "${ENV_FILE}"
-echo "" >> "${ENV_FILE}"
-
 # Add domain and mount point
 echo "# Domain for Cloudflare Tunnel" >> "${ENV_FILE}"
 echo "DOMAIN=${DOMAIN}" >> "${ENV_FILE}"
@@ -99,7 +83,6 @@ for username in "${USER_ARRAY[@]}"; do
     USERNAME_UPPER=$(echo "${username}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
     echo "  - USER_${USERNAME_UPPER}_PASSWORD"
 done
-echo "  - USER_VNC_PASSWORD (shared VNC credential)"
 echo "  - DOMAIN (${DOMAIN})"
 echo "  - MOUNT_POINT (${MOUNT_POINT})"
 echo ""

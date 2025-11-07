@@ -32,11 +32,8 @@ USER_SHELL="/bin/bash"
 USER_GROUPS="docker sudo"
 
 # Default password for all users (IMPORTANT: Change this!)
-# Used for SSH, RDP, web desktop, and container login
+# Used for SSH, VNC, RDP, web desktop, and container login
 USER_DEFAULT_PASSWORD="changeme_default_password"
-
-# VNC password (6-8 characters)
-USER_VNC_PASSWORD="changeme"
 
 
 #==============================================================================
@@ -105,6 +102,11 @@ DOCKER_LOG_MAX_SIZE="10m"
 # Number of rotated log files to keep per container
 DOCKER_LOG_MAX_FILES="3"
 
+# Require GPU to be available for containers to start
+# Set to 'true' to fail container startup if the GPU is missing or inaccessible
+# Set to 'false' to allow CPU-only operation with a warning
+REQUIRE_GPU=true
+
 #==============================================================================
 # NETWORKING
 #==============================================================================
@@ -115,6 +117,15 @@ DOMAIN=""
 
 CODE_SERVER_PREFIX="code"
 JUPYTER_PREFIX="jupyter"
+
+# Docker bridge network subnet (must not conflict with your LAN/VPN)
+# Default: 172.28.0.0/16 (chosen to avoid common conflicts)
+# Common ranges to avoid:
+#   - 172.16.0.0/12 (AWS VPCs, corporate networks)
+#   - 172.20.0.0/16 (Cisco VPN, frequent Docker default)
+#   - 192.168.0.0/16 (home networks)
+#   - 10.0.0.0/8 (large corporate networks)
+DOCKER_SUBNET="172.28.0.0/16"
 
 # Local network CIDR for firewall (optional)
 # Example: "192.168.1.0/24"
@@ -128,6 +139,10 @@ LOCAL_NETWORK_CIDR=""
 # Example: "gdrive:backups/ml-train-server" or "s3:my-bucket/backups"
 # Run 'rclone config' to create remotes first
 BACKUP_REMOTE="gdrive:backups/ml-train-server"
+
+# Restic repository password (set to a long, random string!)
+# This value is written to /root/.restic-password and used for all restic operations.
+RESTIC_PASSWORD="changeme_restic_password"
 
 # Upload bandwidth limit for backups
 BACKUP_BANDWIDTH_LIMIT_MBPS=100

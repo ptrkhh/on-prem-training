@@ -31,17 +31,6 @@ if [[ "${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}" == "changeme_guaca
     ((ERRORS++))
 fi
 
-if [[ -z "${USER_VNC_PASSWORD:-}" ]]; then
-    echo "ERROR: USER_VNC_PASSWORD is not set. Configure a 6-8 character password in config.sh."
-    ((ERRORS++))
-elif [[ ${#USER_VNC_PASSWORD} -lt 6 ]] || [[ ${#USER_VNC_PASSWORD} -gt 8 ]]; then
-    echo "ERROR: USER_VNC_PASSWORD must be between 6 and 8 characters (current length: ${#USER_VNC_PASSWORD})."
-    ((ERRORS++))
-elif [[ "${USER_VNC_PASSWORD}" == "changeme" ]]; then
-    echo "ERROR: USER_VNC_PASSWORD is still set to the example value 'changeme'."
-    ((ERRORS++))
-fi
-
 if [[ ${ERRORS} -gt 0 ]]; then
     echo ""
     echo "Please update passwords in config.sh or .env before generating docker-compose.yml"
@@ -190,7 +179,7 @@ networks:
     driver: bridge
     ipam:
       config:
-        - subnet: 172.20.0.0/16
+        - subnet: ${DOCKER_SUBNET}
 
 volumes:
   prometheus-data:
@@ -598,9 +587,9 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - USER_UID=${UID}
       - USER_GID=${UID}
       - USER_PASSWORD=\${USER_${USERNAME_UPPER}_PASSWORD:-changeme}
-      - USER_VNC_PASSWORD=${USER_VNC_PASSWORD}
       - CODE_SERVER_PASSWORD=\${USER_${USERNAME_UPPER}_PASSWORD:-changeme}
       - USER_GROUPS=${USER_GROUPS}
+      - REQUIRE_GPU=${REQUIRE_GPU}
       - DISPLAY=:0
       - WORKSPACE=/workspace
       - SHARED=/shared

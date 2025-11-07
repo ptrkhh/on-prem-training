@@ -49,8 +49,14 @@ echo ""
 
 # Check rclone is installed
 if ! command -v rclone &> /dev/null; then
-    echo "Installing rclone..."
-    curl https://rclone.org/install.sh | sudo bash
+    echo "Installing rclone via apt..."
+    if [[ $EUID -ne 0 ]]; then
+        sudo apt-get update
+        sudo apt-get install -y rclone
+    else
+        apt-get update
+        apt-get install -y rclone
+    fi
 fi
 
 # Check if rclone is configured
