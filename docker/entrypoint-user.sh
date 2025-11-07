@@ -165,7 +165,19 @@ EOF
 echo "Configuring Jupyter..."
 
 # Generate Jupyter password hash
-JUPYTER_PASSWORD_HASH=$(python3 -c "from jupyter_server.auth import passwd; print(passwd('${USER_PASSWORD}'))")
+JUPYTER_PASSWORD_HASH=$(
+    USER_PASSWORD="${USER_PASSWORD}" python3 - <<'PY'
+import os
+import sys
+from jupyter_server.auth import passwd
+
+password = os.environ.get("USER_PASSWORD")
+if password is None:
+    sys.exit("USER_PASSWORD environment variable is not set")
+
+print(passwd(password))
+PY
+)
 
 su - "${USER_NAME}" << EOF
 mkdir -p ~/.jupyter

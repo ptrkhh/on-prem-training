@@ -90,6 +90,14 @@ if [[ ! -f "${CREDENTIALS_FILE}" ]]; then
     exit 1
 fi
 
+# Ensure jq is available for JSON validation
+if ! command -v jq >/dev/null 2>&1; then
+    echo "Installing jq dependency..."
+    apt install -y jq
+else
+    echo "jq already installed, skipping"
+fi
+
 # Validate credentials file is well-formed JSON
 if ! jq empty "${CREDENTIALS_FILE}" 2>/dev/null; then
     echo "ERROR: Tunnel credentials file is not valid JSON: ${CREDENTIALS_FILE}"
@@ -131,6 +139,8 @@ echo "=== Step 3: Configuring tunnel ==="
 echo "Domain: ${DOMAIN}"
 echo "Users: ${USERS}"
 echo ""
+
+REGENERATE_CONFIG=false
 
 # Generate Cloudflare Tunnel configuration (idempotent - regenerate entire file)
 # Backup existing config if present
