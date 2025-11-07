@@ -269,6 +269,19 @@ CACHE_DIR="${GDRIVE_CACHE_DIR}"
 mkdir -p "${CACHE_DIR}"
 echo "Cache directory: ${CACHE_DIR}"
 
+# Ensure FUSE allows shared mounts
+FUSE_CONF="/etc/fuse.conf"
+if [[ ! -f "${FUSE_CONF}" ]]; then
+    echo "Creating ${FUSE_CONF} to enable user_allow_other"
+    echo "user_allow_other" > "${FUSE_CONF}"
+elif grep -q '^\s*#\s*user_allow_other' "${FUSE_CONF}"; then
+    echo "Enabling user_allow_other in ${FUSE_CONF}"
+    sed -i 's/^\s*#\s*user_allow_other/user_allow_other/' "${FUSE_CONF}"
+elif ! grep -q '^\s*user_allow_other' "${FUSE_CONF}"; then
+    echo "Adding user_allow_other to ${FUSE_CONF}"
+    echo "user_allow_other" >> "${FUSE_CONF}"
+fi
+
 # Step 4: Create systemd service for automatic mounting
 echo ""
 echo "=== Step 4: Creating systemd mount service ==="

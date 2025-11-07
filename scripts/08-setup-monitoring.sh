@@ -297,6 +297,25 @@ cat > ${SCRIPTS_DIR}/export-gpu-metrics.sh <<'EOF'
 set -euo pipefail
 
 # Export GPU metrics to Prometheus node-exporter textfile collector
+sanitize_metric_value() {
+    local value="${1:-}"
+    if [[ -z "${value}" || "${value}" == "N/A" || "${value}" == "[Not Supported]" ]]; then
+        echo "0"
+    else
+        echo "${value}"
+    fi
+}
+
+sanitize_int_value() {
+    local value
+    value="$(sanitize_metric_value "$1")"
+    if [[ "${value}" =~ ^[0-9]+$ ]]; then
+        echo "${value}"
+    else
+        echo "0"
+    fi
+}
+
 TEXTFILE_DIR="/var/lib/node_exporter/textfile_collector"
 PROM_FILE="${TEXTFILE_DIR}/gpu_metrics.prom"
 TEMP_FILE="${PROM_FILE}.$$"
@@ -334,17 +353,24 @@ PROM
 nvidia-smi --query-gpu=index,temperature.gpu,utilization.gpu,memory.used,memory.total,power.draw,fan.speed,name \
     --format=csv,noheader,nounits | \
 while IFS=', ' read -r idx temp util mem_used mem_total power fan name; do
+    temp_value=$(sanitize_metric_value "${temp}")
+    util_value=$(sanitize_metric_value "${util}")
+    mem_used_value=$(sanitize_int_value "${mem_used}")
+    mem_total_value=$(sanitize_int_value "${mem_total}")
+    power_value=$(sanitize_metric_value "${power}")
+    fan_value=$(sanitize_metric_value "${fan}")
+
     # Convert MiB to bytes
-    mem_used_bytes=$((${mem_used} * 1024 * 1024))
-    mem_total_bytes=$((${mem_total} * 1024 * 1024))
+    mem_used_bytes=$((${mem_used_value} * 1024 * 1024))
+    mem_total_bytes=$((${mem_total_value} * 1024 * 1024))
 
     cat >> "${TEMP_FILE}" << METRICS
-nvidia_gpu_temperature_celsius{gpu="${idx}",name="${name}"} ${temp}
-nvidia_gpu_utilization_percent{gpu="${idx}",name="${name}"} ${util}
+nvidia_gpu_temperature_celsius{gpu="${idx}",name="${name}"} ${temp_value}
+nvidia_gpu_utilization_percent{gpu="${idx}",name="${name}"} ${util_value}
 nvidia_gpu_memory_used_bytes{gpu="${idx}",name="${name}"} ${mem_used_bytes}
 nvidia_gpu_memory_total_bytes{gpu="${idx}",name="${name}"} ${mem_total_bytes}
-nvidia_gpu_power_draw_watts{gpu="${idx}",name="${name}"} ${power}
-nvidia_gpu_fan_speed_percent{gpu="${idx}",name="${name}"} ${fan}
+nvidia_gpu_power_draw_watts{gpu="${idx}",name="${name}"} ${power_value}
+nvidia_gpu_fan_speed_percent{gpu="${idx}",name="${name}"} ${fan_value}
 METRICS
 done
 

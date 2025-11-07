@@ -119,7 +119,8 @@ load_config() {
 require_vars() {
     local missing=()
     for var in $1; do
-        if [[ -z "${!var}" ]]; then
+        local value="${!var:-}"
+        if [[ -z "${value}" ]]; then
             missing+=("$var")
         fi
     done

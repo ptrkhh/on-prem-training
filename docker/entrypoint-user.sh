@@ -191,13 +191,16 @@ c.ServerApp.jpserver_extensions = {
 JUPCONF
 EOF
 
-# Install Rust for user
-echo "Installing Rust for user..."
-su - "${USER_NAME}" << EOF
-if [ ! -d ~/.cargo ]; then
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+# Provision Rust toolchain for user
+echo "Provisioning Rust toolchain for user..."
+if [[ ! -x "/home/${USER_NAME}/.cargo/bin/cargo" ]]; then
+    mkdir -p "/home/${USER_NAME}/.cargo"
+    rsync -a --chown="${USER_NAME}:${USER_NAME}" /opt/rust/cargo/ "/home/${USER_NAME}/.cargo/"
 fi
-EOF
+if [[ ! -d "/home/${USER_NAME}/.rustup/toolchains" ]]; then
+    mkdir -p "/home/${USER_NAME}/.rustup"
+    rsync -a --chown="${USER_NAME}:${USER_NAME}" /opt/rust/rustup/ "/home/${USER_NAME}/.rustup/"
+fi
 
 # Setup shell environment
 echo "Configuring shell environment..."
