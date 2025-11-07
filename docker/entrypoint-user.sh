@@ -11,6 +11,8 @@ USER_NAME="${USER_NAME:-user}"
 USER_UID="${USER_UID:-1000}"
 USER_GID="${USER_GID:-1000}"
 USER_PASSWORD="${USER_PASSWORD:-changeme}"
+USER_GROUPS="${USER_GROUPS:-sudo docker}"
+USER_VNC_PASSWORD="${USER_VNC_PASSWORD:-}"
 
 # Validate username format
 if [[ ! "${USER_NAME}" =~ ^[a-z][-a-z0-9]*$ ]]; then
@@ -29,16 +31,17 @@ if [[ ${USER_GID} -lt 1000 ]] || [[ ${USER_GID} -gt 60000 ]]; then
     exit 1
 fi
 
-# Validate USER_PASSWORD length for VNC (6-8 chars required)
-PASS_LEN=${#USER_PASSWORD}
-if [[ ${PASS_LEN} -lt 6 ]]; then
-    echo "ERROR: USER_PASSWORD must be at least 6 characters for VNC compatibility"
-    echo "Current length: ${PASS_LEN}"
-    echo "Please set a longer password in environment variables"
+
+# Validate VNC password (6-8 chars required)
+if [[ -z "${USER_VNC_PASSWORD}" ]]; then
+    echo "ERROR: USER_VNC_PASSWORD is not set. Provide a 6-8 character password."
     exit 1
-elif [[ ${PASS_LEN} -gt 8 ]]; then
-    echo "INFO: Truncating USER_PASSWORD to 8 chars for VNC compatibility"
-    USER_PASSWORD="${USER_PASSWORD:0:8}"
+fi
+
+VNC_PASS_LEN=${#USER_VNC_PASSWORD}
+if [[ ${VNC_PASS_LEN} -lt 6 ]] || [[ ${VNC_PASS_LEN} -gt 8 ]]; then
+    echo "ERROR: USER_VNC_PASSWORD must be between 6 and 8 characters (current length: ${VNC_PASS_LEN})."
+    exit 1
 fi
 
 echo "Initializing user: ${USER_NAME} (UID: ${USER_UID}, GID: ${USER_GID})"
@@ -51,7 +54,26 @@ fi
 if ! id -u ${USER_NAME} > /dev/null 2>&1; then
     useradd -m -u ${USER_UID} -g ${USER_GID} -s /bin/bash ${USER_NAME}
     echo "${USER_NAME}:${USER_PASSWORD}" | chpasswd
-    usermod -aG sudo,docker ${USER_NAME}
+fi
+
+# Ensure supplementary groups are applied
+read -r -a USER_GROUP_LIST <<< "${USER_GROUPS}"
+VALID_GROUPS=()
+for GROUP in "${USER_GROUP_LIST[@]}"; do
+    [[ -z "${GROUP}" ]] && continue
+    if getent group "${GROUP}" > /dev/null 2>&1; then
+        VALID_GROUPS+=("${GROUP}")
+    else
+        echo "WARNING: Supplementary group '${GROUP}' does not exist inside the container; skipping"
+    fi
+done
+
+if [[ ${#VALID_GROUPS[@]} -gt 0 ]]; then
+    GROUP_CSV=$(IFS=,; echo "${VALID_GROUPS[*]}")
+    usermod -aG "${GROUP_CSV}" ${USER_NAME}
+    echo "Added ${USER_NAME} to supplementary groups: ${VALID_GROUPS[*]}"
+else
+    echo "No supplementary groups assigned to ${USER_NAME}"
 fi
 
 # Setup home directory structure
@@ -78,7 +100,7 @@ su - ${USER_NAME} << EOF
 mkdir -p ~/.vnc
 
 # Create VNC password file
-echo "${USER_PASSWORD}" | vncpasswd -f > ~/.vnc/passwd
+echo "${USER_VNC_PASSWORD}" | vncpasswd -f > ~/.vnc/passwd
 chmod 600 ~/.vnc/passwd
 
 # Create VNC startup script

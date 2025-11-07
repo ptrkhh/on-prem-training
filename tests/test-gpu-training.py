@@ -5,66 +5,13 @@ Verifies CUDA is available and GPU can run a simple training loop
 """
 
 import sys
-import subprocess
-import re
-
-def get_cuda_version():
-    """Get CUDA version from nvidia-smi"""
-    try:
-        result = subprocess.run(
-            ["nvidia-smi"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        # Parse: CUDA Version: 12.1
-        match = re.search(r"CUDA Version: (\d+\.\d+)", result.stdout)
-        if match:
-            version = match.group(1)
-            # Convert 12.1 to cu121
-            major, minor = version.split('.')
-            return f"cu{major}{minor}"
-        return None
-    except Exception as e:
-        print(f"Could not detect CUDA version: {e}")
-        return None
-
-def install_torch():
-    """Install PyTorch matching CUDA version"""
-    cuda_version = get_cuda_version()
-
-    if cuda_version is None:
-        print("WARNING: Could not detect CUDA, installing CPU-only PyTorch")
-        torch_package = "torch"
-    else:
-        print(f"Detected CUDA version: {cuda_version}")
-        # PyTorch 2.1.0 with CUDA support
-        torch_package = f"torch==2.1.0+{cuda_version}"
-
-        # Set PyTorch index URL for CUDA builds
-        index_url = f"https://download.pytorch.org/whl/{cuda_version}"
-
-        subprocess.check_call([
-            sys.executable, "-m", "pip", "install",
-            torch_package,
-            "--index-url", index_url
-        ])
-        return
-
-    # Fallback to standard index for CPU
-    subprocess.check_call([
-        sys.executable, "-m", "pip", "install",
-        torch_package
-    ])
-
-# Try importing torch, install if missing
+# Try importing torch, fail fast if missing
 try:
     import torch
     print(f"PyTorch {torch.__version__} already installed")
 except ImportError:
-    print("PyTorch not found, installing...")
-    install_torch()
-    import torch
+    print("ERROR: PyTorch is not installed. Install PyTorch before running this test.")
+    sys.exit(1)
 
 import torch.nn as nn
 import torch.optim as optim
@@ -200,7 +147,7 @@ try:
     print()
 
     print("=" * 60)
-    print("GPU Test PASSED ✓")
+    print("GPU Test PASSED")
     print("=" * 60)
 finally:
     # Final cleanup to ensure GPU resources are freed

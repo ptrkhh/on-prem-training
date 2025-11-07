@@ -92,6 +92,37 @@ if [[ -z "${USER_DEFAULT_PASSWORD:-}" ]]; then
     exit 1
 fi
 
+# Resolve supplementary groups
+USER_GROUPS_ARRAY=()
+USER_GROUPS_VALID=()
+USER_GROUPS_MISSING=()
+USER_GROUPS_VALID_CSV=""
+
+if [[ -n "${USER_GROUPS:-}" ]]; then
+    # Split USER_GROUPS on whitespace
+    read -r -a USER_GROUPS_ARRAY <<< "${USER_GROUPS}"
+
+    for GROUP in "${USER_GROUPS_ARRAY[@]}"; do
+        [[ -z "${GROUP}" ]] && continue
+
+        if getent group "${GROUP}" > /dev/null 2>&1; then
+            USER_GROUPS_VALID+=("${GROUP}")
+        else
+            USER_GROUPS_MISSING+=("${GROUP}")
+        fi
+    done
+
+    if [[ ${#USER_GROUPS_VALID[@]} -gt 0 ]]; then
+        USER_GROUPS_VALID_CSV=$(IFS=,; echo "${USER_GROUPS_VALID[*]}")
+    fi
+else
+    echo "WARNING: USER_GROUPS is empty in config.sh; users will not receive supplementary groups."
+fi
+
+if [[ ${#USER_GROUPS_MISSING[@]} -gt 0 ]]; then
+    echo "WARNING: The following groups from USER_GROUPS do not exist and will be skipped: ${USER_GROUPS_MISSING[*]}"
+fi
+
 USER_INDEX=0
 for USERNAME in "${USER_ARRAY[@]}"; do
     UID=$((FIRST_UID + USER_INDEX))
@@ -125,6 +156,16 @@ for USERNAME in "${USER_ARRAY[@]}"; do
 ${USERNAME}:${USER_DEFAULT_PASSWORD}
 EOF
     echo "  Password set from USER_DEFAULT_PASSWORD"
+
+    if [[ -n "${USER_GROUPS_VALID_CSV}" ]]; then
+        if usermod -aG "${USER_GROUPS_VALID_CSV}" "${USERNAME}"; then
+            echo "  Added to supplementary groups: ${USER_GROUPS_VALID[*]}"
+        else
+            echo "  WARNING: Failed to update supplementary groups for ${USERNAME}"
+        fi
+    else
+        echo "  No supplementary groups configured for ${USERNAME}"
+    fi
 
     # Create home directory on BTRFS storage
     mkdir -p ${MOUNT_POINT}/homes/${USERNAME}

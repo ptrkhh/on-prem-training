@@ -32,8 +32,11 @@ USER_SHELL="/bin/bash"
 USER_GROUPS="docker sudo"
 
 # Default password for all users (IMPORTANT: Change this!)
-# Used for SSH, VNC, RDP, web desktop, and container login
+# Used for SSH, RDP, web desktop, and container login
 USER_DEFAULT_PASSWORD="changeme_default_password"
+
+# VNC password (6-8 characters)
+USER_VNC_PASSWORD="changeme"
 
 
 #==============================================================================

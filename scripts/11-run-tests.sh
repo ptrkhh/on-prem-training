@@ -57,6 +57,116 @@ section() {
     echo "=== $1 ==="
 }
 
+COMPOSE_FILE_PATH="${SCRIPT_DIR}/../docker/docker-compose.yml"
+COMPOSE_STATUS_STATE="unset"
+COMPOSE_STATUS_JSON=""
+
+http_status_ok() {
+    case "$1" in
+        200|201|204|301|302|401|403) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+load_compose_status() {
+    if [[ "${COMPOSE_STATUS_STATE}" != "unset" ]]; then
+        return
+    fi
+
+    if [[ ! -f "${COMPOSE_FILE_PATH}" ]]; then
+        COMPOSE_STATUS_STATE="missing_file"
+        return
+    fi
+
+    local output
+    if output=$(docker compose -f "${COMPOSE_FILE_PATH}" ps --format json 2>/dev/null); then
+        COMPOSE_STATUS_STATE="ok"
+        COMPOSE_STATUS_JSON="${output}"
+    else
+        COMPOSE_STATUS_STATE="error"
+        COMPOSE_STATUS_JSON=""
+    fi
+}
+
+docker_service_running() {
+    local service_name="$1"
+    load_compose_status
+
+    case "${COMPOSE_STATUS_STATE}" in
+        ok)
+            local state
+            state=$(echo "${COMPOSE_STATUS_JSON}" | jq -r ".[] | select(.Service==\"${service_name}\") | .State // empty")
+            if [[ -z "${state}" ]]; then
+                return 2
+            fi
+            if [[ "${state}" == "running" ]]; then
+                return 0
+            else
+                return 1
+            fi
+            ;;
+        missing_file|error)
+            return 3
+            ;;
+        *)
+            return 3
+            ;;
+    esac
+}
+
+check_route_service() {
+    local display_name="$1"
+    local host_prefix="$2"
+    local compose_service="$3"
+    local route_path="${4:-/}"
+
+    if [[ -n "${DOMAIN}" ]]; then
+        local fqdn="${host_prefix}.${DOMAIN}"
+        local status_code
+        status_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 --resolve "${fqdn}:80:127.0.0.1" "http://${fqdn}${route_path}" 2>/dev/null)
+        status_code=${status_code:-000}
+
+        if http_status_ok "${status_code}"; then
+            pass "${display_name} reachable via http://${fqdn}${route_path}"
+            return
+        fi
+
+        docker_service_running "${compose_service}"
+        local service_state=$?
+        case "${service_state}" in
+            0)
+                fail "${display_name} route http://${fqdn}${route_path} returned status ${status_code}"
+                ;;
+            1)
+                fail "${display_name} container is not running (HTTP status ${status_code})"
+                ;;
+            2)
+                warn "${display_name} not found in docker compose output (HTTP status ${status_code})"
+                ;;
+            3)
+                warn "${display_name} route http://${fqdn}${route_path} returned status ${status_code} (docker compose status unavailable)"
+                ;;
+        esac
+    else
+        docker_service_running "${compose_service}"
+        local service_state=$?
+        case "${service_state}" in
+            0)
+                pass "${display_name} container running (DOMAIN not set; skipped HTTP check)"
+                ;;
+            1)
+                fail "${display_name} container is not running (DOMAIN not set)"
+                ;;
+            2)
+                warn "${display_name} not found in docker compose output (DOMAIN not set)"
+                ;;
+            3)
+                warn "${display_name} skipped (DOMAIN not set and docker compose status unavailable)"
+                ;;
+        esac
+    fi
+}
+
 # Test 1: Storage
 section "Storage Tests"
 
@@ -285,26 +395,10 @@ fi
 # Test 6: Monitoring
 section "Monitoring Tests"
 
-# Check Prometheus
-if curl -s http://localhost:9090/-/healthy &>/dev/null; then
-    pass "Prometheus is healthy"
-else
-    warn "Prometheus is not responding"
-fi
-
-# Check Grafana
-if curl -s http://localhost:3000/api/health &>/dev/null; then
-    pass "Grafana is healthy"
-else
-    warn "Grafana is not responding"
-fi
-
-# Check Netdata
-if curl -s http://localhost:19999/api/v1/info &>/dev/null; then
-    pass "Netdata is healthy"
-else
-    warn "Netdata is not responding"
-fi
+# Check Prometheus, Grafana, Netdata via Traefik
+check_route_service "Prometheus" "prometheus" "prometheus" "/-/healthy"
+check_route_service "Grafana" "grafana" "grafana" "/api/health"
+check_route_service "Netdata" "health" "netdata" "/api/v1/info"
 
 # Test 7: Backups
 section "Backup Tests"
@@ -406,27 +500,28 @@ fi
 # Test 10: Services
 section "Service Tests"
 
-SERVICES=(
-    "traefik:${TRAEFIK_PORT:-8080}"
-    "netdata:${NETDATA_PORT:-19999}"
-    "prometheus:${PROMETHEUS_PORT:-9090}"
-    "grafana:${GRAFANA_PORT:-3000}"
-    "portainer:${PORTAINER_PORT:-9000}"
-    "filebrowser:${FILEBROWSER_PORT:-8081}"
-    "dozzle:${DOZZLE_PORT:-8082}"
-    "tensorboard:${TENSORBOARD_PORT:-6006}"
-    "guacamole:${GUACAMOLE_PORT:-8083}"
+TRAEFIK_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 "http://localhost:${TRAEFIK_PORT:-8080}" 2>/dev/null)
+TRAEFIK_STATUS=${TRAEFIK_STATUS:-000}
+if http_status_ok "${TRAEFIK_STATUS}"; then
+    pass "Traefik dashboard responding on port ${TRAEFIK_PORT:-8080}"
+else
+    warn "Traefik dashboard is NOT responding on port ${TRAEFIK_PORT:-8080} (status ${TRAEFIK_STATUS})"
+fi
+
+SERVICE_ROUTES=(
+    "Netdata|health|netdata"
+    "Prometheus|prometheus|prometheus"
+    "Grafana|grafana|grafana"
+    "Portainer|portainer|portainer"
+    "File Browser|files|filebrowser"
+    "Dozzle|logs|dozzle"
+    "TensorBoard|tensorboard|tensorboard"
+    "Guacamole|guacamole|guacamole"
 )
 
-for service in "${SERVICES[@]}"; do
-    NAME="${service%%:*}"
-    PORT="${service##*:}"
-
-    if curl -s -o /dev/null -w "%{http_code}" http://localhost:${PORT} | grep -q "200\|302\|401"; then
-        pass "${NAME} is responding on port ${PORT}"
-    else
-        warn "${NAME} is NOT responding on port ${PORT}"
-    fi
+for entry in "${SERVICE_ROUTES[@]}"; do
+    IFS='|' read -r DISPLAY_NAME ROUTE_HOST COMPOSE_SERVICE <<< "${entry}"
+    check_route_service "${DISPLAY_NAME}" "${ROUTE_HOST}" "${COMPOSE_SERVICE}"
 done
 
 # Test 11: Smart Monitoring

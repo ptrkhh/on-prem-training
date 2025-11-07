@@ -367,6 +367,14 @@ else
     echo "  ✓ USER_DEFAULT_PASSWORD is set"
 fi
 
+# Check USER_VNC_PASSWORD
+if [[ ${#USER_VNC_PASSWORD} -lt 6 ]] || [[ ${#USER_VNC_PASSWORD} -gt 8 ]]; then
+    echo "  ✗ ERROR: USER_VNC_PASSWORD must be between 6 and 8 characters (current length: ${#USER_VNC_PASSWORD})"
+    ((ERRORS++))
+else
+    echo "  ✓ USER_VNC_PASSWORD is set"
+fi
+
 # Check GUACAMOLE_DB_PASSWORD
 if [[ -z "${GUACAMOLE_DB_PASSWORD}" ]]; then
     echo "  ✗ ERROR: GUACAMOLE_DB_PASSWORD is not set"
