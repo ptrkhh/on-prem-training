@@ -194,8 +194,11 @@ RUN apt-get update && apt-get install -y \
     # Screenshot tools
     spectacle \
     # Monitoring & Profiling
-    nvitop nvtop ncdu \
+    nvtop ncdu \
     && rm -rf /var/lib/apt/lists/*
+
+# Install nvitop (not available via apt in Ubuntu 24.04)
+RUN pip3 install --no-cache-dir nvitop
 
 #==============================================================================
 # DATABASE & TOOLS

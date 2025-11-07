@@ -39,12 +39,12 @@ else
     fi
     echo "  ✓ Users configured: ${USERS} (${USER_COUNT} users)"
 
-    # Validate each username format (lowercase, start with letter, alphanumeric + hyphens)
+    # Validate each username format (lowercase, start with letter, alphanumeric only)
     USER_ARRAY=(${USERS})
     for username in "${USER_ARRAY[@]}"; do
-        if [[ ! "${username}" =~ ^[a-z][-a-z0-9]*$ ]]; then
+        if [[ ! "${username}" =~ ^[a-z][a-z0-9]*$ ]]; then
             echo "  ✗ ERROR: Invalid username '${username}'"
-            echo "    Usernames must start with a lowercase letter and contain only lowercase letters, digits, and hyphens"
+            echo "    Usernames must start with a lowercase letter and contain only lowercase letters and digits"
             ((ERRORS++))
         elif [[ ${#username} -gt 32 ]]; then
             echo "  ✗ ERROR: Username '${username}' is too long (max 32 characters)"

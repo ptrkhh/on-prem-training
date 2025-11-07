@@ -611,7 +611,7 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - ${MOUNT_POINT:-/mnt/storage}/workspaces/${USERNAME}:/workspace:rw
       # Shared data (read-write for all users to share files)
       - ${MOUNT_POINT:-/mnt/storage}/shared:/shared:rw
-      # Container state
+      # Container state (Docker data root)
       - ${MOUNT_POINT:-/mnt/storage}/docker-volumes/${USERNAME}-state:/var/lib/state:rw
       # Shared caches (for all users to benefit from cached downloads)
       - ${MOUNT_POINT:-/mnt/storage}/cache/ml-models:/cache/ml-models:rw

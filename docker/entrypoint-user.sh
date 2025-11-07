@@ -357,7 +357,7 @@ stderr_logfile_maxbytes=0
 exitcodes=0
 
 [program:docker]
-command=/usr/bin/dockerd
+command=/usr/bin/dockerd --data-root=/var/lib/state
 autostart=true
 autorestart=true
 startsecs=10
