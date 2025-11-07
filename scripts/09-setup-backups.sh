@@ -38,6 +38,27 @@ BACKUP_SOURCES=(
     "${MOUNT_POINT}/shared/datasets"
 )
 
+SHARED_DIR="${MOUNT_POINT}/shared"
+
+if [[ ! -d "${SHARED_DIR}" ]]; then
+    echo "ERROR: Expected shared directory not found at ${SHARED_DIR}"
+    echo "Please run scripts/02-setup-gdrive-shared.sh before configuring backups."
+    exit 1
+fi
+
+if ! mountpoint -q "${SHARED_DIR}"; then
+    echo "ERROR: ${SHARED_DIR} is not mounted."
+    echo "Google Drive mirroring is required for backups. Run scripts/02-setup-gdrive-shared.sh and ensure gdrive-shared.service is active."
+    exit 1
+fi
+
+SHARED_FSTYPE=$(findmnt -n -o FSTYPE "${SHARED_DIR}" 2>/dev/null || echo "")
+if [[ "${SHARED_FSTYPE}" != "fuse.rclone" ]]; then
+    echo "ERROR: ${SHARED_DIR} must be mounted via rclone (fuse.rclone), found '${SHARED_FSTYPE:-unknown}'."
+    echo "Re-run scripts/02-setup-gdrive-shared.sh to configure the Google Drive mount."
+    exit 1
+fi
+
 # Load common functions
 COMMON_LIB="${SCRIPT_DIR}/lib/common.sh"
 if [[ -f "${COMMON_LIB}" ]]; then
@@ -276,7 +297,7 @@ fi
 # Validate backup directories exist
 echo "Validating backup directories..."
 MISSING_DIRS=""
-for dir in "\${MOUNT_POINT}/homes" "\${MOUNT_POINT}/docker-volumes" "\${MOUNT_POINT}/shared/tensorboard"; do
+for dir in "\${BACKUP_SOURCES[@]}"; do
     if [[ ! -d "\${dir}" ]]; then
         echo "ERROR: Required backup directory does not exist: \${dir}"
         MISSING_DIRS="\${MISSING_DIRS} \${dir}"
@@ -313,7 +334,21 @@ echo "Created snapshot: \${SNAPSHOT_NAME}"
 # Run backup from snapshot (no need to pause containers)
 # Backup runs from read-only snapshot, containers continue running normally
 BANDWIDTH_LIMIT_KBPS=\$((${BACKUP_BANDWIDTH_LIMIT_MBPS} * 1000 / 8))
-echo "Running backup from snapshot (${BACKUP_BANDWIDTH_LIMIT_MBPS} Mbps limit)..."
+SNAPSHOT_SOURCES=()
+for source in "\${BACKUP_SOURCES[@]}"; do
+    if [[ "\${source}" == "\${MOUNT_POINT}"* ]]; then
+        relative_path="\${source#\${MOUNT_POINT}/}"
+        SNAPSHOT_SOURCES+=("\${SNAPSHOT_PATH}/\${relative_path}")
+    else
+        echo "WARNING: Skipping backup source outside mount point: \${source}"
+    fi
+done
+
+if [[ \${#SNAPSHOT_SOURCES[@]} -eq 0 ]]; then
+    echo "ERROR: No snapshot sources resolved for backup."
+    exit 1
+fi
+echo "Running backup from snapshot (\${BACKUP_BANDWIDTH_LIMIT_MBPS} Mbps limit)..."
 
 # Mark repository as locked before backup starts
 REPO_LOCKED=true
@@ -322,9 +357,7 @@ if restic -r \${RESTIC_REPOSITORY} backup \
     --verbose \
     --tag daily \
     --limit-upload \${BANDWIDTH_LIMIT_KBPS} \
-    \${SNAPSHOT_PATH}/homes \
-    \${SNAPSHOT_PATH}/docker-volumes \
-    \${SNAPSHOT_PATH}/shared/tensorboard; then
+    "\${SNAPSHOT_SOURCES[@]}"; then
 
     echo "Backup completed successfully"
     BACKUP_STATUS="success"

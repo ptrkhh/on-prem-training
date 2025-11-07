@@ -73,7 +73,7 @@ echo "✓ BTRFS filesystem validation passed"
 echo "Validating required directories..."
 if [[ ! -d "${MOUNT_POINT}/shared" ]]; then
     echo "ERROR: ${MOUNT_POINT}/shared does not exist!"
-    echo "Please run 01-setup-storage.sh first, then 02-setup-gdrive-shared.sh if using Google Drive."
+    echo "Please run 01-setup-storage.sh first, then 02-setup-gdrive-shared.sh to mount the required Google Drive Shared Drive."
     exit 1
 fi
 
