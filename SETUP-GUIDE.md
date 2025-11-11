@@ -239,6 +239,8 @@ cd ~/train-server/docker
 sudo docker compose up -d
 ```
 
+Per-user CPU and memory limits are now enforced automatically via Docker Compose `mem_limit`, `mem_reservation`, and `cpus` settings sourced from `.env` (`MEMORY_LIMIT_GB`, `MEMORY_GUARANTEE_GB`, `CPU_LIMIT`). No Swarm mode or `--compatibility` flag is required.
+
 ### Verify Services
 
 ```bash

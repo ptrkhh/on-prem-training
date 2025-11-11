@@ -225,18 +225,29 @@ prune_snapshots() {
         keep_count=0
     fi
 
-    # Delete snapshots exceeding retention using btrfs-aware deletion
-    find "\${SNAPSHOT_DIR}" -maxdepth 1 -name "\${tier}_*" -type d \\
-        | sort -r \\
-        | tail -n +\$((keep_count + 1)) \\
-        | while IFS= read -r snapshot; do
-            [[ -z "\${snapshot}" ]] && continue
-            if ! btrfs subvolume delete "\${snapshot}"; then
-                echo "WARNING: Failed to delete snapshot: \${snapshot}"
-            else
-                echo "Deleted snapshot: \${snapshot}"
-            fi
-        done
+    local lockfile="/var/lock/snapshot-prune-\${tier}.lock"
+
+    # Use flock to prevent concurrent snapshot pruning for the same tier
+    (
+        flock -n 9 || {
+            echo "Another snapshot pruning for tier '\${tier}' is in progress, skipping..."
+            return 0
+        }
+
+        # Delete snapshots exceeding retention using btrfs-aware deletion
+        find "\${SNAPSHOT_DIR}" -maxdepth 1 -name "\${tier}_*" -type d \\
+            | sort -r \\
+            | tail -n +\$((keep_count + 1)) \\
+            | while IFS= read -r snapshot; do
+                [[ -z "\${snapshot}" ]] && continue
+                if ! btrfs subvolume delete "\${snapshot}"; then
+                    echo "WARNING: Failed to delete snapshot: \${snapshot}"
+                else
+                    echo "Deleted snapshot: \${snapshot}"
+                fi
+            done
+
+    ) 9>"\${lockfile}"
 }
 
 # Cleanup old snapshots

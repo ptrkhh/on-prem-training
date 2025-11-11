@@ -46,6 +46,21 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
+# Check if Docker daemon is running and ready
+echo "Checking Docker daemon..."
+if ! docker info &>/dev/null; then
+    echo "ERROR: Docker daemon is not responding"
+    echo ""
+    echo "Please ensure Docker is installed and running:"
+    echo "  systemctl status docker"
+    echo "  systemctl start docker"
+    echo ""
+    echo "If Docker was just started, wait a few seconds and try again."
+    exit 1
+fi
+echo "✓ Docker daemon is ready"
+echo ""
+
 # Check for Docker Compose v2 only
 if ! docker compose version &> /dev/null; then
     echo "ERROR: Docker Compose v2 not found"
@@ -134,6 +149,21 @@ else
     echo "  3. Find compatible CUDA version: https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/"
     echo "  4. Set CUDA_VERSION in config.sh to match your driver"
     exit 1
+fi
+
+# Validate CUDA version format
+if [[ -n "${CUDA_BUILD_VERSION}" ]]; then
+    if ! [[ "${CUDA_BUILD_VERSION}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+        echo "ERROR: Invalid CUDA version format: ${CUDA_BUILD_VERSION}"
+        echo "Expected format: X.Y or X.Y.Z (e.g., '12.4' or '12.4.1')"
+        echo ""
+        echo "Valid examples:"
+        echo "  CUDA_VERSION=\"12.4.1\""
+        echo "  CUDA_VERSION=\"11.8\""
+        exit 1
+    fi
+    echo "✓ CUDA version format validated: ${CUDA_BUILD_VERSION}"
+    echo ""
 fi
 
 # Validate required configuration
@@ -621,18 +651,14 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - "${VNC_PORT}:5900"       # VNC (for Guacamole/direct VNC clients)
       - "${RDP_PORT}:3389"       # XRDP (for Guacamole/direct RDP clients)
       - "${NOVNC_PORT}:6080"     # noVNC (HTML5 VNC client)
-    deploy:
-      resources:
-        limits:
-          memory: ${MEMORY_LIMIT_GB:-100}G
-          cpus: '${CPU_LIMIT:-32}'  # Maximum CPU cores per container (prevents monopolization)
-        reservations:
-          memory: ${MEMORY_GUARANTEE_GB:-32}G
-          cpus: '${CPU_GUARANTEE:-8}'  # Guaranteed CPU cores per container
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    mem_limit: ${MEMORY_LIMIT_GB:-100}G           # Hard memory cap (applies without Swarm/compat mode)
+    mem_reservation: ${MEMORY_GUARANTEE_GB:-32}G  # Soft memory reservation for proactive reclaim
+    cpus: '${CPU_LIMIT:-32}'                      # Maximum CPU cores per container (prevents monopolization)
+    device_requests:
+      - driver: nvidia
+        count: all
+        capabilities:
+          - gpu
     healthcheck:
       test: ["CMD", "pgrep", "-f", "Xvnc"]
       interval: 30s
@@ -774,7 +800,6 @@ GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}
 MEMORY_LIMIT_GB=${MEMORY_LIMIT_GB:-100}
 MEMORY_GUARANTEE_GB=${MEMORY_GUARANTEE_GB:-32}
 CPU_LIMIT=${CPU_LIMIT:-32}
-CPU_GUARANTEE=${CPU_GUARANTEE:-8}
 EOF
     echo "✅ Generated: ${ENV_FILE}"
     echo "⚠️  IMPORTANT: Update passwords in .env file before deployment!"
@@ -791,6 +816,6 @@ echo "     export DOCKER_BUILDKIT=1"
 echo "     export COMPOSE_DOCKER_CLI_BUILD=1"
 echo "     docker compose build --parallel"
 echo "  3. Start services: docker compose up -d"
-echo "     (Use the Docker Compose V2 CLI plugin so deploy.resources limits are enforced.)"
+echo "     (Per-user CPU/RAM limits now apply automatically via mem_limit/cpus — no Swarm compatibility flag required.)"
 echo "  4. Setup Cloudflare Tunnel (for remote access)"
 echo ""

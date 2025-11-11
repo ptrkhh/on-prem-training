@@ -18,6 +18,9 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Backwards compatibility defaults
+: "${CPU_LIMIT:=32}"
+
 echo "=== ML Training Server - Configuration Validation ==="
 echo ""
 
@@ -222,6 +225,17 @@ for var in FIRST_UID OS_PARTITION_SIZE_GB MEMORY_GUARANTEE_GB MEMORY_LIMIT_GB SW
         echo "  ✓ ${var}: ${val}"
     fi
 done
+
+if [[ ! "${CPU_LIMIT}" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+    echo "  ✗ ERROR: CPU_LIMIT must be a positive number (integer or decimal), got '${CPU_LIMIT}'"
+    ((ERRORS++))
+else
+    echo "  ✓ CPU_LIMIT: ${CPU_LIMIT}"
+    if [[ $(awk "BEGIN {print (${CPU_LIMIT} > 0) ? 1 : 0}") -eq 0 ]]; then
+        echo "  ✗ ERROR: CPU_LIMIT must be greater than 0"
+        ((ERRORS++))
+    fi
+fi
 
 # Logic validation
 echo ""
