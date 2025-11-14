@@ -291,9 +291,13 @@ cat > /etc/systemd/system/gdrive-shared.service <<EOF
 Description=Google Drive Shared Drive mount for /shared
 After=network-online.target
 Wants=network-online.target
+OnFailure=gdrive-mount-failure-alert.service
 
 [Service]
 Type=notify
+# Pre-flight validation to catch connectivity issues before mount attempt
+ExecStartPre=/usr/bin/rclone lsd ${GDRIVE_SHARED_REMOTE}: --max-depth 1
+
 # Mount Shared Drive with aggressive VFS caching for local-like performance
 ExecStart=/usr/bin/rclone mount ${GDRIVE_SHARED_REMOTE}: ${MOUNT_POINT}/shared \\
     --vfs-cache-mode full \\
@@ -324,15 +328,29 @@ ExecStart=/usr/bin/rclone mount ${GDRIVE_SHARED_REMOTE}: ${MOUNT_POINT}/shared \
     --log-file /var/log/gdrive-shared.log \\
     --syslog
 
-# Restart on failure
+# Restart on failure with circuit breaker
 Restart=on-failure
-RestartSec=10s
+RestartSec=30s
+StartLimitBurst=5
+StartLimitIntervalSec=600
 
 # Health monitoring with retry logic
 ExecStartPost=/bin/bash -c 'for i in {1..30}; do if ls ${MOUNT_POINT}/shared > /dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1'
 
 [Install]
 WantedBy=multi-user.target
+EOF
+
+# Create failure alert service
+echo "Creating failure alert service..."
+cat > /etc/systemd/system/gdrive-mount-failure-alert.service <<EOF
+[Unit]
+Description=Alert on GDrive mount circuit breaker trip
+After=gdrive-shared.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'if [[ -x /opt/scripts/monitoring/send-telegram-alert.sh ]]; then /opt/scripts/monitoring/send-telegram-alert.sh critical "Google Drive mount failed 5 times in 10 minutes. Circuit breaker tripped. Manual intervention required: systemctl reset-failed gdrive-shared.service && systemctl start gdrive-shared.service"; else logger -t gdrive-alert -p user.crit "Google Drive mount circuit breaker tripped. Manual recovery required: systemctl reset-failed gdrive-shared.service && systemctl start gdrive-shared.service"; fi'
 EOF
 
 # Step 5: Create monitoring script

@@ -387,3 +387,134 @@
 **Time estimate:** 20 minutes
 
 ---
+
+### Systemd Service Failures (Circuit Breaker Tripped)
+
+**Symptoms:** Service won't start, shows "failed" state, logs show "start-limit-hit" or "Start request repeated too quickly".
+
+**Common services affected:** `gdrive-shared.service`, `cloudflared.service`, custom monitoring services.
+
+**Steps:**
+
+1. **List all failed services**
+   ```bash
+   systemctl list-units --state=failed
+   ```
+
+2. **Check specific service status**
+   ```bash
+   systemctl status gdrive-shared.service
+   # Look for: "Failed with result 'start-limit-hit'"
+   ```
+
+3. **View recent logs to identify failure cause**
+   ```bash
+   journalctl -u gdrive-shared.service -n 100 --no-pager
+
+   # For real-time monitoring:
+   journalctl -u gdrive-shared.service -f
+   ```
+
+4. **Common failure patterns and fixes:**
+
+   **Google Drive mount failures:**
+   ```bash
+   # OAuth token expired/invalid
+   rclone config reconnect gdrive-shared:
+
+   # Test connectivity before restarting
+   rclone lsd gdrive-shared: --max-depth 1
+   ```
+
+   **Network-dependent services:**
+   ```bash
+   # Verify network is up
+   ping -c 4 8.8.8.8
+
+   # Check DNS
+   nslookup google.com
+   ```
+
+   **Permission/file access errors:**
+   ```bash
+   # Check file permissions
+   ls -la /mnt/storage/shared
+
+   # Check mount points
+   mountpoint -q /mnt/storage
+   ```
+
+5. **Reset the circuit breaker**
+   ```bash
+   # This clears the failure count and allows restart attempts
+   sudo systemctl reset-failed gdrive-shared.service
+   ```
+
+6. **Start the service**
+   ```bash
+   sudo systemctl start gdrive-shared.service
+   ```
+
+7. **Verify service is running**
+   ```bash
+   systemctl status gdrive-shared.service
+
+   # Should show: "Active: active (running)"
+   ```
+
+8. **Monitor for stability**
+   ```bash
+   # Watch for restart loops (5 failures in 10 min triggers circuit breaker)
+   watch -n 5 systemctl status gdrive-shared.service
+
+   # Check logs in real-time
+   journalctl -u gdrive-shared.service -f
+   ```
+
+9. **If service keeps failing:**
+   ```bash
+   # Check dependencies
+   systemctl list-dependencies gdrive-shared.service
+
+   # Verify configuration
+   systemctl cat gdrive-shared.service
+
+   # Check for conflicting processes
+   ps aux | grep rclone
+   lsof /mnt/storage/shared
+   ```
+
+**Understanding the Circuit Breaker:**
+
+The circuit breaker prevents infinite restart loops that waste resources and fill logs. Services with circuit breakers have these settings:
+
+- `StartLimitBurst=5`: Maximum restart attempts
+- `StartLimitIntervalSec=600`: Time window (10 minutes)
+- Behavior: After 5 failures in 10 minutes, systemd stops trying
+
+**Why Circuit Breakers Matter:**
+
+Without circuit breakers, a failing service could:
+- Restart 8,640+ times per day (at 10s intervals)
+- Fill disk with logs
+- Consume CPU/memory with failed attempts
+- Obscure real issues in monitoring systems
+
+**Monitoring Best Practices:**
+
+```bash
+# Add to crontab for daily checks
+0 9 * * * systemctl list-units --state=failed | mail -s "Failed Services" admin@example.com
+
+# Or set up a monitoring script
+#!/bin/bash
+FAILED=$(systemctl list-units --state=failed --no-legend | wc -l)
+if [ $FAILED -gt 0 ]; then
+    /opt/scripts/monitoring/send-telegram-alert.sh warning "Found $FAILED failed systemd services"
+    systemctl list-units --state=failed
+fi
+```
+
+**Time estimate:** 10-20 minutes (depends on root cause)
+
+---

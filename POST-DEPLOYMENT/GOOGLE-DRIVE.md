@@ -142,6 +142,80 @@
 
 ---
 
+### Circuit Breaker and Service Recovery
+
+**When:** The Google Drive mount service stops restarting after repeated failures.
+
+**Background:** The systemd service includes a circuit breaker to prevent infinite restart loops. After 5 failures within 10 minutes, the service will stop attempting to restart automatically. This prevents resource waste and log spam when there are permanent issues (invalid credentials, API quota exceeded, network partition, etc.).
+
+**Symptoms:**
+- Service shows as "failed" status: `systemctl status gdrive-shared.service`
+- Mount point `/shared` is not accessible
+- Logs show: "Start request repeated too quickly" or "Failed with result 'start-limit-hit'"
+
+**Recovery Steps:**
+
+1. **Check service status**
+   ```bash
+   systemctl status gdrive-shared.service
+   ```
+
+2. **Identify the root cause** (check logs)
+   ```bash
+   journalctl -u gdrive-shared.service -n 100
+   ```
+
+   Common issues:
+   - OAuth token expired/revoked → Reconfigure rclone authentication
+   - Google API quota exceeded → Wait for quota reset (usually 24h)
+   - Network connectivity issues → Verify internet access
+   - Shared Drive deleted/permissions removed → Check Google Drive access
+   - Account locked/suspended → Contact Google Workspace admin
+
+3. **Fix the underlying issue** before restarting
+   ```bash
+   # Example: Refresh OAuth token
+   rclone config reconnect gdrive-shared:
+
+   # Example: Test connectivity
+   rclone lsd gdrive-shared: --max-depth 1
+   ```
+
+4. **Reset the circuit breaker and restart service**
+   ```bash
+   sudo systemctl reset-failed gdrive-shared.service
+   sudo systemctl start gdrive-shared.service
+   ```
+
+5. **Verify mount is working**
+   ```bash
+   mountpoint /mnt/storage/shared
+   ls -la /mnt/storage/shared
+   ```
+
+6. **Monitor for stability**
+   ```bash
+   # Watch service status
+   watch -n 5 systemctl status gdrive-shared.service
+
+   # Watch logs in real-time
+   journalctl -u gdrive-shared.service -f
+   ```
+
+**Alert Integration:** When the circuit breaker trips, the system will:
+- Send a Telegram alert (if `/opt/scripts/monitoring/send-telegram-alert.sh` exists)
+- Log to syslog with tag `gdrive-alert` (always)
+
+**Prevention:**
+- Set up monitoring alerts for `systemctl list-units --state=failed`
+- Regularly check OAuth token validity
+- Monitor Google Drive quota usage
+- Set up network connectivity monitoring
+
+**Time estimate:** 5-15 minutes (depends on root cause)
+
+---
+
 ### Migrating to Different Shared Drive
 
 **When:** Organization change, moving to different Google Workspace, or consolidation.
