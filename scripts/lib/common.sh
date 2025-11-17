@@ -293,10 +293,107 @@ show_progress() {
     fi
 }
 
+# Helper accessors for configuration data shared across scripts.
+get_users() {
+    echo "${USERS:-}"
+}
+
+get_user_count() {
+    local users="${USERS:-}"
+    if [[ -z "${users}" ]]; then
+        echo 0
+    else
+        # shellcheck disable=SC2086 # intentional word splitting for wc -w
+        echo ${users} | wc -w
+    fi
+}
+
+get_user_uid() {
+    local username="$1"
+    local index=0
+    for user in ${USERS:-}; do
+        if [[ "${user}" == "${username}" ]]; then
+            echo $((FIRST_UID + index))
+            return 0
+        fi
+        ((index++))
+    done
+    return 1
+}
+
+get_user_port() {
+    local username="$1"
+    local base_port="$2"
+    local index=0
+    for user in ${USERS:-}; do
+        if [[ "${user}" == "${username}" ]]; then
+            echo $((base_port + index))
+            return 0
+        fi
+        ((index++))
+    done
+    return 1
+}
+
+detect_nvme_device() {
+    if [[ -n "${NVME_DEVICE:-}" ]]; then
+        echo "${NVME_DEVICE}"
+        return 0
+    fi
+
+    if [[ -b "/dev/nvme0n1" ]]; then
+        echo "/dev/nvme0n1"
+        return 0
+    fi
+
+    if [[ -b "/dev/sda" ]]; then
+        echo "/dev/sda"
+        return 0
+    fi
+
+    return 1
+}
+
+detect_hdd_devices() {
+    if [[ -n "${HDD_DEVICES:-}" ]]; then
+        echo "${HDD_DEVICES}"
+        return 0
+    fi
+
+    local nvme_dev
+    nvme_dev=$(detect_nvme_device 2>/dev/null || true)
+    local hdds=()
+
+    shopt -s nullglob
+    for dev in /dev/sd{b..z}; do
+        if [[ -b "${dev}" ]] && [[ -z "${nvme_dev}" || "${dev}" != "${nvme_dev}" ]]; then
+            local disk_name
+            disk_name=$(basename "${dev}")
+            if [[ -f "/sys/block/${disk_name}/queue/rotational" ]] && \
+               [[ "$(cat "/sys/block/${disk_name}/queue/rotational")" == "1" ]]; then
+                hdds+=("${dev}")
+            fi
+        fi
+    done
+    shopt -u nullglob
+
+    echo "${hdds[*]}"
+}
+
+get_rclone_bandwidth() {
+    local mbps="$1"
+    if [[ -z "${mbps}" ]]; then
+        echo "0M"
+    else
+        echo "${mbps}M"
+    fi
+}
+
 # Export all functions so they're available in subshells
 export -f log_info log_success log_warning log_error
 export -f check_command check_commands send_alert
 export -f require_root load_config require_vars
 export -f check_network setup_cleanup_trap retry
 export -f for_each_user check_disk_space calculate_retention_storage
-export -f show_progress
+export -f show_progress get_users get_user_count get_user_uid get_user_port
+export -f detect_nvme_device detect_hdd_devices get_rclone_bandwidth

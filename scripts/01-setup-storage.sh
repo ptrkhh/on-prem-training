@@ -7,6 +7,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
+COMMON_LIB="${SCRIPT_DIR}/lib/common.sh"
+
+if [[ ! -f "${COMMON_LIB}" ]]; then
+    echo "ERROR: Common library not found: ${COMMON_LIB}"
+    exit 1
+fi
+
+# shellcheck source=../scripts/lib/common.sh
+source "${COMMON_LIB}"
 
 # Load configuration
 if [[ ! -f "${CONFIG_FILE}" ]]; then
@@ -15,7 +24,47 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
     exit 1
 fi
 
+# shellcheck source=../config.sh
 source "${CONFIG_FILE}"
+
+extract_partition_number() {
+    local partition="$1"
+    if [[ -z "${partition}" ]]; then
+        return 1
+    fi
+    if [[ "${partition}" =~ ([0-9]+)$ ]]; then
+        echo "${BASH_REMATCH[1]}"
+        return 0
+    fi
+    return 1
+}
+
+next_partition_number() {
+    local device="$1"
+    local max_num=0
+
+    while read -r entry; do
+        if [[ "${entry}" =~ ([0-9]+)$ ]]; then
+            local num="${BASH_REMATCH[1]}"
+            if (( num > max_num )); then
+                max_num=${num}
+            fi
+        fi
+    done < <(lsblk -nr -o NAME "${device}")
+
+    echo $((max_num + 1))
+}
+
+partition_path_for_device() {
+    local device="$1"
+    local number="$2"
+
+    if [[ "${device}" == *"nvme"* ]]; then
+        echo "${device}p${number}"
+    else
+        echo "${device}${number}"
+    fi
+}
 
 
 echo "=== ML Training Server Storage Setup ==="
@@ -286,38 +335,42 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
     echo "=== Step 1: Setting up bcache cache device ==="
 
     # Check if NVMe is partitioned (OS already installed)
-    NUM_PARTITIONS=$(lsblk -nlo NAME ${NVME_DEVICE} | wc -l)
+    NUM_PARTITIONS=$(lsblk -nlo NAME "${NVME_DEVICE}" | wc -l)
 
     if [[ $NUM_PARTITIONS -gt 1 ]]; then
-        # OS is installed, add bcache partition
-        echo "OS detected on ${NVME_DEVICE}, creating bcache partition..."
+        echo "OS detected on ${NVME_DEVICE}, ensuring dedicated bcache partition exists..."
 
-        # Determine partition naming (nvme0n1p3 vs sda3)
-        if [[ ${NVME_DEVICE} == *"nvme"* ]]; then
-            BCACHE_PARTITION="${NVME_DEVICE}p3"
+        EXISTING_BCACHE=$(lsblk -nr -o NAME,PARTLABEL "${NVME_DEVICE}" | awk '$2 == "ml-bcache" {print "/dev/" $1; exit}')
+        if [[ -n "${EXISTING_BCACHE}" ]]; then
+            BCACHE_PARTITION="${EXISTING_BCACHE}"
+            BCACHE_PART_NUM=$(extract_partition_number "${BCACHE_PARTITION}" || true)
         else
-            BCACHE_PARTITION="${NVME_DEVICE}3"
+            BCACHE_PART_NUM=$(next_partition_number "${NVME_DEVICE}")
+            BCACHE_PARTITION=$(partition_path_for_device "${NVME_DEVICE}" "${BCACHE_PART_NUM}")
         fi
 
-        # Get total size and calculate bcache start
-        TOTAL_SIZE_GB=$(lsblk -bndo SIZE ${NVME_DEVICE} | awk '{print int($1/1024/1024/1024)}')
-        BCACHE_SIZE_GB=$((TOTAL_SIZE_GB - OS_PARTITION_SIZE_GB))
+        if [[ -z "${BCACHE_PART_NUM}" ]]; then
+            echo "ERROR: Unable to determine partition number for ${BCACHE_PARTITION}"
+            exit 1
+        fi
 
-        # Check if bcache partition already exists
         if [[ -b "${BCACHE_PARTITION}" ]]; then
             echo "Partition ${BCACHE_PARTITION} already exists."
             read -p "Do you want to recreate it? This will DESTROY all data on this partition! (yes/no): " RECREATE_PARTITION
             if [[ "${RECREATE_PARTITION}" != "yes" ]]; then
                 echo "Skipping partition creation. Using existing partition ${BCACHE_PARTITION}"
             else
-                echo "Removing existing partition..."
-                # Get partition number (e.g., 3 from nvme0n1p3 or sda3)
-                PART_NUM=$(echo "${BCACHE_PARTITION}" | grep -o '[0-9]*$')
-                if ! parted -s "${NVME_DEVICE}" rm ${PART_NUM}; then
+                PARENT_NAME=$(lsblk -no PKNAME "${BCACHE_PARTITION}" 2>/dev/null || true)
+                if [[ -n "${PARENT_NAME}" && "${PARENT_NAME}" != "$(basename "${NVME_DEVICE}")" ]]; then
+                    echo "ERROR: ${BCACHE_PARTITION} is not located on ${NVME_DEVICE}. Aborting to avoid data loss."
+                    exit 1
+                fi
+                echo "Removing existing partition ${BCACHE_PARTITION}..."
+                if ! parted -s "${NVME_DEVICE}" rm "${BCACHE_PART_NUM}"; then
                     echo "ERROR: Failed to remove existing partition"
                     exit 1
                 fi
-                echo "Creating new bcache partition..."
+                echo "Creating new bcache partition (number ${BCACHE_PART_NUM})..."
                 if ! parted -s "${NVME_DEVICE}" mkpart primary ${OS_PARTITION_SIZE_GB}GiB 100%; then
                     echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
                     echo ""
@@ -325,10 +378,10 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
                     parted -s "${NVME_DEVICE}" print || true
                     exit 1
                 fi
+                parted -s "${NVME_DEVICE}" name "${BCACHE_PART_NUM}" ml-bcache || true
             fi
         else
-            # Create bcache partition
-            echo "Creating bcache partition..."
+            echo "Creating bcache partition (${BCACHE_PARTITION})..."
             if ! parted -s "${NVME_DEVICE}" mkpart primary ${OS_PARTITION_SIZE_GB}GiB 100%; then
                 echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
                 echo ""
@@ -342,11 +395,11 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
                 echo "  4. Check dmesg for disk errors: dmesg | tail -50"
                 exit 1
             fi
+            parted -s "${NVME_DEVICE}" name "${BCACHE_PART_NUM}" ml-bcache || true
         fi
 
-        # Wait for partition to appear
         sleep 2
-        partprobe ${NVME_DEVICE}
+        partprobe "${NVME_DEVICE}"
         sleep 2
 
         BCACHE_CACHE_DEV="${BCACHE_PARTITION}"
@@ -417,43 +470,40 @@ if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
     echo "Creating storage partition on ${NVME_DEVICE}..."
 
     # Check if NVMe is partitioned (OS already installed)
-    NUM_PARTITIONS=$(lsblk -nlo NAME ${NVME_DEVICE} | wc -l)
+    NUM_PARTITIONS=$(lsblk -nlo NAME "${NVME_DEVICE}" | wc -l)
 
     if [[ $NUM_PARTITIONS -gt 1 ]]; then
-        # OS is installed, add storage partition
-        echo "OS detected on ${NVME_DEVICE}, creating storage partition..."
+        echo "OS detected on ${NVME_DEVICE}, verifying dedicated storage partition..."
 
-        # Determine partition naming (nvme0n1p3 vs sda3)
-        if [[ ${NVME_DEVICE} == *"nvme"* ]]; then
-            STORAGE_PARTITION="${NVME_DEVICE}p3"
+        EXISTING_STORAGE=$(lsblk -nr -o NAME,PARTLABEL "${NVME_DEVICE}" | awk '$2 == "ml-storage" {print "/dev/" $1; exit}')
+        if [[ -n "${EXISTING_STORAGE}" ]]; then
+            STORAGE_PARTITION="${EXISTING_STORAGE}"
+            STORAGE_PART_NUM=$(extract_partition_number "${STORAGE_PARTITION}" || true)
+            echo "  Found existing storage partition ${STORAGE_PARTITION} (label: ml-storage)"
         else
-            STORAGE_PARTITION="${NVME_DEVICE}3"
+            STORAGE_PART_NUM=$(next_partition_number "${NVME_DEVICE}")
+            STORAGE_PARTITION=$(partition_path_for_device "${NVME_DEVICE}" "${STORAGE_PART_NUM}")
+            echo "  Creating storage partition (${STORAGE_PARTITION})..."
+            if ! parted -s "${NVME_DEVICE}" mkpart primary btrfs ${OS_PARTITION_SIZE_GB}GiB 100%; then
+                echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
+                echo ""
+                echo "Current partition table:"
+                parted -s "${NVME_DEVICE}" print || true
+                echo ""
+                echo "Recovery options:"
+                echo "  1. Check if partition already exists"
+                echo "  2. Verify disk has sufficient free space"
+                echo "  3. Run 'parted ${NVME_DEVICE}' to manually inspect/fix"
+                echo "  4. Check dmesg for disk errors: dmesg | tail -50"
+                exit 1
+            fi
+            parted -s "${NVME_DEVICE}" name "${STORAGE_PART_NUM}" ml-storage || true
+            sleep 2
+            partprobe "${NVME_DEVICE}"
+            sleep 2
         fi
 
-        # Get total size and calculate storage start
-        TOTAL_SIZE_GB=$(lsblk -bndo SIZE ${NVME_DEVICE} | awk '{print int($1/1024/1024/1024)}')
-
-        # Create storage partition
-        if ! parted -s "${NVME_DEVICE}" mkpart primary btrfs ${OS_PARTITION_SIZE_GB}GiB 100%; then
-            echo "ERROR: Failed to create partition on ${NVME_DEVICE}"
-            echo ""
-            echo "Current partition table:"
-            parted -s "${NVME_DEVICE}" print || true
-            echo ""
-            echo "Recovery options:"
-            echo "  1. Check if partition already exists"
-            echo "  2. Verify disk has sufficient free space"
-            echo "  3. Run 'parted ${NVME_DEVICE}' to manually inspect/fix"
-            echo "  4. Check dmesg for disk errors: dmesg | tail -50"
-            exit 1
-        fi
-
-        # Wait for partition to appear
-        sleep 2
-        partprobe ${NVME_DEVICE}
-        sleep 2
-
-        echo "Created storage partition: ${STORAGE_PARTITION}"
+        echo "Using storage partition: ${STORAGE_PARTITION}"
         HDD_DEVICES_FOR_BTRFS+=("${STORAGE_PARTITION}")
     else
         # No OS, use entire device
@@ -468,10 +518,25 @@ for hdd in "${HDD_ARRAY[@]}"; do
     echo "Preparing ${hdd}..."
 
     # Unmount if mounted
-    umount ${hdd}* 2>/dev/null || true
+    echo "Checking for mounted partitions on ${hdd}..."
+    mapfile -t mounted_parts < <(findmnt -rno SOURCE | grep "^${hdd}" || true)
+    if [[ ${#mounted_parts[@]} -gt 0 ]]; then
+        for partition in "${mounted_parts[@]}"; do
+            echo "  Unmounting ${partition}..."
+            if ! umount "${partition}"; then
+                echo "  WARNING: Failed to unmount ${partition}, attempting lazy unmount..."
+                if ! umount -l "${partition}"; then
+                    echo "ERROR: Unable to unmount ${partition}. Resolve busy mounts and rerun the script."
+                    exit 1
+                fi
+            fi
+        done
+    else
+        echo "  No mounted partitions found on ${hdd}"
+    fi
 
     # Wipe filesystem signatures
-    wipefs -af ${hdd}
+    wipefs -af "${hdd}"
 
     if [[ "${BCACHE_MODE}" != "none" ]]; then
         # Create bcache backing device
@@ -564,58 +629,60 @@ fi
 echo ""
 echo "=== Step 3: Creating BTRFS ${BTRFS_RAID_LEVEL} ==="
 
-# Build mkfs.btrfs command
-MKFS_CMD="mkfs.btrfs -f -L ml-storage"
-
-# Add data and metadata RAID levels
+# Build mkfs.btrfs command safely
+MKFS_ARGS=(-f -L ml-storage)
 if [[ "${BTRFS_RAID_LEVEL}" != "single" ]]; then
-    MKFS_CMD="${MKFS_CMD} -d ${BTRFS_RAID_LEVEL} -m ${BTRFS_RAID_LEVEL}"
+    MKFS_ARGS+=(-d "${BTRFS_RAID_LEVEL}" -m "${BTRFS_RAID_LEVEL}")
 else
-    MKFS_CMD="${MKFS_CMD} -d single -m single"
+    MKFS_ARGS+=(-d single -m single)
 fi
 
-# Add devices
-MKFS_CMD="${MKFS_CMD} ${HDD_DEVICES_FOR_BTRFS[*]}"
+MKFS_ARGS+=("${HDD_DEVICES_FOR_BTRFS[@]}")
 
-echo "Running: ${MKFS_CMD}"
-eval ${MKFS_CMD}
+MKFS_CMD_PRETTY="mkfs.btrfs"
+for arg in "${MKFS_ARGS[@]}"; do
+    printf -v MKFS_CMD_PRETTY '%s %q' "${MKFS_CMD_PRETTY}" "${arg}"
+done
+
+echo "Running: ${MKFS_CMD_PRETTY}"
+mkfs.btrfs "${MKFS_ARGS[@]}"
 
 # Mount BTRFS
 echo "Mounting BTRFS to ${MOUNT_POINT}..."
-mkdir -p ${MOUNT_POINT}
+mkdir -p "${MOUNT_POINT}"
 
 MOUNT_OPTS="compress=${BTRFS_COMPRESSION},space_cache=v2,relatime"
-mount -o ${MOUNT_OPTS} ${HDD_DEVICES_FOR_BTRFS[0]} ${MOUNT_POINT}
+mount -o "${MOUNT_OPTS}" "${HDD_DEVICES_FOR_BTRFS[0]}" "${MOUNT_POINT}"
 
 # Verify BTRFS
 echo ""
 echo "BTRFS created successfully:"
-btrfs filesystem show ${MOUNT_POINT}
-btrfs filesystem df ${MOUNT_POINT}
+btrfs filesystem show "${MOUNT_POINT}"
+btrfs filesystem df "${MOUNT_POINT}"
 
 # Step 4: Create directory structure
 echo ""
 echo "=== Step 4: Creating directory structure ==="
 
-mkdir -p ${MOUNT_POINT}/homes
-mkdir -p ${MOUNT_POINT}/workspaces
-mkdir -p ${MOUNT_POINT}/shared
-mkdir -p ${MOUNT_POINT}/shared/tensorboard
-mkdir -p ${MOUNT_POINT}/docker-volumes
-mkdir -p ${MOUNT_POINT}/snapshots
-mkdir -p ${MOUNT_POINT}/cache
-mkdir -p ${MOUNT_POINT}/cache/gdrive
+mkdir -p "${MOUNT_POINT}/homes"
+mkdir -p "${MOUNT_POINT}/workspaces"
+mkdir -p "${MOUNT_POINT}/shared"
+mkdir -p "${MOUNT_POINT}/shared/tensorboard"
+mkdir -p "${MOUNT_POINT}/docker-volumes"
+mkdir -p "${MOUNT_POINT}/snapshots"
+mkdir -p "${MOUNT_POINT}/cache"
+mkdir -p "${MOUNT_POINT}/cache/gdrive"
 
-chmod 755 ${MOUNT_POINT}/homes
-chmod 755 ${MOUNT_POINT}/workspaces
-chmod 755 ${MOUNT_POINT}/shared
-chmod 755 ${MOUNT_POINT}/docker-volumes
-chmod 700 ${MOUNT_POINT}/snapshots
-chmod 755 ${MOUNT_POINT}/cache
-chmod 755 ${MOUNT_POINT}/cache/gdrive
+chmod 755 "${MOUNT_POINT}/homes"
+chmod 755 "${MOUNT_POINT}/workspaces"
+chmod 755 "${MOUNT_POINT}/shared"
+chmod 755 "${MOUNT_POINT}/docker-volumes"
+chmod 700 "${MOUNT_POINT}/snapshots"
+chmod 755 "${MOUNT_POINT}/cache"
+chmod 755 "${MOUNT_POINT}/cache/gdrive"
 
 echo "Directory structure created:"
-ls -la ${MOUNT_POINT}/
+ls -la "${MOUNT_POINT}/"
 
 # Step 5: Configure /etc/fstab
 echo ""

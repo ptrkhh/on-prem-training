@@ -6,6 +6,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
+COMMON_LIB="${SCRIPT_DIR}/lib/common.sh"
+
+if [[ ! -f "${COMMON_LIB}" ]]; then
+    echo "ERROR: Common library not found: ${COMMON_LIB}"
+    exit 1
+fi
+
+# shellcheck source=../scripts/lib/common.sh
+source "${COMMON_LIB}"
 
 if [[ ! -f "${CONFIG_FILE}" ]]; then
     echo "ERROR: Configuration file not found: ${CONFIG_FILE}"
@@ -16,6 +25,7 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
     exit 1
 fi
 
+# shellcheck source=../config.sh
 source "${CONFIG_FILE}"
 
 # Backwards compatibility defaults
@@ -34,12 +44,7 @@ if [[ -z "${USERS}" ]]; then
     echo "  ✗ ERROR: USERS is not set"
     ((ERRORS++))
 else
-    if type -t get_user_count &>/dev/null; then
-        USER_COUNT=$(get_user_count)
-    else
-        # Fallback if function not defined
-        USER_COUNT=$(echo ${USERS} | wc -w)
-    fi
+    USER_COUNT=$(get_user_count)
     echo "  ✓ Users configured: ${USERS} (${USER_COUNT} users)"
 
     # Validate each username format (lowercase, start with letter, alphanumeric only)
@@ -88,16 +93,7 @@ fi
 echo ""
 echo "Checking storage configuration..."
 
-if type -t detect_nvme_device &>/dev/null; then
-    NVME=$(detect_nvme_device)
-else
-    # Fallback if function not defined
-    NVME="${NVME_DEVICE:-}"
-    if [[ -z "${NVME}" ]]; then
-        [[ -b "/dev/nvme0n1" ]] && NVME="/dev/nvme0n1"
-        [[ -b "/dev/sda" ]] && NVME="/dev/sda"
-    fi
-fi
+NVME=$(detect_nvme_device 2>/dev/null || true)
 
 if [[ -z "${NVME}" ]]; then
     echo "  ⚠ WARNING: No SSD/NVMe device detected"
@@ -110,24 +106,7 @@ else
     fi
 fi
 
-if type -t detect_hdd_devices &>/dev/null; then
-    HDDS=$(detect_hdd_devices)
-else
-    # Fallback if function not defined
-    HDDS="${HDD_DEVICES:-}"
-    if [[ -z "${HDDS}" ]]; then
-        hdds=""
-        for dev in /dev/sd{b..z}; do
-            if [[ -b "${dev}" ]] && [[ "${dev}" != "${NVME}" ]]; then
-                disk_name=$(basename ${dev})
-                if [[ -f "/sys/block/${disk_name}/queue/rotational" ]]; then
-                    [[ "$(cat /sys/block/${disk_name}/queue/rotational)" == "1" ]] && hdds="${hdds} ${dev}"
-                fi
-            fi
-        done
-        HDDS=${hdds}
-    fi
-fi
+HDDS=$(detect_hdd_devices 2>/dev/null || true)
 HDD_ARRAY=(${HDDS})
 HDD_COUNT=${#HDD_ARRAY[@]}
 

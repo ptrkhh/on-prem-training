@@ -13,6 +13,22 @@ USER_GID="${USER_GID:-1000}"
 USER_PASSWORD="${USER_PASSWORD:-changeme}"
 USER_GROUPS="${USER_GROUPS:-sudo docker}"
 
+wait_for_shared_mount() {
+    local target="${SHARED:-/shared}"
+    local timeout="${SHARED_MOUNT_TIMEOUT:-60}"
+    echo "Checking ${target} availability..."
+    for ((i = 1; i <= timeout; i++)); do
+        if mountpoint -q "${target}" && timeout 5 ls "${target}" >/dev/null 2>&1; then
+            echo "✓ ${target} is accessible (ready after ${i}s)"
+            return 0
+        fi
+        sleep 1
+    done
+    echo "ERROR: ${target} is not mounted or readable after ${timeout}s"
+    echo "Ensure the host gdrive-shared.service is healthy before restarting this container."
+    exit 1
+}
+
 # Validate username format
 if [[ ! "${USER_NAME}" =~ ^[a-z][-a-z0-9]*$ ]]; then
     echo "ERROR: Invalid username '${USER_NAME}'. Must start with lowercase letter and contain only lowercase letters, digits, and hyphens"
@@ -56,6 +72,8 @@ else
     fi
 fi
 echo ""
+
+wait_for_shared_mount
 
 
 echo "Initializing user: ${USER_NAME} (UID: ${USER_UID}, GID: ${USER_GID})"

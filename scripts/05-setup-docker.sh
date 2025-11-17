@@ -185,6 +185,42 @@ systemctl enable docker
 
 echo "Docker daemon configured"
 
+echo ""
+echo "Validating Docker storage driver..."
+ACTIVE_DRIVER=$(docker info --format '{{.Driver}}' 2>/dev/null || true)
+if [[ -z "${ACTIVE_DRIVER}" ]]; then
+    echo "ERROR: Unable to determine Docker storage driver. Check 'docker info' output."
+    exit 1
+fi
+
+if [[ "${ACTIVE_DRIVER}" != "${DOCKER_STORAGE_DRIVER}" ]]; then
+    echo "ERROR: Docker is using storage driver '${ACTIVE_DRIVER}', but config.sh requested '${DOCKER_STORAGE_DRIVER}'"
+    echo "Please resolve the mismatch (update config.sh or adjust /etc/docker/daemon.json) and rerun this script."
+    exit 1
+fi
+
+DATA_FS=$(stat -f -c %T "${MOUNT_POINT}/docker" 2>/dev/null || echo "unknown")
+if [[ "${DOCKER_STORAGE_DRIVER}" == "btrfs" && "${DATA_FS}" != "btrfs" ]]; then
+    echo "ERROR: Docker data-root (${MOUNT_POINT}/docker) lives on '${DATA_FS}' but the btrfs storage driver requires a BTRFS filesystem."
+    echo "Move ${MOUNT_POINT}/docker to a BTRFS volume or set DOCKER_STORAGE_DRIVER=overlay2."
+    exit 1
+fi
+
+if [[ "${DOCKER_STORAGE_DRIVER}" == "overlay2" ]]; then
+    case "${DATA_FS}" in
+        ext2|ext3|ext4|xfs)
+            ;;
+        btrfs)
+            echo "⚠️  WARNING: overlay2 on BTRFS can suffer from copy-on-write overhead. Consider using btrfs driver instead."
+            ;;
+        *)
+            echo "⚠️  WARNING: overlay2 on filesystem type '${DATA_FS}' is untested. Monitor performance closely."
+            ;;
+    esac
+fi
+
+echo "✓ Docker storage driver '${ACTIVE_DRIVER}' validated (backing FS: ${DATA_FS})"
+
 # Step 5: Test Installation
 echo ""
 echo "=== Step 5: Testing Installation ==="

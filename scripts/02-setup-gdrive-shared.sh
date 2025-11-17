@@ -212,8 +212,8 @@ if [[ ${RESERVED_GB} -gt ${SAFE_LIMIT_GB} ]]; then
     exit 1
 fi
 
-# Calculate free space for VFS cache
-FREE_GB=$((TOTAL_BTRFS_GB - RESERVED_GB))
+# Calculate free space for VFS cache within the safety limit
+FREE_GB=$((SAFE_LIMIT_GB - RESERVED_GB))
 
 # Validate free space (should be positive after passing above check, but double-check)
 if [[ ${FREE_GB} -le 0 ]]; then
@@ -231,22 +231,14 @@ echo "  Total user data: ${TOTAL_USER_DATA_GB}GB"
 echo "  Snapshot overhead: ${SNAPSHOT_OVERHEAD_GB}GB (0.5× user data)"
 echo "  Total reserved: ${RESERVED_GB}GB"
 echo "  Safe limit (${STORAGE_SAFETY_MARGIN_PERCENT}% margin): ${SAFE_LIMIT_GB}GB"
-echo "  Free space for VFS cache: ${FREE_GB}GB"
+echo "  Free space for VFS cache (within margin): ${FREE_GB}GB"
 echo ""
 
 echo "✅ Storage validation passed!"
 echo ""
 
-# Calculate VFS cache size using remaining free space
-
-# Validate free space is available
-if [[ ${FREE_GB} -le 0 ]]; then
-    echo "ERROR: No free space available for VFS cache"
-    echo "Available: ${FREE_GB}GB"
-    exit 1
-fi
-
-CACHE_SIZE_GB=$(awk "BEGIN {printf \"%.0f\", ${FREE_GB} * (1 - ${STORAGE_SAFETY_MARGIN_PERCENT}/100.0)}")
+# Calculate VFS cache size using remaining free space within the limit
+CACHE_SIZE_GB=${FREE_GB}
 
 # Validate cache size meets minimum requirements
 if [[ ${CACHE_SIZE_GB} -lt 10 ]]; then
@@ -255,13 +247,13 @@ if [[ ${CACHE_SIZE_GB} -lt 10 ]]; then
     exit 1
 fi
 
-SAFETY_BUFFER_GB=$(awk "BEGIN {printf \"%.0f\", ${FREE_GB} - ${CACHE_SIZE_GB}}")
+SAFETY_BUFFER_GB=$(awk "BEGIN {printf \"%.0f\", ${TOTAL_BTRFS_GB} - ${SAFE_LIMIT_GB}}")
 CACHE_PERCENT=$(awk "BEGIN {printf \"%.0f\", ${CACHE_SIZE_GB} * 100.0 / ${TOTAL_BTRFS_GB}}")
 
 echo "Google Drive VFS cache allocation:"
 echo "  Free space after reservations: ${FREE_GB}GB"
 echo "  VFS cache size: ${CACHE_SIZE_GB}GB (${CACHE_PERCENT}% of total disk)"
-echo "  Safety buffer: ${SAFETY_BUFFER_GB}GB (${STORAGE_SAFETY_MARGIN_PERCENT}% of free space)"
+echo "  Safety buffer: ${SAFETY_BUFFER_GB}GB (${STORAGE_SAFETY_MARGIN_PERCENT}% reserved for filesystem headroom)"
 echo ""
 
 # Create cache directory
@@ -291,10 +283,11 @@ cat > /etc/systemd/system/gdrive-shared.service <<EOF
 Description=Google Drive Shared Drive mount for /shared
 After=network-online.target
 Wants=network-online.target
+Before=docker.service
 OnFailure=gdrive-mount-failure-alert.service
 
 [Service]
-Type=notify
+Type=simple
 # Pre-flight validation to catch connectivity issues before mount attempt
 ExecStartPre=/usr/bin/rclone lsd ${GDRIVE_SHARED_REMOTE}: --max-depth 1
 
@@ -312,7 +305,6 @@ ExecStart=/usr/bin/rclone mount ${GDRIVE_SHARED_REMOTE}: ${MOUNT_POINT}/shared \
     --poll-interval ${GDRIVE_POLL_INTERVAL} \\
     --cache-dir ${CACHE_DIR} \\
     --allow-other \\
-    --allow-non-empty \\
     --default-permissions \\
     --uid 0 \\
     --gid 0 \\
@@ -336,6 +328,10 @@ StartLimitIntervalSec=600
 
 # Health monitoring with retry logic
 ExecStartPost=/bin/bash -c 'for i in {1..30}; do if ls ${MOUNT_POINT}/shared > /dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1'
+
+# Warn if stopping while containers are using /shared
+ExecStop=/bin/bash -c 'ACTIVE_CONTAINERS=\$(docker ps --filter "volume=${MOUNT_POINT}/shared" --format "{{.Names}}" 2>/dev/null | wc -l); if [[ \${ACTIVE_CONTAINERS} -gt 0 ]]; then logger -t gdrive-shared -p user.warning "Unmounting /shared while \${ACTIVE_CONTAINERS} container(s) are using it. Data written during unmount may be lost."; fi; pkill -TERM -f "rclone mount.*${MOUNT_POINT}/shared"'
+TimeoutStopSec=15
 
 [Install]
 WantedBy=multi-user.target

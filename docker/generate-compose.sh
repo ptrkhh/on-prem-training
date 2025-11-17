@@ -80,7 +80,8 @@ echo "✓ Docker Compose v2 detected: ${COMPOSE_VERSION}"
 echo ""
 
 # Check Prometheus config exists
-if [[ ! -f "${SCRIPT_DIR}/prometheus/prometheus.yml" ]]; then
+PROM_CONFIG_FILE="${SCRIPT_DIR}/prometheus/prometheus.yml"
+if [[ ! -f "${PROM_CONFIG_FILE}" ]]; then
     echo "ERROR: Prometheus config not found: ${SCRIPT_DIR}/prometheus/prometheus.yml"
     echo "This file is required for monitoring."
     echo ""
@@ -97,6 +98,24 @@ if [[ ! -f "${SCRIPT_DIR}/prometheus/prometheus.yml" ]]; then
     exit 1
 fi
 echo "✓ Prometheus configuration found"
+echo ""
+
+echo "=== Validating Prometheus configuration syntax ==="
+if command -v promtool &>/dev/null; then
+    if ! promtool check config "${PROM_CONFIG_FILE}"; then
+        echo "ERROR: promtool validation failed for ${PROM_CONFIG_FILE}"
+        exit 1
+    fi
+else
+    echo "promtool not found locally; using prom/prometheus container for validation..."
+    if ! docker run --rm -v "${SCRIPT_DIR}/prometheus:/etc/prometheus:ro" prom/prometheus promtool check config /etc/prometheus/prometheus.yml >/tmp/promtool.log 2>&1; then
+        cat /tmp/promtool.log
+        echo "ERROR: Prometheus configuration is invalid"
+        exit 1
+    fi
+    rm -f /tmp/promtool.log
+fi
+echo "✓ Prometheus configuration syntax looks good"
 echo ""
 
 # Auto-generate .env file from config.sh

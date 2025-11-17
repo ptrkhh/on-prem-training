@@ -355,56 +355,7 @@ CUDA_VERSION=""
 # Docker Compose project name (prefix for all containers)
 COMPOSE_PROJECT_NAME="ml-train-server"
 
-#==============================================================================
-# HELPER FUNCTIONS (DO NOT EDIT)
-#==============================================================================
-
-get_users() { echo ${USERS}; }
-get_user_count() { echo ${USERS} | wc -w; }
-
-get_user_uid() {
-    local username=$1
-    local index=0
-    for user in ${USERS}; do
-        [[ "$user" == "$username" ]] && echo $((FIRST_UID + index)) && return
-        ((index++))
-    done
-}
-
-get_user_port() {
-    local username=$1
-    local base_port=$2
-    local index=0
-    for user in ${USERS}; do
-        [[ "$user" == "$username" ]] && echo $((base_port + index)) && return
-        ((index++))
-    done
-}
-
-detect_nvme_device() {
-    [[ -n "${NVME_DEVICE}" ]] && echo "${NVME_DEVICE}" && return
-    [[ -b "/dev/nvme0n1" ]] && echo "/dev/nvme0n1" && return
-    [[ -b "/dev/sda" ]] && echo "/dev/sda" && return
-}
-
-detect_hdd_devices() {
-    [[ -n "${HDD_DEVICES}" ]] && echo "${HDD_DEVICES}" && return
-    local nvme_dev=$(detect_nvme_device)
-    local hdds=""
-    for dev in /dev/sd{b..z}; do
-        if [[ -b "${dev}" ]] && [[ "${dev}" != "${nvme_dev}" ]]; then
-            local disk_name=$(basename ${dev})
-            if [[ -f "/sys/block/${disk_name}/queue/rotational" ]]; then
-                [[ "$(cat /sys/block/${disk_name}/queue/rotational)" == "1" ]] && hdds="${hdds} ${dev}"
-            fi
-        fi
-    done
-    echo ${hdds}
-}
-
-get_rclone_bandwidth() { echo "${1}M"; }
-
-# Export all
+# Export all - DO NOT EDIT
 export SERVER_HOSTNAME MOUNT_POINT USERS FIRST_UID USER_SHELL USER_GROUPS USER_DEFAULT_PASSWORD
 export NVME_DEVICE HDD_DEVICES OS_PARTITION_SIZE_GB
 export BTRFS_RAID_LEVEL BTRFS_COMPRESSION BCACHE_MODE
