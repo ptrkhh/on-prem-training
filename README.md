@@ -11,19 +11,53 @@ improving performance.
 - **[SETUP-GUIDE.md](SETUP-GUIDE.md)** - Complete step-by-step setup instructions
 - **[config.sh.example](config.sh.example)** - Configuration template (customize users, hardware, and all settings)
 
+## Table of Contents
+
+- [System Requirements](#system-requirements)
+- [System Overview](#system-overview)
+- [Cost Savings](#cost-savings)
+- [Quick Start](#quick-start)
+- [Access Your Services](#access-your-services)
+- [Key Features](#key-features)
+- [Documentation](#documentation)
+- [Example Configurations](#example-configurations)
+- [Architecture](#architecture)
+- [User Guide](#user-guide)
+- [Admin Guide](#admin-guide)
+- [Maintenance](#maintenance)
+- [Troubleshooting](#troubleshooting)
+
 ## System Requirements
 
-### Supported Configurations
+### Minimum Requirements
 
 - **OS**: Fresh Ubuntu Server 22.04+ or Debian 12+ installation
-- **Storage**: Dedicated server (NOT dual-boot or shared partitions)
-- **Docker**: Docker 20.10+ with overlay2 or btrfs storage driver
+- **Storage**: 2+ disks (any size, any type)
+- **Users**: 1-100 users (configurable)
+- **Docker**: Docker 20.10+ with overlay2 (ext4/xfs) or btrfs storage driver
 
-### Important Limitations
+### Recommended Setup (5 users)
 
-- **Dual-boot systems NOT supported**: The storage setup script manages partitions automatically and assumes dedicated disk access. Multi-OS configurations (Windows/Linux dual-boot, recovery partitions, etc.) will cause setup failures or data loss.
-- **Fresh OS installation recommended**: Install Ubuntu/Debian as the only OS on the primary drive before running setup scripts.
-- **Docker storage driver**: Must use `overlay2` (for ext4/xfs) or `btrfs` (for BTRFS filesystems). Legacy drivers like `devicemapper` will cause performance and stability issues.
+- **CPU**: AMD Threadripper or similar (32+ cores)
+- **RAM**: 200GB DDR5
+- **GPU**: NVIDIA RTX 5080 or similar
+- **Storage**: 1TB NVMe SSD + 4x 20TB HDD
+
+### Critical Limitations
+
+> ⚠️ **IMPORTANT - Read before proceeding:**
+
+1. **Dedicated server only**: NOT compatible with dual-boot systems (Windows/Linux)
+   - Storage scripts assume full control of all disks
+   - Multi-OS configurations will cause setup failures or data loss
+
+2. **Fresh OS required**: Install Ubuntu/Debian as the ONLY OS before running setup
+   - Remove recovery partitions and other OS installations first
+
+3. **Docker storage driver**: Must use `overlay2` or `btrfs` drivers
+   - Legacy drivers (`devicemapper`, `aufs`) cause performance issues
+
+**For detailed prerequisites, see [SETUP-GUIDE.md#prerequisites-and-warnings](SETUP-GUIDE.md#prerequisites-and-warnings)**
 
 ## System Overview
 
@@ -37,19 +71,30 @@ improving performance.
 
 ### Remote Desktop Access
 
-**Per-User URLs**
-- Direct browser access: `http://alice.yourdomain.com` or `http://alice-desktop.yourdomain.com`
-- Zero configuration, no login required
-- HTML5 noVNC client with full KDE Plasma desktop
+**Primary Access Methods (Recommended):**
 
-**Gateway Options:**
-- **Apache Guacamole**: Multi-protocol gateway (VNC/RDP/SSH) at `http://guacamole.yourdomain.com`
-- **Kasm Workspaces**: Container streaming platform at `http://kasm.yourdomain.com`
+1. **Per-User Direct URLs** (Easiest)
+   - `http://alice.yourdomain.com` - Direct desktop access
+   - Zero configuration, no gateway login required
+   - HTML5 browser client with full KDE Plasma desktop
 
-**Direct Clients:**
-- VNC: Ports 5900+ (TigerVNC server)
-- RDP: Ports 3389+ (XRDP server)
-- HTML5 noVNC: Ports 6080+
+2. **Apache Guacamole Gateway** (Multi-Protocol)
+   - `http://guacamole.yourdomain.com`
+   - Unified interface for VNC/RDP/SSH
+   - Best for managing multiple users
+
+3. **Kasm Workspaces** (Enterprise Alternative)
+   - `http://kasm.yourdomain.com`
+   - Container streaming platform with session recording
+
+**Advanced: Direct Protocol Access**
+
+For users who prefer native clients:
+- **VNC**: Ports 5900+ (TigerVNC) - Use RealVNC, TightVNC, etc.
+- **RDP**: Ports 3389+ (XRDP) - Use Windows Remote Desktop
+- **noVNC**: Ports 6080+ - Browser-based VNC without gateway
+
+**Recommendation**: Start with per-user URLs (option 1) for simplicity.
 
 ### Shared Cache System
 
@@ -65,32 +110,36 @@ All users benefit from shared package/model caches - when one user downloads, al
 
 **Monitoring:** Run `/opt/scripts/cache/show-cache-info.sh` to view cache statistics
 
-**Cleanup:** Caches grow indefinitely (except Google Drive VFS auto-evicts via LRU). Clean old caches manually:
+**Cleanup:** Caches grow indefinitely (except Google Drive VFS auto-evicts via LRU).
+
+**Example - Clean old cache files (older than 90 days):**
 ```bash
 find /mnt/storage/cache/{pip,conda,apt} -type f -mtime +90 -delete
 ```
 
-### Each User Gets ONE Container With Everything
+### User Workspaces: One Container = One Complete Environment
 
-- **Full KDE Plasma Desktop** (access via Guacamole/Kasm web interface or VNC/RDP)
-- **All Development Tools**: VS Code, PyCharm, Jupyter Lab, VSCodium
-- **Multiple Languages**: Python 3.11+, Go, Rust, Julia, R, Node.js
-- **GUI Applications**: Firefox, Chromium, LibreOffice, GIMP, Inkscape
-- **Docker-in-Docker**: Run containers inside your workspace
-- **Persistent Storage**: Home directory survives restarts
+Each user gets a single comprehensive container (like `workspace-alice`) that functions as a complete development machine:
 
-#### Why Containers Instead of VMs?
+**What's Included:**
+- Full KDE Plasma desktop environment
+- All development tools: VS Code, PyCharm, Jupyter Lab, VSCodium
+- Multiple languages: Python 3.11+, Go, Rust, Julia, R, Node.js
+- GUI applications: Firefox, Chromium, LibreOffice, GIMP, Inkscape
+- Docker-in-Docker for running containers inside your workspace
+- Persistent storage: `/home` and `/workspace` survive restarts
 
-The architecture uses Docker containers rather than traditional VMs for several key advantages:
+**Why Containers Instead of VMs?**
 
-- **Universal GPU Support**: Official `nvidia-container-toolkit` works with any NVIDIA GPU
-- **Maximum Performance**: No hypervisor overhead means 96%+ native GPU performance
-- **Simpler Management**: Single host OS to manage, standard Docker tooling
-- **Full Isolation**: Each user gets their own containerized environment with dedicated resources
-- **Desktop Experience**: Full KDE Plasma desktop in each container via Guacamole/Kasm web gateway
+| Feature | Containers (Our Approach) | Traditional VMs |
+|---------|---------------------------|-----------------|
+| GPU Support | Universal (nvidia-container-toolkit) | Complex passthrough |
+| Performance | 96%+ native GPU performance | 80-90% (hypervisor overhead) |
+| Management | Single host OS + Docker | Multiple guest OS to patch |
+| Startup Time | 2-5 seconds | 30-60 seconds |
+| Isolation | Full (namespaces, cgroups) | Full (hardware virtualization) |
 
-This approach provides VM-like isolation for trusted team environments while maintaining bare-metal performance for ML
-workloads.
+**Best of Both Worlds**: VM-like isolation with bare-metal performance, perfect for trusted team environments.
 
 ### Infrastructure Services (Shared)
 
@@ -118,6 +167,10 @@ workloads.
 - **Alerts**: Telegram notifications for critical events
 - **Data Pipeline**: Daily GCS → GDrive sync with bandwidth limits
 
+**Related Documentation:**
+- [SETUP-GUIDE.md#services-deployment](SETUP-GUIDE.md#services-deployment) - Detailed service configuration
+- [GRAND-PLAN.md](GRAND-PLAN.md) - Architecture decisions and rationale
+
 ## Cost Savings
 
 | Item             | Before (GCP)   | After (On-Premise) |
@@ -133,44 +186,24 @@ Break-even: ~1.5 months (even if buying all new hardware)
 
 ## Quick Start (~2-3 hours total, 30 minutes hands-on)
 
-**Attended time:** ~30-60 minutes (configuration + supervision)
-**Unattended time:** ~1-2 hours (Docker builds, initial sync, scrubs)
+**Prerequisites**: Fresh Ubuntu 22.04+ or Debian 12+ installation on dedicated hardware
 
 ```bash
-# 1. Clone repository
-git clone <repo-url> train-server
-cd train-server
-
-# 2. Configure (edit users, domain, hardware settings)
+# 1. Clone and configure
+git clone <repo-url> train-server && cd train-server
 cp config.sh.example config.sh
-nano config.sh
+nano config.sh  # Edit users, domain, hardware settings
 
-# 3. Validate configuration
+# 2. Validate and generate configs
 ./scripts/00-validate-config.sh
-
-# 4. Generate docker-compose.yml (also auto-generates docker/.env)
 cd docker && ./generate-compose.sh && cd ..
 
-# 5. Run setup scripts (in order)
-sudo ./scripts/01-setup-storage.sh  # REBOOT after this!
-sudo ./scripts/02-setup-gdrive-shared.sh  # Mount Google Drive Shared Drive to /shared
-sudo ./scripts/03-setup-shared-caches.sh
-sudo ./scripts/04-setup-users.sh
-sudo ./scripts/05-setup-docker.sh
-sudo ./scripts/06-setup-cloudflare-tunnel.sh
-sudo ./scripts/07-setup-firewall.sh
-sudo ./scripts/08-setup-monitoring.sh
-sudo ./scripts/09-setup-backups.sh
-sudo ./scripts/10-setup-data-pipeline.sh
-
-# 6. Build and start containers
-cd docker
-docker compose build
-docker compose up -d
-
-# 7. Run tests
-cd ../scripts && sudo ./11-run-tests.sh
+# 3. Run setup scripts (scripts 01-10, reboot after 01)
+# 4. Build and start containers
+# 5. Run tests
 ```
+
+**For detailed setup instructions, see [SETUP-GUIDE.md](SETUP-GUIDE.md)**
 
 ## Access Your Services
 
@@ -192,8 +225,9 @@ cd ../scripts && sudo ./11-run-tests.sh
 **Shared:**
 - TensorBoard: `http://tensorboard.yourdomain.com` (all users)
 - Guacamole Gateway: `http://guacamole.yourdomain.com` (default: guacadmin/guacadmin)
-  - **⚠️ SECURITY WARNING: Change the default credentials immediately after first login!**
 - Kasm Workspaces: `http://kasm.yourdomain.com`
+
+> ⚠️ **SECURITY WARNING**: Change the default Guacamole credentials (guacadmin/guacadmin) immediately after first login.
 
 ## Key Features
 
@@ -211,9 +245,30 @@ cd ../scripts && sudo ./11-run-tests.sh
 
 ## Documentation
 
-- **[SETUP-GUIDE.md](SETUP-GUIDE.md)** - Complete setup instructions and troubleshooting
-- **[GRAND-PLAN.md](GRAND-PLAN.md)** - Architecture and design decisions
+**Getting Started:**
+- **[README.md](README.md)** - This file (overview, quick start, architecture)
+- **[SETUP-GUIDE.md](SETUP-GUIDE.md)** - Complete installation and setup
 - **[config.sh.example](config.sh.example)** - Configuration reference (100+ parameters)
+
+**Operations:**
+- **[POST-DEPLOYMENT/](POST-DEPLOYMENT/)** - Operational guides:
+  - [BACKUP-RESTORE.md](POST-DEPLOYMENT/BACKUP-RESTORE.md) - Backup and restore procedures
+  - [MONITORING-ALERT.md](POST-DEPLOYMENT/MONITORING-ALERT.md) - Monitoring and alerting
+  - [TROUBLESHOOTING.md](POST-DEPLOYMENT/TROUBLESHOOTING.md) - Common issues and solutions
+  - [USER-MANAGEMENT.md](POST-DEPLOYMENT/USER-MANAGEMENT.md) - Adding/removing users
+  - [MAINTENANCE.md](POST-DEPLOYMENT/MAINTENANCE.md) - System maintenance tasks
+  - [STORAGE-OPERATION.md](POST-DEPLOYMENT/STORAGE-OPERATION.md) - Storage management
+  - [GOOGLE-DRIVE.md](POST-DEPLOYMENT/GOOGLE-DRIVE.md) - Google Drive operations
+  - [NETWORK-AND-ACCESS.md](POST-DEPLOYMENT/NETWORK-AND-ACCESS.md) - Networking configuration
+  - [SECURITY-OPERATION.md](POST-DEPLOYMENT/SECURITY-OPERATION.md) - Security operations
+  - [CONTAINER-MANAGEMENT.md](POST-DEPLOYMENT/CONTAINER-MANAGEMENT.md) - Container operations
+  - [DISASTER-RECOVERY.md](POST-DEPLOYMENT/DISASTER-RECOVERY.md) - Emergency procedures
+  - [HARDWARE-CHANGE.md](POST-DEPLOYMENT/HARDWARE-CHANGE.md) - Hardware modifications
+  - [PACKAGE-MANAGEMENT.md](POST-DEPLOYMENT/PACKAGE-MANAGEMENT.md) - Software updates
+  - [PERFORMANCE-TUNING.md](POST-DEPLOYMENT/PERFORMANCE-TUNING.md) - Optimization guide
+
+**Architecture:**
+- **[GRAND-PLAN.md](GRAND-PLAN.md)** - Design decisions and technical rationale
 
 ## Example Configurations
 
@@ -496,33 +551,26 @@ libraries (with `-dev` suffix, command-line tools, etc.) need Dockerfile changes
 
 ## Maintenance
 
-* **Daily**: Check Telegram alerts, review dashboards
-* **Weekly**: Review logs, check disk usage
-* **Monthly**: Verify backup restore (automated), BTRFS scrub
-* **Quarterly**: Update Docker images, test failover
+- **Daily**: Check Telegram alerts, review dashboards
+- **Weekly**: Review logs, check disk usage
+- **Monthly**: Verify backup restore (automated), BTRFS scrub
+- **Quarterly**: Update Docker images, test failover
+
+**For detailed maintenance procedures and automation schedules, see [SETUP-GUIDE.md#maintenance](SETUP-GUIDE.md#maintenance)**
 
 ## Troubleshooting
 
-See [SETUP-GUIDE.md](SETUP-GUIDE.md#troubleshooting) for detailed troubleshooting steps.
-
-Quick checks:
+**Quick health checks:**
 
 ```bash
-# Check all containers
-docker compose ps
-
-# Check specific service
-docker logs workspace-alice
-
-# Check storage
-sudo btrfs filesystem df /mnt/storage
-
-# Check GPU
-nvidia-smi
-
-# Check Cloudflare Tunnel
-sudo systemctl status cloudflared
+docker compose ps              # Check all containers
+docker logs workspace-alice    # Check specific service
+sudo btrfs filesystem df /mnt/storage  # Check storage
+nvidia-smi                     # Check GPU
+sudo systemctl status cloudflared      # Check tunnel
 ```
+
+**For detailed troubleshooting, see [SETUP-GUIDE.md#troubleshooting](SETUP-GUIDE.md#troubleshooting)**
 
 ## Support
 

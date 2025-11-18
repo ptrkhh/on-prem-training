@@ -1,5 +1,7 @@
 # ML Training Server Setup Guide
 
+> **Note**: This is a detailed installation and operations manual. For an overview of the system, costs, and architecture, see [README.md](README.md).
+
 Complete guide for setting up a 5-user on-premise ML training server replacing GCP GCE infrastructure.
 
 ## Table of Contents
@@ -79,6 +81,8 @@ After setup, you should have:
 
 ### Google Drive Shared Drive Setup
 
+> **See also**: [POST-DEPLOYMENT/GOOGLE-DRIVE.md](POST-DEPLOYMENT/GOOGLE-DRIVE.md) for managing shared drive operations, cache management, and troubleshooting.
+
 The `/shared` directory should be mounted from a Google Workspace Shared Drive with local caching for near-disk performance.
 
 **Run the Google Drive setup script:**
@@ -133,6 +137,10 @@ sudo systemctl restart gdrive-shared.service
 ---
 
 ## User Account Setup
+
+> **See also**: [POST-DEPLOYMENT/USER-MANAGEMENT.md](POST-DEPLOYMENT/USER-MANAGEMENT.md) for adding/removing users and managing permissions after initial setup.
+
+**Run the user setup script:**
 
 ```bash
 cd ~/train-server/scripts
@@ -218,6 +226,8 @@ sudo docker run --rm --gpus all nvidia/cuda:13.0.1-base-ubuntu24.04 nvidia-smi
 
 ## Services Deployment
 
+> **See also**: [POST-DEPLOYMENT/CONTAINER-MANAGEMENT.md](POST-DEPLOYMENT/CONTAINER-MANAGEMENT.md) for managing containers, rebuilding images, and troubleshooting services.
+
 All services run in Docker containers orchestrated by Docker Compose.
 
 ### Services Overview
@@ -281,6 +291,8 @@ sudo docker compose logs netdata
 ---
 
 ## Networking and Security
+
+> **See also**: [POST-DEPLOYMENT/NETWORK-AND-ACCESS.md](POST-DEPLOYMENT/NETWORK-AND-ACCESS.md) for managing network configuration, DNS, and access control.
 
 ### Network Architecture Overview
 
@@ -404,6 +416,8 @@ The configuration is located at `/etc/ssh/sshd_config.d/ml-train-server.conf`
 
 ## Monitoring and Alerting
 
+> **See also**: [POST-DEPLOYMENT/MONITORING-ALERT.md](POST-DEPLOYMENT/MONITORING-ALERT.md) for monitoring dashboards, alert configuration, and operational procedures.
+
 ### Prometheus Configuration
 
 Prometheus scrapes metrics from:
@@ -457,6 +471,8 @@ This installs:
 ---
 
 ## Backup Configuration
+
+> **See also**: [POST-DEPLOYMENT/BACKUP-RESTORE.md](POST-DEPLOYMENT/BACKUP-RESTORE.md) for ongoing backup operations, restore procedures, and disaster recovery.
 
 ### Backup Strategy
 
@@ -586,6 +602,8 @@ This tests:
 
 ## Maintenance
 
+> **See also**: [POST-DEPLOYMENT/MAINTENANCE.md](POST-DEPLOYMENT/MAINTENANCE.md) for detailed maintenance procedures, automation scripts, and schedules.
+
 ### Daily Tasks
 - Check Telegram for alerts
 - Review Grafana dashboards for anomalies
@@ -643,6 +661,8 @@ This tests:
 ---
 
 ## Troubleshooting
+
+> **See also**: [POST-DEPLOYMENT/TROUBLESHOOTING.md](POST-DEPLOYMENT/TROUBLESHOOTING.md) for comprehensive troubleshooting guides and solutions.
 
 ### Storage Issues
 

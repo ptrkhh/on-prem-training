@@ -1,4 +1,8 @@
+# System Package Management Guide
 
+**Documentation**: [README](../README.md) > [Setup Guide](../SETUP-GUIDE.md) > [Operations](./README.md) > Package Management
+
+---
 
 ## System Package Management
 

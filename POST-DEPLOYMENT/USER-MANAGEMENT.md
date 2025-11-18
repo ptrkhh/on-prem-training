@@ -1,3 +1,8 @@
+# User Management Operations
+
+**Documentation**: [README](../README.md) > [Setup Guide](../SETUP-GUIDE.md) > [Operations](./README.md) > User Management
+
+---
 
 ## User Management
 
