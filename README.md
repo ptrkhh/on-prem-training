@@ -11,6 +11,20 @@ improving performance.
 - **[SETUP-GUIDE.md](SETUP-GUIDE.md)** - Complete step-by-step setup instructions
 - **[config.sh.example](config.sh.example)** - Configuration template (customize users, hardware, and all settings)
 
+## System Requirements
+
+### Supported Configurations
+
+- **OS**: Fresh Ubuntu Server 22.04+ or Debian 12+ installation
+- **Storage**: Dedicated server (NOT dual-boot or shared partitions)
+- **Docker**: Docker 20.10+ with overlay2 or btrfs storage driver
+
+### Important Limitations
+
+- **Dual-boot systems NOT supported**: The storage setup script manages partitions automatically and assumes dedicated disk access. Multi-OS configurations (Windows/Linux dual-boot, recovery partitions, etc.) will cause setup failures or data loss.
+- **Fresh OS installation recommended**: Install Ubuntu/Debian as the only OS on the primary drive before running setup scripts.
+- **Docker storage driver**: Must use `overlay2` (for ext4/xfs) or `btrfs` (for BTRFS filesystems). Legacy drivers like `devicemapper` will cause performance and stability issues.
+
 ## System Overview
 
 ### Hardware (Flexible!)

@@ -21,6 +21,15 @@ Complete guide for setting up a 5-user on-premise ML training server replacing G
 
 ## Storage Setup
 
+### Prerequisites and Warnings
+
+**IMPORTANT: Read before proceeding**
+
+- **Dedicated server required**: This setup assumes the server is dedicated to ML training. Dual-boot systems (e.g., Windows/Linux) or servers with multiple OS installations are NOT supported.
+- **Partition management**: The storage scripts automatically partition disks and assume full control of the NVMe/SSD and all HDDs. Non-standard partition layouts (recovery partitions, custom disk configurations) may cause failures.
+- **Fresh OS installation**: For best results, install Ubuntu Server or Debian as the only operating system before running these scripts.
+- **Data loss warning**: The storage setup will format all specified disks. Ensure you have backups of any important data.
+
 ### Automated Setup
 
 Run the storage setup script:
@@ -166,6 +175,17 @@ sudo chown -R alice:alice /mnt/storage/homes/alice/.ssh
 
 ## Docker and Container Setup
 
+### Storage Driver Requirements
+
+**IMPORTANT: Docker storage driver compatibility**
+
+The setup script automatically configures Docker to use the appropriate storage driver based on your filesystem:
+
+- **BTRFS filesystem** → Uses `btrfs` storage driver (best performance, native CoW support)
+- **ext4/xfs filesystem** → Uses `overlay2` storage driver (recommended, stable)
+
+**Legacy drivers NOT supported**: Do not manually configure `devicemapper`, `aufs`, or other deprecated drivers, as they cause severe performance degradation and stability issues with BTRFS.
+
 ### Install Docker and NVIDIA Container Toolkit
 
 ```bash
@@ -177,7 +197,7 @@ This installs:
 - Docker Engine (latest stable)
 - Docker Compose v2
 - nvidia-container-toolkit
-- Configures Docker daemon
+- Configures Docker daemon with appropriate storage driver
 
 ### Verify Installation
 
@@ -186,6 +206,9 @@ This installs:
 docker --version
 docker compose version
 sudo docker run hello-world
+
+# Verify storage driver (should be 'btrfs' or 'overlay2')
+docker info | grep "Storage Driver"
 
 # Test NVIDIA runtime
 sudo docker run --rm --gpus all nvidia/cuda:13.0.1-base-ubuntu24.04 nvidia-smi
