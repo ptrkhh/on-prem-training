@@ -31,7 +31,7 @@ improving performance.
 
 ### Minimum Requirements
 
-- **OS**: Fresh Ubuntu Server 22.04+ or Debian 12+ installation
+- **OS**: Fresh Ubuntu Server 24.04 LTS or Debian 12+ installation
 - **Storage**: 2+ disks (any size, any type)
 - **Users**: 1-100 users (configurable)
 - **Docker**: Docker 20.10+ with overlay2 (ext4/xfs) or btrfs storage driver
@@ -73,26 +73,34 @@ improving performance.
 
 **Primary Access Methods (Recommended):**
 
-1. **Per-User Direct URLs** (Easiest)
+1. **Per-User Direct URLs** (Easiest) - via noVNC
    - `http://alice.yourdomain.com` - Direct desktop access
-   - Zero configuration, no gateway login required
-   - HTML5 browser client with full KDE Plasma desktop
+   - Uses noVNC (HTML5 VNC client) built into each workspace container
+   - Zero configuration, no separate gateway login required
+   - Full KDE Plasma desktop in browser
 
-2. **Apache Guacamole Gateway** (Multi-Protocol)
+2. **Apache Guacamole Gateway** (Multi-Protocol Hub)
    - `http://guacamole.yourdomain.com`
-   - Unified interface for VNC/RDP/SSH
-   - Best for managing multiple users
+   - Centralized gateway supporting VNC/RDP/SSH protocols
+   - Single login to access all user workspaces
+   - Best for admins managing multiple users
 
 3. **Kasm Workspaces** (Enterprise Alternative)
    - `http://kasm.yourdomain.com`
    - Container streaming platform with session recording
+   - Advanced features like clipboard sync, file transfer
 
 **Advanced: Direct Protocol Access**
 
-For users who prefer native clients:
-- **VNC**: Ports 5900+ (TigerVNC) - Use RealVNC, TightVNC, etc.
-- **RDP**: Ports 3389+ (XRDP) - Use Windows Remote Desktop
-- **noVNC**: Ports 6080+ - Browser-based VNC without gateway
+For users who prefer native desktop clients:
+- **VNC**: Ports 5900+ (TigerVNC server) - Use RealVNC, TightVNC, etc.
+- **RDP**: Ports 3389+ (XRDP server) - Use Windows Remote Desktop
+- **SSH**: Ports 2222+ - Terminal access via SSH client
+
+**How They Work:**
+- Option 1 (`alice.yourdomain.com`) → Traefik routes directly to Alice's noVNC on port 6080
+- Option 2 (`guacamole.yourdomain.com`) → Traefik routes to Guacamole gateway → connects to user's VNC/RDP
+- Option 3 (`kasm.yourdomain.com`) → Traefik routes to Kasm gateway → streams container desktop
 
 **Recommendation**: Start with per-user URLs (option 1) for simplicity.
 
@@ -186,7 +194,7 @@ Break-even: ~1.5 months (even if buying all new hardware)
 
 ## Quick Start (~2-3 hours total, 30 minutes hands-on)
 
-**Prerequisites**: Fresh Ubuntu 22.04+ or Debian 12+ installation on dedicated hardware
+**Prerequisites**: Fresh Ubuntu 24.04 LTS or Debian 12+ installation on dedicated hardware
 
 ```bash
 # 1. Clone and configure
@@ -315,12 +323,12 @@ MEMORY_LIMIT_GB=64
 └── BTRFS RAID10 (~40TB usable)
     ├── with bcache acceleration
     ├── /homes (backed up to GDrive)
-    ├── /workspaces (ephemeral, not backed up)
-    └── /cache/gdrive (80% of storage for Google Drive cache)
+    ├── /workspaces (persistent, not backed up)
+    └── /cache/gdrive (Google Drive VFS cache)
 
 Google Workspace Shared Drive
 └── Mounted at /shared via rclone VFS
-    ├── Local cache: ~25TB (80% of free space after user data + snapshots)
+    ├── Local cache: ~25TB (80% of remaining space after user data + snapshots)
     ├── Near-local performance after first access
     └── Auto-sync with cloud (LRU eviction, 30-day max age)
 ```
@@ -406,8 +414,7 @@ Your workspace runs in a Docker container, not a traditional VM. Here's what you
     - **Performance:** Near-local speed after first access (aggressive caching)
     - **Access:** Read-write for all users (share files with team)
     - **Use for:** Common datasets, shared files, team resources, collaboration
-    - **Cache:** Auto-calculated (typically 60-70% of total disk, ~24TB for 5 users)
-    - **Allocation:** Uses 80% of space remaining after user data + snapshot reservations
+    - **Cache size:** 80% of remaining space after user data + snapshot reservations (~24TB for 5-user example)
     - **Syncing:** Automatic background sync with Google Drive
     - **TensorBoard:** Each user has `/shared/tensorboard/${USERNAME}` for training logs
 

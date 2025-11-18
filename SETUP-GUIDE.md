@@ -6,18 +6,18 @@ Complete guide for setting up a 5-user on-premise ML training server replacing G
 
 ## Table of Contents
 
-1. [Hardware Assembly](#hardware-assembly)
-2. [Initial OS Installation](#initial-os-installation)
-3. [Storage Setup](#storage-setup)
-4. [User Account Setup](#user-account-setup)
-5. [Docker and Container Setup](#docker-and-container-setup)
-6. [Services Deployment](#services-deployment)
-7. [Networking and Security](#networking-and-security)
-8. [Monitoring and Alerting](#monitoring-and-alerting)
-9. [Backup Configuration](#backup-configuration)
-10. [Data Pipeline Setup](#data-pipeline-setup)
-11. [Testing and Validation](#testing-and-validation)
-12. [Maintenance](#maintenance)
+1. [Storage Setup](#storage-setup)
+2. [Shared Caches Setup](#shared-caches-setup)
+3. [User Account Setup](#user-account-setup)
+4. [Docker and Container Setup](#docker-and-container-setup)
+5. [Services Deployment](#services-deployment)
+6. [Networking and Security](#networking-and-security)
+7. [Monitoring and Alerting](#monitoring-and-alerting)
+8. [Backup Configuration](#backup-configuration)
+9. [Data Pipeline Setup](#data-pipeline-setup)
+10. [Testing and Validation](#testing-and-validation)
+11. [Maintenance](#maintenance)
+12. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -29,7 +29,7 @@ Complete guide for setting up a 5-user on-premise ML training server replacing G
 
 - **Dedicated server required**: This setup assumes the server is dedicated to ML training. Dual-boot systems (e.g., Windows/Linux) or servers with multiple OS installations are NOT supported.
 - **Partition management**: The storage scripts automatically partition disks and assume full control of the NVMe/SSD and all HDDs. Non-standard partition layouts (recovery partitions, custom disk configurations) may cause failures.
-- **Fresh OS installation**: For best results, install Ubuntu Server or Debian as the only operating system before running these scripts.
+- **Fresh OS installation**: For best results, install Ubuntu Server 24.04 LTS or Debian 12+ as the only operating system before running these scripts.
 - **Data loss warning**: The storage setup will format all specified disks. Ensure you have backups of any important data.
 
 ### Automated Setup
@@ -102,7 +102,7 @@ This script will:
 
 **Configuration details:**
 - **Cache mode**: Full VFS cache (files downloaded on first access, cached locally)
-- **Cache size**: 80% of available BTRFS storage (configurable)
+- **Cache size**: 80% of remaining BTRFS space after user data + snapshots (auto-calculated)
 - **Cache expiry**: 30 days (LRU eviction)
 - **Performance**: First access downloads from cloud (~10-100 MB/s), subsequent access is near-local speed
 - **Auto-recovery**: Systemd service restarts on failure
@@ -132,6 +132,42 @@ sudo systemctl restart gdrive-shared.service
 
 # Check health
 /opt/scripts/monitoring/check-gdrive-mount.sh
+```
+
+---
+
+## Shared Caches Setup
+
+**Run the shared caches setup script:**
+
+```bash
+cd ~/train-server/scripts
+sudo ./03-setup-shared-caches.sh
+```
+
+This script configures shared caching directories for:
+- **Python packages**: pip wheels, conda packages
+- **ML models**: HuggingFace Hub, PyTorch Hub, TensorFlow Hub
+- **Language package managers**: Go modules, npm, cargo, Julia, R packages
+- **Build caches**: Docker layers, BuildKit cache
+- **APT packages**: System package cache
+
+**Benefits:**
+- When one user downloads a model or package, all users can access it instantly
+- Saves 80% bandwidth and 10-100x time for repeated installations
+- Reduces redundant downloads across user workspaces
+
+**Cache locations:**
+```
+/mnt/storage/cache/
+├── pip/           # Python pip cache
+├── conda/         # Conda package cache
+├── huggingface/   # HuggingFace models
+├── torch/         # PyTorch Hub models
+├── apt/           # APT package cache
+├── go/            # Go modules
+├── npm/           # Node.js packages
+└── docker/        # Docker build cache
 ```
 
 ---
@@ -341,24 +377,27 @@ Cloudflare Edge ──────────────> Local DNS/Hosts
    sudo ./06-setup-cloudflare-tunnel.sh
    ```
 
-2. **Configure Public Hostnames**
-   Map these subdomains to local services:
+2. **Configure Public Hostname**
+
+   In the Cloudflare Zero Trust dashboard, configure the tunnel to route **all traffic** through Traefik:
 
    ```
-   health.yourdomain.com       → http://localhost:19999 (Netdata)
-   prometheus.yourdomain.com   → http://localhost:9090 (Prometheus)
-   grafana.yourdomain.com      → http://localhost:3000 (Grafana)
-   tensorboard.yourdomain.com  → http://localhost:6006 (TensorBoard)
-   files.yourdomain.com        → http://localhost:8081 (FileBrowser)
-   logs.yourdomain.com         → http://localhost:8082 (Dozzle)
-   portainer.yourdomain.com    → http://localhost:9000 (Portainer)
-   alice-code.yourdomain.com   → http://localhost:8443 (code-server alice)
-   bob-code.yourdomain.com     → http://localhost:8444 (code-server bob)
-   # ... repeat for charlie, dave, eve
-   alice-jupyter.yourdomain.com → http://localhost:8888
-   bob-jupyter.yourdomain.com   → http://localhost:8889
-   # ... repeat for charlie, dave, eve
+   *.yourdomain.com → http://localhost:80
    ```
+
+   Traefik handles all hostname-based routing internally. This single wildcard entry routes:
+   - `health.yourdomain.com` → Netdata
+   - `prometheus.yourdomain.com` → Prometheus
+   - `grafana.yourdomain.com` → Grafana
+   - `alice.yourdomain.com` → Alice's desktop
+   - `alice-code.yourdomain.com` → Alice's VS Code
+   - `alice-jupyter.yourdomain.com` → Alice's Jupyter
+   - All other services configured in Traefik
+
+   **Benefits:**
+   - Single tunnel endpoint (simpler configuration)
+   - Add new services by updating Traefik config, not Cloudflare
+   - Consistent routing for both local and remote users
 
 3. **Configure Cloudflare Access**
    - Enable Google Workspace authentication (includes 2FA enforcement)
@@ -429,7 +468,7 @@ Configuration is in [docker/prometheus/prometheus.yml](docker/prometheus/prometh
 
 ### Grafana Dashboards
 
-1. Access Grafana at `metrics.yourdomain.com`
+1. Access Grafana at `grafana.yourdomain.com`
 2. Login with admin credentials (see docker/.env)
 3. Add Prometheus data source: `http://prometheus:9090`
 4. Import dashboards:
@@ -524,9 +563,9 @@ sudo /opt/scripts/backup/verify-restore.sh
 - `/mnt/storage/shared/tensorboard/` (training logs)
 
 **NOT backed up:**
-- `/mnt/storage/workspaces/` (ephemeral)
-- `/mnt/storage/shared/` (customer data already in GDrive)
-- Docker images (reproducible)
+- `/mnt/storage/workspaces/` (persistent, but not backed up - users responsible for reproducible data)
+- `/mnt/storage/shared/` (data already in Google Drive cloud)
+- Docker images (reproducible from Dockerfiles)
 
 ---
 
@@ -539,7 +578,7 @@ For the 50TB migration, use a temporary GCE instance to avoid egress charges:
 ```bash
 # On a GCE instance in the same region
 cd ~/train-server/scripts
-./08-gcs-to-gdrive-migration.sh
+./gcs-to-gdrive-migration.sh
 ```
 
 This uses rclone to:
@@ -556,7 +595,7 @@ After migration, daily sync runs at 4 AM:
 
 ```bash
 cd ~/train-server/scripts
-sudo ./09-setup-data-pipeline.sh
+sudo ./10-setup-data-pipeline.sh
 ```
 
 This configures:
