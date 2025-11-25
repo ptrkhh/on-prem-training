@@ -398,9 +398,15 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
             parted -s "${NVME_DEVICE}" name "${BCACHE_PART_NUM}" ml-bcache || true
         fi
 
-        sleep 2
+        # Trigger partition table re-read and wait for device to be ready
         partprobe "${NVME_DEVICE}"
-        sleep 2
+        udevadm settle --timeout=30
+
+        # Wait for the bcache partition to become available
+        if ! wait_for_block_device "${BCACHE_PARTITION}" 30; then
+            echo "ERROR: Bcache partition ${BCACHE_PARTITION} not available after partitioning"
+            exit 1
+        fi
 
         BCACHE_CACHE_DEV="${BCACHE_PARTITION}"
     else
@@ -409,11 +415,15 @@ if [[ -n "${NVME_DEVICE}" && "${BCACHE_MODE}" != "none" ]]; then
         BCACHE_CACHE_DEV="${NVME_DEVICE}"
     fi
 
-    # Create bcache cache device
-    wipefs -af ${BCACHE_CACHE_DEV}
-    make-bcache -C ${BCACHE_CACHE_DEV} --wipe-bcache
-
-    echo "bcache cache device created: ${BCACHE_CACHE_DEV}"
+    # Create bcache cache device (check if already exists first)
+    if bcache-super-show ${BCACHE_CACHE_DEV} &>/dev/null; then
+        echo "Bcache cache device already exists on ${BCACHE_CACHE_DEV}, skipping creation"
+    else
+        echo "Creating bcache cache device on ${BCACHE_CACHE_DEV}..."
+        wipefs -af ${BCACHE_CACHE_DEV}
+        make-bcache -C ${BCACHE_CACHE_DEV} --wipe-bcache
+        echo "Bcache cache device created: ${BCACHE_CACHE_DEV}"
+    fi
 
     # Verify bcache-super-show command is available
     if ! command -v bcache-super-show &>/dev/null; then
@@ -498,9 +508,16 @@ if [[ "${SINGLE_NVME_MODE}" == "true" ]]; then
                 exit 1
             fi
             parted -s "${NVME_DEVICE}" name "${STORAGE_PART_NUM}" ml-storage || true
-            sleep 2
+
+            # Trigger partition table re-read and wait for device to be ready
             partprobe "${NVME_DEVICE}"
-            sleep 2
+            udevadm settle --timeout=30
+
+            # Wait for the storage partition to become available
+            if ! wait_for_block_device "${STORAGE_PARTITION}" 30; then
+                echo "ERROR: Storage partition ${STORAGE_PARTITION} not available after partitioning"
+                exit 1
+            fi
         fi
 
         echo "Using storage partition: ${STORAGE_PARTITION}"
@@ -535,17 +552,19 @@ for hdd in "${HDD_ARRAY[@]}"; do
         echo "  No mounted partitions found on ${hdd}"
     fi
 
-    # Wipe filesystem signatures
-    wipefs -af "${hdd}"
-
     if [[ "${BCACHE_MODE}" != "none" ]]; then
-        # Create bcache backing device
-        make-bcache -B ${hdd} --wipe-bcache
+        # Create bcache backing device (check if already exists first)
+        if bcache-super-show ${hdd} &>/dev/null; then
+            echo "  Bcache backing device already exists on ${hdd}, skipping creation"
+        else
+            echo "  Creating bcache backing device on ${hdd}..."
+            wipefs -af "${hdd}"
+            make-bcache -B ${hdd} --wipe-bcache
+        fi
 
         # Find the bcache device using sysfs (more reliable than lsblk)
         echo "  Waiting for bcache device to appear..."
         udevadm settle --timeout=30
-        sleep 2
         BCACHE_DEV=""
         for i in {1..30}; do
             # Check /sys/block/bcache*/slaves/ for the source device
@@ -585,11 +604,22 @@ for hdd in "${HDD_ARRAY[@]}"; do
                         exit 1
                     fi
                 fi
-                sleep 1
+
+                # Wait for bcache device to be properly attached
+                echo "  Waiting for bcache attachment to complete..."
+                ATTACHMENT_READY=false
+                for attach_retry in {1..30}; do
+                    if [[ -f "${BCACHE_SYSFS}/cache_mode" ]]; then
+                        echo "  Bcache attachment ready (after ${attach_retry} seconds)"
+                        ATTACHMENT_READY=true
+                        break
+                    fi
+                    sleep 1
+                done
 
                 # Validate bcache device is properly attached
-                if [[ ! -f "${BCACHE_SYSFS}/cache_mode" ]]; then
-                    echo "  ERROR: bcache device ${BCACHE_DEV} not properly attached (cache_mode not available)"
+                if [[ "${ATTACHMENT_READY}" != "true" ]]; then
+                    echo "  ERROR: bcache device ${BCACHE_DEV} not properly attached (cache_mode not available after 30s)"
                     echo "  Check: ls -la ${BCACHE_SYSFS}/"
                     ls -la ${BCACHE_SYSFS}/ || true
                     exit 1
@@ -629,30 +659,43 @@ fi
 echo ""
 echo "=== Step 3: Creating BTRFS ${BTRFS_RAID_LEVEL} ==="
 
-# Build mkfs.btrfs command safely
-MKFS_ARGS=(-f -L ml-storage)
-if [[ "${BTRFS_RAID_LEVEL}" != "single" ]]; then
-    MKFS_ARGS+=(-d "${BTRFS_RAID_LEVEL}" -m "${BTRFS_RAID_LEVEL}")
+# Check if BTRFS filesystem already exists on the first device
+FIRST_DEVICE="${HDD_DEVICES_FOR_BTRFS[0]}"
+if blkid "${FIRST_DEVICE}" | grep -q 'TYPE="btrfs"'; then
+    echo "BTRFS filesystem already exists on ${FIRST_DEVICE}, skipping creation"
+    echo "To recreate, manually wipe the devices first: wipefs -af ${FIRST_DEVICE}"
 else
-    MKFS_ARGS+=(-d single -m single)
+    # Build mkfs.btrfs command safely
+    MKFS_ARGS=(-f -L ml-storage)
+    if [[ "${BTRFS_RAID_LEVEL}" != "single" ]]; then
+        MKFS_ARGS+=(-d "${BTRFS_RAID_LEVEL}" -m "${BTRFS_RAID_LEVEL}")
+    else
+        MKFS_ARGS+=(-d single -m single)
+    fi
+
+    MKFS_ARGS+=("${HDD_DEVICES_FOR_BTRFS[@]}")
+
+    MKFS_CMD_PRETTY="mkfs.btrfs"
+    for arg in "${MKFS_ARGS[@]}"; do
+        printf -v MKFS_CMD_PRETTY '%s %q' "${MKFS_CMD_PRETTY}" "${arg}"
+    done
+
+    echo "Running: ${MKFS_CMD_PRETTY}"
+    mkfs.btrfs "${MKFS_ARGS[@]}"
 fi
-
-MKFS_ARGS+=("${HDD_DEVICES_FOR_BTRFS[@]}")
-
-MKFS_CMD_PRETTY="mkfs.btrfs"
-for arg in "${MKFS_ARGS[@]}"; do
-    printf -v MKFS_CMD_PRETTY '%s %q' "${MKFS_CMD_PRETTY}" "${arg}"
-done
-
-echo "Running: ${MKFS_CMD_PRETTY}"
-mkfs.btrfs "${MKFS_ARGS[@]}"
 
 # Mount BTRFS
 echo "Mounting BTRFS to ${MOUNT_POINT}..."
 mkdir -p "${MOUNT_POINT}"
 
-MOUNT_OPTS="compress=${BTRFS_COMPRESSION},space_cache=v2,relatime"
-mount -o "${MOUNT_OPTS}" "${HDD_DEVICES_FOR_BTRFS[0]}" "${MOUNT_POINT}"
+# Check if already mounted
+if mountpoint -q "${MOUNT_POINT}"; then
+    echo "BTRFS already mounted at ${MOUNT_POINT}, skipping mount"
+else
+    MOUNT_OPTS="compress=${BTRFS_COMPRESSION},space_cache=v2,relatime"
+    mount -o "${MOUNT_OPTS}" "${HDD_DEVICES_FOR_BTRFS[0]}" "${MOUNT_POINT}"
+    echo "BTRFS mounted successfully"
+fi
 
 # Verify BTRFS
 echo ""
@@ -788,6 +831,54 @@ case "${BTRFS_RAID_LEVEL}" in
         ;;
 esac
 
+echo ""
+
+# Health check verification
+echo "=== Verifying Storage Setup Health ==="
+echo ""
+
+# Check 1: BTRFS is mounted
+if ! mountpoint -q "${MOUNT_POINT}"; then
+    echo "❌ ERROR: ${MOUNT_POINT} is not mounted"
+    exit 1
+fi
+echo "✓ BTRFS filesystem is mounted at ${MOUNT_POINT}"
+
+# Check 2: Filesystem is actually BTRFS
+if ! mount | grep "${MOUNT_POINT}" | grep -q btrfs; then
+    echo "❌ ERROR: ${MOUNT_POINT} is not a BTRFS filesystem"
+    exit 1
+fi
+echo "✓ Filesystem type verified as BTRFS"
+
+# Check 3: Read access
+if ! ls "${MOUNT_POINT}" >/dev/null 2>&1; then
+    echo "❌ ERROR: Cannot read from ${MOUNT_POINT}"
+    exit 1
+fi
+echo "✓ Read access verified"
+
+# Check 4: Write access
+TEST_FILE="${MOUNT_POINT}/.health-check-$$"
+if ! echo "health check" > "${TEST_FILE}" 2>/dev/null; then
+    echo "❌ ERROR: Cannot write to ${MOUNT_POINT}"
+    exit 1
+fi
+rm -f "${TEST_FILE}" 2>/dev/null
+echo "✓ Write access verified"
+
+# Check 5: Verify required directories can be created
+REQUIRED_DIRS=("homes" "workspaces" "docker-volumes" "datasets")
+for dir in "${REQUIRED_DIRS[@]}"; do
+    if ! mkdir -p "${MOUNT_POINT}/${dir}" 2>/dev/null; then
+        echo "❌ ERROR: Cannot create directory ${MOUNT_POINT}/${dir}"
+        exit 1
+    fi
+done
+echo "✓ Required directories structure verified"
+
+echo ""
+echo "✅ All health checks passed - Storage is operational"
 echo ""
 echo "✅ Storage setup complete!"
 echo ""

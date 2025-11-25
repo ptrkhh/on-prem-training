@@ -6,14 +6,14 @@ set -euo pipefail
 
 echo "=== ML Training Server User Setup ==="
 
+# Load common library and configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/common.sh"
+
 # Check if running as root
-if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root"
-   exit 1
-fi
+require_root
 
 # Load configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
 
 if [[ ! -f "${CONFIG_FILE}" ]]; then
@@ -207,10 +207,16 @@ done
 # Configure SSH
 echo "Configuring SSH..."
 
-# Backup sshd_config
-cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.$(date +%Y%m%d_%H%M%S)
+# Backup sshd_config (only if not already backed up)
+if [[ ! -f /etc/ssh/sshd_config.backup.original ]]; then
+    echo "Creating backup of original sshd_config..."
+    cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.original
+else
+    echo "Backup of sshd_config already exists, skipping"
+fi
 
 # Update sshd_config for security (keep password auth enabled until SSH keys are added)
+echo "Creating ML training server SSH configuration..."
 cat > /etc/ssh/sshd_config.d/ml-train-server.conf <<EOF
 # ML Training Server SSH Configuration
 # Allow root login with SSH keys only (no password-based root login)
@@ -391,6 +397,71 @@ echo "=== User Setup Complete ==="
 echo ""
 echo "Created users: ${USERS}"
 echo ""
+# Health check verification
+echo ""
+echo "=== Verifying User Setup Health ==="
+echo ""
+
+# Check each user account
+ALL_USERS_OK=true
+for USERNAME in "${USER_ARRAY[@]}"; do
+    echo "Checking user: ${USERNAME}"
+
+    # Check 1: User exists
+    if ! id "${USERNAME}" >/dev/null 2>&1; then
+        echo "  ❌ ERROR: User ${USERNAME} does not exist"
+        ALL_USERS_OK=false
+        continue
+    fi
+    echo "  ✓ User account exists"
+
+    # Check 2: Home directory exists and is accessible
+    HOME_DIR="${MOUNT_POINT}/homes/${USERNAME}"
+    if [[ ! -d "${HOME_DIR}" ]]; then
+        echo "  ❌ ERROR: Home directory ${HOME_DIR} does not exist"
+        ALL_USERS_OK=false
+        continue
+    fi
+    echo "  ✓ Home directory exists"
+
+    # Check 3: Correct ownership
+    if [[ "$(stat -c '%U' "${HOME_DIR}")" != "${USERNAME}" ]]; then
+        echo "  ❌ ERROR: Home directory has incorrect ownership"
+        ALL_USERS_OK=false
+        continue
+    fi
+    echo "  ✓ Ownership is correct"
+
+    # Check 4: SSH directory exists
+    SSH_DIR="${HOME_DIR}/.ssh"
+    if [[ ! -d "${SSH_DIR}" ]]; then
+        echo "  ❌ ERROR: SSH directory ${SSH_DIR} does not exist"
+        ALL_USERS_OK=false
+        continue
+    fi
+    echo "  ✓ SSH directory exists"
+
+    echo ""
+done
+
+# Check 5: SSH configuration
+if [[ ! -f /etc/ssh/sshd_config.d/ml-train-server.conf ]]; then
+    echo "❌ ERROR: SSH configuration file missing"
+    ALL_USERS_OK=false
+else
+    echo "✓ SSH configuration applied"
+fi
+
+if [[ "${ALL_USERS_OK}" == "true" ]]; then
+    echo ""
+    echo "✅ All health checks passed - User accounts are operational"
+    echo ""
+else
+    echo ""
+    echo "❌ Some health checks failed - please review errors above"
+    exit 1
+fi
+
 echo "IMPORTANT: Add SSH public keys for each user:"
 for USERNAME in "${USER_ARRAY[@]}"; do
     echo "  ${MOUNT_POINT}/homes/${USERNAME}/.ssh/authorized_keys"

@@ -6,14 +6,14 @@ set -euo pipefail
 
 echo "=== Backup Setup ==="
 
+# Load common library and configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/common.sh"
+
 # Check if running as root
-if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root"
-   exit 1
-fi
+require_root
 
 # Load configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
 
 if [[ ! -f "${CONFIG_FILE}" ]]; then
@@ -645,6 +645,11 @@ export RESTIC_PASSWORD_FILE
 
 # Ensure cleanup on exit
 cleanup() {
+    # Validate path before deletion to prevent catastrophic data loss
+    if [[ -z "\${RESTORE_DIR}" || "\${RESTORE_DIR}" == "/" ]]; then
+        echo "ERROR: Invalid RESTORE_DIR='\${RESTORE_DIR}' - refusing to delete"
+        exit 1
+    fi
     rm -rf "\${RESTORE_DIR}"
 }
 trap cleanup EXIT
@@ -652,6 +657,11 @@ trap cleanup EXIT
 echo "=== Restic Restore Verification: $(date) ==="
 
 # Clean restore directory
+# Validate path before deletion to prevent catastrophic data loss
+if [[ -z "\${RESTORE_DIR}" || "\${RESTORE_DIR}" == "/" ]]; then
+    echo "ERROR: Invalid RESTORE_DIR='\${RESTORE_DIR}' - refusing to delete"
+    exit 1
+fi
 rm -rf ${RESTORE_DIR}
 mkdir -p ${RESTORE_DIR}
 
@@ -681,6 +691,11 @@ else
 fi
 
 # Cleanup
+# Validate path before deletion to prevent catastrophic data loss
+if [[ -z "\${RESTORE_DIR}" || "\${RESTORE_DIR}" == "/" ]]; then
+    echo "ERROR: Invalid RESTORE_DIR='\${RESTORE_DIR}' - refusing to delete"
+    exit 1
+fi
 rm -rf ${RESTORE_DIR}
 
 # Send alert if verification failed

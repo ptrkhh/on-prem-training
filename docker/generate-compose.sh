@@ -192,11 +192,26 @@ echo "  - Infrastructure services (Traefik, monitoring, storage)"
 echo "  - ${USER_COUNT} user workspace containers (with VNC/RDP remote desktop)"
 echo ""
 
-# Warn about default passwords
-if [[ "${GRAFANA_ADMIN_PASSWORD:-admin}" == "admin" || "${GRAFANA_ADMIN_PASSWORD}" == "changeme_secure_password" ]]; then
-    echo "⚠️  WARNING: Grafana is using default password"
-    echo "   Set GRAFANA_ADMIN_PASSWORD in config.sh for security"
+# Validate required passwords are set (no defaults allowed)
+MISSING_PASSWORDS=()
+
+if [[ -z "${GUACAMOLE_DB_PASSWORD:-}" ]]; then
+    MISSING_PASSWORDS+=("GUACAMOLE_DB_PASSWORD")
+fi
+
+if [[ -z "${GRAFANA_ADMIN_PASSWORD:-}" || "${GRAFANA_ADMIN_PASSWORD}" == "admin" ]]; then
+    MISSING_PASSWORDS+=("GRAFANA_ADMIN_PASSWORD")
+fi
+
+if [[ ${#MISSING_PASSWORDS[@]} -gt 0 ]]; then
+    echo "ERROR: Required passwords not set in config.sh:"
+    for missing_pass in "${MISSING_PASSWORDS[@]}"; do
+        echo "  - ${missing_pass}"
+    done
     echo ""
+    echo "Please set these passwords in config.sh before generating docker-compose.yml"
+    echo "Security requirement: No default passwords are allowed"
+    exit 1
 fi
 
 ###############################################################################
@@ -278,7 +293,7 @@ services:
     environment:
       - POSTGRES_DB=guacamole_db
       - POSTGRES_USER=guacamole_user
-      - POSTGRES_PASSWORD=${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}
+      - POSTGRES_PASSWORD=${GUACAMOLE_DB_PASSWORD}
     volumes:
       - guacamole-db-data:/var/lib/postgresql/data
     networks:
@@ -299,7 +314,7 @@ services:
       - POSTGRES_HOSTNAME=guacamole-db
       - POSTGRES_DATABASE=guacamole_db
       - POSTGRES_USER=guacamole_user
-      - POSTGRES_PASSWORD=${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}
+      - POSTGRES_PASSWORD=${GUACAMOLE_DB_PASSWORD}
     networks:
       - ml-net
     entrypoint: ["/bin/sh", "-c"]
@@ -307,7 +322,7 @@ services:
       - |
         # Check if Guacamole schema is already initialized
         echo "Checking if Guacamole schema exists..."
-        SCHEMA_EXISTS=\$(PGPASSWORD="${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}" psql -h guacamole-db -U guacamole_user -d guacamole_db -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='guacamole_user';" 2>/dev/null || echo "0")
+        SCHEMA_EXISTS=\$(PGPASSWORD="${GUACAMOLE_DB_PASSWORD}" psql -h guacamole-db -U guacamole_user -d guacamole_db -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='guacamole_user';" 2>/dev/null || echo "0")
 
         if [ "\$SCHEMA_EXISTS" != "0" ]; then
           echo "Guacamole schema already exists, skipping initialization"
@@ -324,7 +339,7 @@ services:
         fi
 
         # Apply schema and log all output
-        if ! PGPASSWORD="${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}" psql -h guacamole-db -U guacamole_user -d guacamole_db -f /tmp/initdb.sql > /tmp/initdb.log 2>&1; then
+        if ! PGPASSWORD="${GUACAMOLE_DB_PASSWORD}" psql -h guacamole-db -U guacamole_user -d guacamole_db -f /tmp/initdb.sql > /tmp/initdb.log 2>&1; then
           echo "ERROR: Failed to apply Guacamole schema"
           cat /tmp/initdb.log
           exit 1
@@ -343,7 +358,7 @@ services:
       - POSTGRES_HOSTNAME=guacamole-db
       - POSTGRES_DATABASE=guacamole_db
       - POSTGRES_USER=guacamole_user
-      - POSTGRES_PASSWORD=${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}
+      - POSTGRES_PASSWORD=${GUACAMOLE_DB_PASSWORD}
     depends_on:
       - guacd
       - guacamole-db-init
@@ -812,9 +827,9 @@ DOMAIN=${DOMAIN}
 # Storage mount point
 MOUNT_POINT=${MOUNT_POINT:-/mnt/storage}
 
-# Service passwords
-GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}
+# Service passwords (validated at generation time - no defaults allowed)
+GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
+GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD}
 
 # Resource limits
 MEMORY_LIMIT_GB=${MEMORY_LIMIT_GB:-100}

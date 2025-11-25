@@ -180,6 +180,12 @@ setup_cleanup_trap() {
     cleanup() {
         log_info "Cleaning up..."
         for item in $cleanup_items; do
+            # Validate path before deletion to prevent catastrophic data loss
+            if [[ -z "${item}" || "${item}" == "/" || "${item}" == "/home" || "${item}" == "/root" || "${item}" == "/etc" || "${item}" == "/var" || "${item}" == "/usr" ]]; then
+                log_error "CRITICAL: Refusing to delete invalid or dangerous path: '${item}'"
+                continue
+            fi
+
             if [[ -e "$item" ]]; then
                 rm -rf "$item"
                 log_info "Removed: $item"
@@ -389,6 +395,113 @@ get_rclone_bandwidth() {
     fi
 }
 
+# Safely remove a directory with validation
+# Usage: safe_remove_directory "/path/to/directory" "description for error messages"
+# Returns: 0 on success, 1 on validation failure (exits script on validation failure)
+safe_remove_directory() {
+    local target_path="$1"
+    local description="${2:-directory}"
+
+    # Validate path is not empty, not root, and not a critical system directory
+    if [[ -z "${target_path}" || "${target_path}" == "/" ]]; then
+        log_error "CRITICAL: Invalid ${description} path='${target_path}' - refusing to delete"
+        exit 1
+    fi
+
+    # Prevent deletion of critical system directories
+    local dangerous_paths=(
+        "/home"
+        "/root"
+        "/etc"
+        "/var"
+        "/usr"
+        "/bin"
+        "/sbin"
+        "/lib"
+        "/lib64"
+        "/boot"
+        "/sys"
+        "/proc"
+        "/dev"
+    )
+
+    for dangerous_path in "${dangerous_paths[@]}"; do
+        if [[ "${target_path}" == "${dangerous_path}" || "${target_path}" == "${dangerous_path}/"* ]]; then
+            log_error "CRITICAL: Refusing to delete system directory: '${target_path}'"
+            exit 1
+        fi
+    done
+
+    # If path exists, delete it
+    if [[ -e "${target_path}" ]]; then
+        log_info "Removing ${description}: ${target_path}"
+        rm -rf "${target_path}"
+        log_success "Successfully removed ${description}"
+    else
+        log_info "${description} does not exist, skipping: ${target_path}"
+    fi
+
+    return 0
+}
+
+# Wait for a block device to become available
+# Usage: wait_for_block_device "/dev/sda1" 30
+# Returns: 0 if device is available, 1 if timeout
+wait_for_block_device() {
+    local device_path="$1"
+    local timeout_seconds="${2:-30}"
+    local elapsed_seconds=0
+
+    log_info "Waiting for block device: ${device_path} (timeout: ${timeout_seconds}s)"
+
+    while [[ ${elapsed_seconds} -lt ${timeout_seconds} ]]; do
+        if [[ -b "${device_path}" ]]; then
+            log_success "Block device is available: ${device_path}"
+            return 0
+        fi
+
+        sleep 1
+        elapsed_seconds=$((elapsed_seconds + 1))
+
+        # Show progress every 5 seconds
+        if [[ $((elapsed_seconds % 5)) -eq 0 ]]; then
+            log_info "Still waiting for ${device_path}... (${elapsed_seconds}/${timeout_seconds}s)"
+        fi
+    done
+
+    log_error "Timeout waiting for block device: ${device_path} (waited ${timeout_seconds}s)"
+    return 1
+}
+
+# Wait for a file or directory to exist
+# Usage: wait_for_path "/mnt/storage" 30
+# Returns: 0 if path exists, 1 if timeout
+wait_for_path() {
+    local target_path="$1"
+    local timeout_seconds="${2:-30}"
+    local elapsed_seconds=0
+
+    log_info "Waiting for path: ${target_path} (timeout: ${timeout_seconds}s)"
+
+    while [[ ${elapsed_seconds} -lt ${timeout_seconds} ]]; do
+        if [[ -e "${target_path}" ]]; then
+            log_success "Path is available: ${target_path}"
+            return 0
+        fi
+
+        sleep 1
+        elapsed_seconds=$((elapsed_seconds + 1))
+
+        # Show progress every 5 seconds
+        if [[ $((elapsed_seconds % 5)) -eq 0 ]]; then
+            log_info "Still waiting for ${target_path}... (${elapsed_seconds}/${timeout_seconds}s)"
+        fi
+    done
+
+    log_error "Timeout waiting for path: ${target_path} (waited ${timeout_seconds}s)"
+    return 1
+}
+
 # Export all functions so they're available in subshells
 export -f log_info log_success log_warning log_error
 export -f check_command check_commands send_alert
@@ -397,3 +510,4 @@ export -f check_network setup_cleanup_trap retry
 export -f for_each_user check_disk_space calculate_retention_storage
 export -f show_progress get_users get_user_count get_user_uid get_user_port
 export -f detect_nvme_device detect_hdd_devices get_rclone_bandwidth
+export -f safe_remove_directory wait_for_block_device wait_for_path

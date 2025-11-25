@@ -5,14 +5,14 @@ set -euo pipefail
 
 echo "=== Docker and NVIDIA Container Toolkit Setup ==="
 
+# Load common library and configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "${SCRIPT_DIR}/lib/common.sh"
+
 # Check if running as root
-if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root"
-   exit 1
-fi
+require_root
 
 # Load configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
 
 if [[ ! -f "${CONFIG_FILE}" ]]; then

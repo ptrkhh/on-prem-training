@@ -33,10 +33,7 @@ echo "  5. Configure systemd service for automatic mounting"
 echo ""
 
 # Check if running as root
-if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root"
-   exit 1
-fi
+require_root
 
 # Validate BTRFS storage is properly mounted
 echo "Validating BTRFS storage..."
@@ -402,10 +399,19 @@ if ! mountpoint -q "\${SHARED_DIR}"; then
 
     # Attempt to restart
     systemctl restart gdrive-shared.service
-    sleep 10
 
-    # Check again
-    if ! mountpoint -q "\${SHARED_DIR}"; then
+    # Wait for mount to become ready
+    MOUNT_READY=false
+    for retry in {1..30}; do
+        if mountpoint -q "\${SHARED_DIR}"; then
+            MOUNT_READY=true
+            break
+        fi
+        sleep 1
+    done
+
+    # Check if mount is ready after waiting
+    if [[ "\${MOUNT_READY}" != "true" ]]; then
         if [[ -x "\${ALERT_SCRIPT}" ]]; then
             \${ALERT_SCRIPT} "critical" "Failed to remount Google Drive Shared Drive at \${SHARED_DIR}!"
         fi
@@ -687,8 +693,13 @@ systemctl restart gdrive-shared.service
 # Stop service first
 systemctl stop gdrive-shared.service
 
-# Clear cache
-rm -rf ${GDRIVE_CACHE_DIR}/*
+# Clear cache - validate directory first
+if [[ -n "${GDRIVE_CACHE_DIR}" && "${GDRIVE_CACHE_DIR}" != "/" && -d "${GDRIVE_CACHE_DIR}" ]]; then
+    rm -rf ${GDRIVE_CACHE_DIR}/*
+else
+    echo "ERROR: Invalid or missing GDRIVE_CACHE_DIR"
+    exit 1
+fi
 
 # Restart service
 systemctl start gdrive-shared.service
@@ -779,4 +790,45 @@ echo "User guide: /root/GDRIVE-SHARED-GUIDE.md"
 echo ""
 echo "⚠️  Note: First access to files will download from Google Drive"
 echo "          Subsequent access will be near-local speed (from cache)"
+echo ""
+
+# Health check verification
+echo "=== Verifying Google Drive Mount Health ==="
+echo ""
+
+# Check 1: Mount is active
+if ! mountpoint -q "${MOUNT_POINT}/shared"; then
+    echo "❌ ERROR: Mount verification failed - ${MOUNT_POINT}/shared not mounted"
+    exit 1
+fi
+echo "✓ Mount point is active"
+
+# Check 2: Read access with timeout
+if ! timeout 10 ls "${MOUNT_POINT}/shared" >/dev/null 2>&1; then
+    echo "❌ ERROR: Cannot read from ${MOUNT_POINT}/shared (timeout after 10s)"
+    echo "   This may indicate network or authentication issues"
+    echo "   Check logs: journalctl -u gdrive-shared.service -n 50"
+    exit 1
+fi
+echo "✓ Read access verified"
+
+# Check 3: Write access
+TEST_FILE="${MOUNT_POINT}/shared/.health-check-$$"
+if ! echo "health check" > "${TEST_FILE}" 2>/dev/null; then
+    echo "❌ ERROR: Cannot write to ${MOUNT_POINT}/shared"
+    echo "   Check rclone configuration and permissions"
+    exit 1
+fi
+rm -f "${TEST_FILE}" 2>/dev/null
+echo "✓ Write access verified"
+
+# Check 4: Service is running and healthy
+if ! systemctl is-active --quiet gdrive-shared.service; then
+    echo "❌ ERROR: gdrive-shared.service is not running"
+    exit 1
+fi
+echo "✓ Service is running"
+
+echo ""
+echo "✅ All health checks passed - Google Drive mount is operational"
 echo ""
