@@ -125,14 +125,37 @@ if ! rclone listremotes | grep -q "^${GDRIVE_SHARED_REMOTE}:$"; then
     fi
 fi
 
-# Test access
+# Pre-flight network check
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMMON_LIB="${SCRIPT_DIR}/lib/common.sh"
+if [[ -f "${COMMON_LIB}" ]]; then
+    source "${COMMON_LIB}"
+
+    # Check network connectivity before attempting rclone operations
+    if ! check_network 5; then
+        echo "❌ ERROR: Network unavailable after 5 attempts"
+        echo "Please check connectivity and retry"
+        exit 1
+    fi
+fi
+
+# Test access with timeout and retry
 echo ""
 echo "Testing Shared Drive access..."
-if rclone lsd "${GDRIVE_SHARED_REMOTE}:" --max-depth 1 2>/dev/null; then
+RCLONE_TIMEOUT_SECONDS=300
+RCLONE_RETRY_ATTEMPTS=3
+
+if retry ${RCLONE_RETRY_ATTEMPTS} "rclone lsd '${GDRIVE_SHARED_REMOTE}:' --max-depth 1 --timeout ${RCLONE_TIMEOUT_SECONDS}s 2>/dev/null"; then
     echo "✅ Shared Drive access verified"
 else
-    echo "❌ ERROR: Cannot access Shared Drive!"
+    echo "❌ ERROR: Cannot access Shared Drive after ${RCLONE_RETRY_ATTEMPTS} attempts!"
     echo "Please verify OAuth permissions and Shared Drive access."
+    echo ""
+    echo "Possible issues:"
+    echo "  - Network connectivity (check your internet connection)"
+    echo "  - OAuth token expired (run 'rclone config reconnect ${GDRIVE_SHARED_REMOTE}:')"
+    echo "  - Insufficient permissions on Shared Drive"
+    echo "  - Google Drive API temporarily unavailable"
     exit 1
 fi
 
@@ -289,14 +312,15 @@ OnFailure=gdrive-mount-failure-alert.service
 [Service]
 Type=simple
 # Pre-flight validation to catch connectivity issues before mount attempt
-ExecStartPre=/usr/bin/rclone lsd ${GDRIVE_SHARED_REMOTE}: --max-depth 1
+ExecStartPre=/usr/bin/rclone lsd ${GDRIVE_SHARED_REMOTE}: --max-depth 1 --timeout 300s
 
 # Mount Shared Drive with aggressive VFS caching for local-like performance
 ExecStart=/usr/bin/rclone mount ${GDRIVE_SHARED_REMOTE}: ${MOUNT_POINT}/shared \\
     --vfs-cache-mode full \\
     --vfs-cache-max-size ${CACHE_SIZE_GB}G \\
     --vfs-cache-max-age ${GDRIVE_CACHE_MAX_AGE} \\
-    --vfs-read-ahead 1G \\
+    --vfs-cache-poll-interval 5m \\
+    --vfs-read-ahead 128M \\
     --vfs-read-chunk-size ${GDRIVE_READ_CHUNK_SIZE} \\
     --vfs-read-chunk-size-limit ${GDRIVE_READ_CHUNK_LIMIT} \\
     --vfs-write-back ${GDRIVE_WRITE_BACK} \\
@@ -304,6 +328,8 @@ ExecStart=/usr/bin/rclone mount ${GDRIVE_SHARED_REMOTE}: ${MOUNT_POINT}/shared \
     --dir-cache-time ${GDRIVE_DIR_CACHE_TIME} \\
     --poll-interval ${GDRIVE_POLL_INTERVAL} \\
     --cache-dir ${CACHE_DIR} \\
+    --tpslimit 80 \\
+    --tpslimit-burst 160 \\
     --allow-other \\
     --default-permissions \\
     --uid 0 \\

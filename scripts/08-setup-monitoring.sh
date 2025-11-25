@@ -200,7 +200,7 @@ echo "✓ GPU temperature threshold set to ${GPU_TEMP_THRESHOLD}°C"
 
 chmod +x ${SCRIPTS_DIR}/check-gpu-temperature.sh
 
-# BTRFS Health Check Script
+# BTRFS Health Check Script (basic version for backward compatibility)
 cat > ${SCRIPTS_DIR}/check-btrfs-health.sh <<EOF
 #!/bin/bash
 set -euo pipefail
@@ -210,7 +210,7 @@ MOUNT_POINT="${MOUNT_POINT}"
 
 if ! mountpoint -q ${MOUNT_POINT}; then
     MESSAGE="CRITICAL: ${MOUNT_POINT} is not mounted!"
-    echo "${MESSAGE}"
+    echo "\${MESSAGE}"
     [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "critical" "\${MESSAGE}"
     exit 1
 fi
@@ -220,21 +220,37 @@ USAGE_PERCENT=\$(df --output=pcent "\${MOUNT_POINT}" | tail -1 | tr -d ' %')
 
 if [[ -n "\${USAGE_PERCENT}" ]]; then
     if (( \${USAGE_PERCENT} > 90 )); then
-        MESSAGE="WARNING: BTRFS filesystem is ${USAGE_PERCENT}% full"
-        echo "${MESSAGE}"
-        [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "warning" "${MESSAGE}"
+        MESSAGE="WARNING: BTRFS filesystem is \${USAGE_PERCENT}% full"
+        echo "\${MESSAGE}"
+        [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
     fi
 fi
 
 # Check device stats for errors
 if btrfs device stats ${MOUNT_POINT} | grep -v " 0\$"; then
     MESSAGE="WARNING: BTRFS device has errors. Run 'btrfs device stats ${MOUNT_POINT}'"
-    echo "${MESSAGE}"
-    [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "warning" "${MESSAGE}"
+    echo "\${MESSAGE}"
+    [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "warning" "\${MESSAGE}"
 fi
 EOF
 
 chmod +x ${SCRIPTS_DIR}/check-btrfs-health.sh
+
+# Copy BTRFS RAID monitoring script if it exists in the repo
+REPO_BTRFS_SCRIPT="${SCRIPT_DIR}/monitoring/check-btrfs-raid-health.sh"
+if [[ -f "\${REPO_BTRFS_SCRIPT}" ]]; then
+    echo "Installing comprehensive BTRFS RAID monitoring script..."
+    cp "\${REPO_BTRFS_SCRIPT}" ${SCRIPTS_DIR}/check-btrfs-raid-health.sh
+    chmod +x ${SCRIPTS_DIR}/check-btrfs-raid-health.sh
+fi
+
+# Copy user quota monitoring script if it exists in the repo
+REPO_QUOTA_SCRIPT="${SCRIPT_DIR}/monitoring/check-user-quotas.sh"
+if [[ -f "\${REPO_QUOTA_SCRIPT}" ]]; then
+    echo "Installing user quota monitoring script..."
+    cp "\${REPO_QUOTA_SCRIPT}" ${SCRIPTS_DIR}/check-user-quotas.sh
+    chmod +x ${SCRIPTS_DIR}/check-user-quotas.sh
+fi
 
 # Container OOM Kill Monitor
 cat > ${SCRIPTS_DIR}/check-oom-kills.sh <<'EOF'
@@ -454,16 +470,49 @@ fi
 echo ""
 echo "=== Step 3: Enabling SMART monitoring ==="
 
-# Configure smartd
+# Configure smartd with Telegram alerting
+ALERT_SCRIPT_PATH="/opt/scripts/monitoring/send-telegram-alert.sh"
 cat > /etc/smartd.conf <<EOF
-# Monitor all devices
-DEVICESCAN -a -o on -S on -n standby,q -s (S/../.././02|L/../../6/03) -W 4,35,40 -m root
+# Monitor all devices with Telegram alerting
+# Short self-test daily at 2 AM, long test weekly on Saturdays at 3 AM
+# Temperature warnings: 4°C difference, 35°C informal, 40°C critical
+# -M exec: Execute alert script on any SMART failures
+DEVICESCAN -a -o on -S on -n standby,q -s (S/../.././02|L/../../6/03) -W 4,35,40 -m root -M exec ${ALERT_SCRIPT_PATH}
 EOF
+
+# Create smartd alert wrapper script
+cat > /usr/local/bin/smartd-alert.sh <<'WRAPPER_EOF'
+#!/bin/bash
+# SMARTD alert wrapper to send notifications via Telegram
+# This script is called by smartd when disk issues are detected
+
+ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
+SMARTD_MESSAGE="\${SMARTD_MESSAGE:-Unknown SMART error}"
+
+# Determine alert level based on message content
+if echo "\${SMARTD_MESSAGE}" | grep -iq "fail\|error\|critical"; then
+    LEVEL="critical"
+elif echo "\${SMARTD_MESSAGE}" | grep -iq "warn"; then
+    LEVEL="warning"
+else
+    LEVEL="info"
+fi
+
+# Send alert
+if [[ -x "\${ALERT_SCRIPT}" ]]; then
+    "\${ALERT_SCRIPT}" "\${LEVEL}" "SMART Alert: \${SMARTD_MESSAGE}"
+fi
+
+# Also send to system mail
+echo "\${SMARTD_MESSAGE}" | mail -s "SMART Alert from \$(hostname)" root 2>/dev/null || true
+WRAPPER_EOF
+
+chmod +x /usr/local/bin/smartd-alert.sh
 
 systemctl enable smartd
 systemctl restart smartd
 
-echo "SMART monitoring enabled"
+echo "SMART monitoring enabled with Telegram alerting"
 
 # Step 4: Setup cron jobs
 echo ""
@@ -473,8 +522,14 @@ cat > /etc/cron.d/ml-monitoring <<EOF
 # Disk SMART checks (daily at 3 AM)
 0 3 * * * root ${SCRIPTS_DIR}/check-disk-smart.sh
 
-# BTRFS health check (every 6 hours)
+# BTRFS basic health check (every 6 hours)
 0 */6 * * * root ${SCRIPTS_DIR}/check-btrfs-health.sh
+
+# BTRFS RAID health check with device stats (every 5 minutes)
+*/5 * * * * root ${SCRIPTS_DIR}/check-btrfs-raid-health.sh 2>&1 | logger -t btrfs-raid-check
+
+# User storage quota monitoring (every hour)
+0 * * * * root ${SCRIPTS_DIR}/check-user-quotas.sh 2>&1 | logger -t quota-check
 
 # GPU temperature check (every 15 minutes)
 */15 * * * * root ${SCRIPTS_DIR}/check-gpu-temperature.sh
@@ -518,13 +573,17 @@ echo ""
 echo "Monitoring scripts installed:"
 echo "  - SMART disk health: ${SCRIPTS_DIR}/check-disk-smart.sh"
 echo "  - GPU temperature: ${SCRIPTS_DIR}/check-gpu-temperature.sh"
-echo "  - BTRFS health: ${SCRIPTS_DIR}/check-btrfs-health.sh"
+echo "  - BTRFS health (basic): ${SCRIPTS_DIR}/check-btrfs-health.sh"
+echo "  - BTRFS RAID health (comprehensive): ${SCRIPTS_DIR}/check-btrfs-raid-health.sh"
+echo "  - User storage quotas: ${SCRIPTS_DIR}/check-user-quotas.sh"
 echo "  - OOM kills: ${SCRIPTS_DIR}/check-oom-kills.sh"
 echo "  - GPU usage: ${SCRIPTS_DIR}/check-gpu-usage.sh"
 echo ""
 echo "Cron schedule:"
 echo "  - SMART: Daily at 3 AM"
-echo "  - BTRFS: Every 6 hours"
+echo "  - BTRFS basic health: Every 6 hours"
+echo "  - BTRFS RAID health: Every 5 minutes"
+echo "  - User quotas: Every hour"
 echo "  - GPU temp: Every 15 minutes"
 echo "  - OOM: Every 30 minutes"
 echo "  - GPU usage: Every hour"

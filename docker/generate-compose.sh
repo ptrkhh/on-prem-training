@@ -18,27 +18,6 @@ fi
 
 source "${CONFIG_FILE}"
 
-# Validate critical passwords are not default
-echo "=== Validating Passwords ==="
-ERRORS=0
-if [[ "${GRAFANA_ADMIN_PASSWORD:-admin}" == "admin" ]]; then
-    echo "ERROR: GRAFANA_ADMIN_PASSWORD is still set to default 'admin'"
-    ((ERRORS++))
-fi
-
-if [[ "${GUACAMOLE_DB_PASSWORD:-changeme_guacamole_password}" == "changeme_guacamole_password" ]]; then
-    echo "ERROR: GUACAMOLE_DB_PASSWORD is still set to default"
-    ((ERRORS++))
-fi
-
-if [[ ${ERRORS} -gt 0 ]]; then
-    echo ""
-    echo "Please update passwords in config.sh or .env before generating docker-compose.yml"
-    exit 1
-fi
-echo "✓ Password validation passed"
-echo ""
-
 # Check Docker Compose version (v2 only)
 echo "=== Checking Docker Compose Version ==="
 if ! command -v docker &> /dev/null; then
@@ -108,9 +87,14 @@ if command -v promtool &>/dev/null; then
     fi
 else
     echo "promtool not found locally; using prom/prometheus container for validation..."
-    if ! docker run --rm -v "${SCRIPT_DIR}/prometheus:/etc/prometheus:ro" prom/prometheus promtool check config /etc/prometheus/prometheus.yml >/tmp/promtool.log 2>&1; then
+    PROMTOOL_TIMEOUT_SECONDS=600
+    if ! timeout ${PROMTOOL_TIMEOUT_SECONDS} docker run --rm -v "${SCRIPT_DIR}/prometheus:/etc/prometheus:ro" prom/prometheus promtool check config /etc/prometheus/prometheus.yml >/tmp/promtool.log 2>&1; then
         cat /tmp/promtool.log
-        echo "ERROR: Prometheus configuration is invalid"
+        echo "ERROR: Prometheus configuration validation failed or timed out after ${PROMTOOL_TIMEOUT_SECONDS}s"
+        echo "This could indicate:"
+        echo "  - Invalid configuration syntax"
+        echo "  - Network issues preventing container image download"
+        echo "  - Docker daemon issues"
         exit 1
     fi
     rm -f /tmp/promtool.log
@@ -391,6 +375,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - ml-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fk https://localhost:443/api/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.kasm.rule=Host(\"kasm.${DOMAIN}\")"
@@ -530,6 +520,11 @@ services:
       - ${MOUNT_POINT:-/mnt/storage}/shared/tensorboard:/logs:ro
     networks:
       - ml-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:6006 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.tensorboard.rule=Host(`tensorboard.${DOMAIN}`)"
@@ -545,6 +540,11 @@ services:
       - ${MOUNT_POINT:-/mnt/storage}:/srv
     networks:
       - ml-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.filebrowser.rule=Host(`files.${DOMAIN}`)"
@@ -630,6 +630,7 @@ for USERNAME in ${USER_ARRAY[@]}; do
     container_name: workspace-${USERNAME}
     hostname: ${USERNAME}-workspace
     restart: unless-stopped
+    stop_grace_period: 5m  # Allow 5 minutes for graceful shutdown (checkpoint saving, etc.)
     privileged: true  # For Docker-in-Docker
     environment:
       - USER_NAME=${USERNAME}

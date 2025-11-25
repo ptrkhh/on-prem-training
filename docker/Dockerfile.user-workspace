@@ -171,14 +171,14 @@ RUN pip3 install --no-cache-dir jupyterlab-vim jupyterlab-code-formatter jupyter
 #==============================================================================
 
 # Install PyCharm Community (headless for now, can be accessed via desktop)
-RUN wget --tries=3 --wait=5 --retry-connrefused -q https://download.jetbrains.com/python/pycharm-community-${PYCHARM_VERSION}.tar.gz -O /tmp/pycharm.tar.gz && \
+RUN wget --timeout=300 --tries=3 --wait=5 --retry-connrefused -q https://download.jetbrains.com/python/pycharm-community-${PYCHARM_VERSION}.tar.gz -O /tmp/pycharm.tar.gz && \
     tar -xzf /tmp/pycharm.tar.gz -C /opt/ && \
     mv /opt/pycharm-* /opt/pycharm && \
     rm /tmp/pycharm.tar.gz && \
     ln -s /opt/pycharm/bin/pycharm.sh /usr/local/bin/pycharm
 
 # Install VSCodium (open source VS Code)
-RUN wget --tries=3 --wait=5 --retry-connrefused -qO - https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg | gpg --dearmor | dd of=/usr/share/keyrings/vscodium-archive-keyring.gpg && \
+RUN wget --timeout=300 --tries=3 --wait=5 --retry-connrefused -qO - https://gitlab.com/paulcarroty/vscodium-deb-rpm-repo/raw/master/pub.gpg | gpg --dearmor | dd of=/usr/share/keyrings/vscodium-archive-keyring.gpg && \
     echo 'deb [ signed-by=/usr/share/keyrings/vscodium-archive-keyring.gpg ] https://download.vscodium.com/debs vscodium main' | tee /etc/apt/sources.list.d/vscodium.list && \
     apt-get update && apt-get install -y codium && \
     rm -rf /var/lib/apt/lists/*
@@ -188,7 +188,7 @@ RUN wget --tries=3 --wait=5 --retry-connrefused -qO - https://gitlab.com/paulcar
 #==============================================================================
 
 # Add Google Chrome repository
-RUN wget --tries=3 --wait=5 --retry-connrefused -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg && \
+RUN wget --timeout=300 --tries=3 --wait=5 --retry-connrefused -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/google-chrome-keyring.gpg && \
     echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-chrome-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list
 
 RUN apt-get update && apt-get install -y \
@@ -239,7 +239,7 @@ RUN apt-get update && apt-get install -y \
 #==============================================================================
 
 # Go
-RUN wget --tries=3 --wait=5 --retry-connrefused -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -O /tmp/go.tar.gz && \
+RUN wget --timeout=300 --tries=3 --wait=5 --retry-connrefused -q https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz -O /tmp/go.tar.gz && \
     tar -C /usr/local -xzf /tmp/go.tar.gz && \
     rm /tmp/go.tar.gz
 ENV PATH="${PATH}:/usr/local/go/bin"
@@ -247,7 +247,7 @@ ENV PATH="${PATH}:/usr/local/go/bin"
 
 # Julia (for scientific computing)
 ARG JULIA_VERSION
-RUN wget --tries=3 --wait=5 --retry-connrefused -q https://julialang-s3.julialang.org/bin/linux/x64/1.12/julia-${JULIA_VERSION}-linux-x86_64.tar.gz -O /tmp/julia.tar.gz && \
+RUN wget --timeout=300 --tries=3 --wait=5 --retry-connrefused -q https://julialang-s3.julialang.org/bin/linux/x64/1.12/julia-${JULIA_VERSION}-linux-x86_64.tar.gz -O /tmp/julia.tar.gz && \
     tar -C /opt -xzf /tmp/julia.tar.gz && \
     ln -s /opt/julia-*/bin/julia /usr/local/bin/julia && \
     rm /tmp/julia.tar.gz
