@@ -202,13 +202,16 @@ git clone <repo-url> train-server && cd train-server
 cp config.sh.example config.sh
 nano config.sh  # Edit users, domain, hardware settings
 
-# 2. Validate and generate configs
+# 2. Make scripts executable
+chmod +x scripts/*.sh scripts/lib/*.sh docker/*.sh
+
+# 3. Validate and generate configs
 ./scripts/00-validate-config.sh
 cd docker && ./generate-compose.sh && cd ..
 
-# 3. Run setup scripts (scripts 01-10, reboot after 01)
-# 4. Build and start containers
-# 5. Run tests
+# 4. Run setup scripts (scripts 01-10, reboot after 01)
+# 5. Build and start containers
+# 6. Run tests
 ```
 
 **For detailed setup instructions, see [SETUP-GUIDE.md](SETUP-GUIDE.md)**

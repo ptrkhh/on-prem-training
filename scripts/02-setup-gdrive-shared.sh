@@ -70,6 +70,21 @@ else
     echo "rclone already installed: $(rclone version | head -n1)"
 fi
 
+# Auto-import rclone config from sudo user if root doesn't have one
+if [[ ! -f /root/.config/rclone/rclone.conf ]]; then
+    if [[ -n "${SUDO_USER}" && "${SUDO_USER}" != "root" ]]; then
+        USER_RCLONE_CONF="/home/${SUDO_USER}/.config/rclone/rclone.conf"
+        if [[ -f "${USER_RCLONE_CONF}" ]]; then
+            echo ""
+            echo "Detected rclone config for user '${SUDO_USER}'"
+            echo "Copying to root's config directory..."
+            mkdir -p /root/.config/rclone
+            cp "${USER_RCLONE_CONF}" /root/.config/rclone/rclone.conf
+            echo "✓ rclone config imported from ${SUDO_USER}"
+        fi
+    fi
+fi
+
 # Check network connectivity (required for rclone and Google Drive)
 echo ""
 if ! check_network 3; then
@@ -283,6 +298,15 @@ echo "Cache directory: ${CACHE_DIR}"
 
 # Ensure FUSE allows shared mounts
 FUSE_CONF="/etc/fuse.conf"
+
+# Fix malformed lines in fuse.conf (e.g., "user_allow_other - some text")
+# These malformed lines cause fusermount errors and must be commented out
+if [[ -f "${FUSE_CONF}" ]] && grep -q '^user_allow_other[[:space:]]\+[^[:space:]]' "${FUSE_CONF}"; then
+    echo "Fixing malformed user_allow_other lines in ${FUSE_CONF}"
+    # Comment out any lines that have user_allow_other followed by non-whitespace text
+    sed -i '/^user_allow_other[[:space:]]\+[^[:space:]]/s/^/# /' "${FUSE_CONF}"
+fi
+
 if [[ ! -f "${FUSE_CONF}" ]]; then
     echo "Creating ${FUSE_CONF} to enable user_allow_other"
     echo "user_allow_other" > "${FUSE_CONF}"
