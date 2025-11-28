@@ -235,7 +235,56 @@ This script will:
 2. Add users to docker and sudo groups
 3. Create home directories in /mnt/storage/homes/
 4. Create workspace directories in /mnt/storage/workspaces/
-5. Set up SSH key authentication (keys only, no passwords)
+5. Configure SSH server with **temporary password authentication** (must be disabled after adding keys)
+
+### Add SSH Keys (REQUIRED)
+
+**⚠️ SECURITY CRITICAL**: The setup script enables password authentication temporarily for initial setup. You MUST add SSH keys and disable password authentication within 24 hours.
+
+**For each user, add their SSH public key:**
+
+```bash
+# Add alice's SSH key
+sudo nano /mnt/storage/homes/alice/.ssh/authorized_keys
+# Paste alice's public key (from her ~/.ssh/id_rsa.pub or ~/.ssh/id_ed25519.pub)
+
+# Set correct permissions
+sudo chmod 700 /mnt/storage/homes/alice/.ssh
+sudo chmod 600 /mnt/storage/homes/alice/.ssh/authorized_keys
+sudo chown -R alice:alice /mnt/storage/homes/alice/.ssh
+
+# Repeat for bob and charlie
+sudo nano /mnt/storage/homes/bob/.ssh/authorized_keys
+sudo chmod 700 /mnt/storage/homes/bob/.ssh
+sudo chmod 600 /mnt/storage/homes/bob/.ssh/authorized_keys
+sudo chown -R bob:bob /mnt/storage/homes/bob/.ssh
+
+sudo nano /mnt/storage/homes/charlie/.ssh/authorized_keys
+sudo chmod 700 /mnt/storage/homes/charlie/.ssh
+sudo chmod 600 /mnt/storage/homes/charlie/.ssh/authorized_keys
+sudo chown -R charlie:charlie /mnt/storage/homes/charlie/.ssh
+```
+
+**Test SSH login with keys:**
+
+```bash
+# Test from each user's machine (should work without password)
+ssh alice@<server-ip>
+```
+
+**Disable password authentication (after confirming SSH keys work):**
+
+```bash
+# This disables password login and enforces key-based authentication only
+sudo /root/disable-ssh-password-auth.sh
+```
+
+The script will:
+- Disable `PasswordAuthentication` in SSH config
+- Restart SSH service
+- Verify the configuration
+
+After this step, only users with valid SSH keys can log in. Make sure all keys work before running this script!
 
 ### Manual User Setup (if needed)
 
@@ -492,11 +541,19 @@ This configures:
 ### SSH Configuration
 
 SSH is configured automatically by the user setup script with:
-- Key-based authentication only (no passwords)
+- **Password authentication initially ENABLED** (for initial setup)
 - Root login disabled
 - PAM enabled for user account integration
 
 The configuration is located at `/etc/ssh/sshd_config.d/ml-train-server.conf`
+
+**⚠️ IMPORTANT**: After adding SSH keys for all users (see [User Account Setup](#user-account-setup)), you MUST disable password authentication by running:
+
+```bash
+sudo /root/disable-ssh-password-auth.sh
+```
+
+This ensures only key-based authentication is allowed, significantly improving security.
 
 ---
 
