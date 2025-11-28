@@ -296,7 +296,7 @@ RUN mkdir /var/run/sshd && \
 RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
 # Create startup script
-COPY entrypoint-user.sh /usr/local/bin/entrypoint.sh
+COPY docker/entrypoint-user.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 
 # Configure systemd-like services using supervisord
@@ -377,13 +377,14 @@ RUN . /opt/cache-env.sh && \
 #==============================================================================
 
 # Expose all necessary ports
-EXPOSE 22      # SSH
-EXPOSE 5900    # KasmVNC server
-EXPOSE 3389    # XRDP server
-EXPOSE 6901    # KasmVNC web interface
-EXPOSE 8080    # code-server
-EXPOSE 8888    # Jupyter
-EXPOSE 6006    # TensorBoard
+# SSH, KasmVNC server, XRDP server, KasmVNC web interface, code-server, Jupyter, TensorBoard
+EXPOSE 22
+EXPOSE 5900
+EXPOSE 3389
+EXPOSE 6901
+EXPOSE 8080
+EXPOSE 8888
+EXPOSE 6006
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
