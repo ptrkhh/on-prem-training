@@ -83,6 +83,23 @@ if [[ ! -d "${MOUNT_POINT}/cache" ]]; then
     exit 1
 fi
 
+# Ensure OpenSSH server is installed
+echo "Checking SSH server installation..."
+if ! dpkg -l | grep -q "^ii.*openssh-server"; then
+    echo "OpenSSH server not found. Installing..."
+    apt-get update -qq
+    apt-get install -y openssh-server
+    echo "✓ OpenSSH server installed"
+else
+    echo "✓ OpenSSH server already installed"
+fi
+
+# Ensure SSH service is enabled
+if ! systemctl is-enabled ssh >/dev/null 2>&1 && ! systemctl is-enabled sshd >/dev/null 2>&1; then
+    echo "Enabling SSH service..."
+    systemctl enable ssh 2>/dev/null || systemctl enable sshd 2>/dev/null || true
+fi
+
 echo "Creating ${USER_COUNT} user accounts..."
 echo ""
 
