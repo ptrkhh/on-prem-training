@@ -102,6 +102,44 @@ fi
 echo "✓ Prometheus configuration syntax looks good"
 echo ""
 
+# Check Google Drive mount is healthy
+echo "=== Checking Google Drive Mount ==="
+MOUNT_POINT="${MOUNT_POINT:-/mnt/storage}"
+SHARED_MOUNT="${MOUNT_POINT}/shared"
+
+if [[ ! -d "${SHARED_MOUNT}" ]]; then
+    echo "ERROR: Shared mount directory not found: ${SHARED_MOUNT}"
+    echo ""
+    echo "Please ensure the Google Drive mount is set up:"
+    echo "  sudo /home/p/on-prem-training/scripts/fix-gdrive-mount.sh"
+    exit 1
+fi
+
+if ! mountpoint -q "${SHARED_MOUNT}" 2>/dev/null; then
+    echo "ERROR: ${SHARED_MOUNT} is not mounted"
+    echo ""
+    echo "The Google Drive mount is required for Docker containers."
+    echo "Please start the mount service:"
+    echo "  sudo systemctl start gdrive-shared.service"
+    echo ""
+    echo "Or run the fix script:"
+    echo "  sudo /home/p/on-prem-training/scripts/fix-gdrive-mount.sh"
+    exit 1
+fi
+
+# Check if mount is responsive (not stale)
+echo "Checking mount responsiveness..."
+if ! timeout 10 ls "${SHARED_MOUNT}" >/dev/null 2>&1; then
+    echo "ERROR: ${SHARED_MOUNT} is stale (hung/not responsive)"
+    echo ""
+    echo "The mount appears to be in a hung state. Please fix it:"
+    echo "  sudo /home/p/on-prem-training/scripts/fix-gdrive-mount.sh"
+    exit 1
+fi
+
+echo "✓ Google Drive mount is healthy"
+echo ""
+
 # Auto-generate .env file from config.sh
 GENERATE_ENV_SCRIPT="${SCRIPT_DIR}/../docker/generate-env.sh"
 if [[ -f "${GENERATE_ENV_SCRIPT}" ]]; then

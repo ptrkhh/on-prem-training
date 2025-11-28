@@ -174,10 +174,10 @@ RUN apt-get update && apt-get install -y \
 #==============================================================================
 
 # Install Python ML libraries
-RUN pip3 install --no-cache-dir jupyter jupyterlab ipywidgets notebook tensorboard jupyterlab-git jupyterlab-lsp
+RUN pip3 install --break-system-packages --no-cache-dir jupyter jupyterlab ipywidgets notebook tensorboard jupyterlab-git jupyterlab-lsp
 
 # Install JupyterLab extensions
-RUN pip3 install --no-cache-dir jupyterlab-vim jupyterlab-code-formatter jupyterlab-spreadsheet-editor jupyterlab-widgets && jupyter lab build --dev-build=False --minimize=True
+RUN pip3 install --break-system-packages --no-cache-dir jupyterlab-vim jupyterlab-code-formatter jupyterlab-spreadsheet-editor jupyterlab-widgets && jupyter lab build --dev-build=False --minimize=True
 
 #==============================================================================
 # IDE & EDITORS
@@ -216,13 +216,13 @@ RUN apt-get update && apt-get install -y \
     # Media player
     vlc \
     # Screenshot tools
-    spectacle \
+    flameshot \
     # Monitoring & Profiling
     nvtop ncdu \
     && rm -rf /var/lib/apt/lists/*
 
 # Install nvitop (not available via apt in Ubuntu 24.04)
-RUN pip3 install --no-cache-dir nvitop
+RUN pip3 install --break-system-packages --no-cache-dir nvitop
 
 #==============================================================================
 # DATABASE & TOOLS
@@ -274,7 +274,7 @@ RUN apt-get update && apt-get install -y \
 # VERSION CONTROL & COLLABORATION
 #==============================================================================
 
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --break-system-packages --no-cache-dir \
     # Git tools
     git-review gitpython \
     # Collaboration

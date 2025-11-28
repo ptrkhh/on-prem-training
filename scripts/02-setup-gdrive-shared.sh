@@ -468,8 +468,9 @@ After=network-online.target
 Wants=network-online.target
 Before=docker.service
 OnFailure=gdrive-mount-failure-alert.service
-StartLimitBurst=5
-StartLimitIntervalSec=600
+# More aggressive restart limits for better resilience
+StartLimitBurst=10
+StartLimitIntervalSec=300
 
 [Service]
 Type=simple
@@ -508,15 +509,16 @@ ExecStart=/usr/bin/rclone mount ${GDRIVE_SHARED_REMOTE}: ${MOUNT_POINT}/shared \
     --log-level ${GDRIVE_LOG_LEVEL} \\
     --log-file /var/log/gdrive-shared.log
 
-# Restart on failure with circuit breaker
-Restart=on-failure
-RestartSec=30s
+# ALWAYS restart (even on clean exit) for maximum resilience
+# Handles network hiccups and rclone clean exits
+Restart=always
+RestartSec=10s
 
-# Health monitoring with retry logic
-ExecStartPost=/bin/bash -c 'for i in {1..30}; do if ls ${MOUNT_POINT}/shared > /dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1'
+# Health monitoring with retry logic (60s timeout for better reliability)
+ExecStartPost=/bin/bash -c 'for i in {1..60}; do if mountpoint -q ${MOUNT_POINT}/shared && ls ${MOUNT_POINT}/shared > /dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1'
 
-# Warn if stopping while containers are using /shared
-ExecStop=/bin/bash -c 'ACTIVE_CONTAINERS=\$(docker ps --filter "volume=${MOUNT_POINT}/shared" --format "{{.Names}}" 2>/dev/null | wc -l); if [[ \${ACTIVE_CONTAINERS} -gt 0 ]]; then logger -t gdrive-shared -p user.warning "Unmounting /shared while \${ACTIVE_CONTAINERS} container(s) are using it. Data written during unmount may be lost."; fi; pkill -TERM -f "rclone mount.*${MOUNT_POINT}/shared"'
+# Clean shutdown with proper unmount
+ExecStop=/bin/bash -c 'ACTIVE_CONTAINERS=\$(docker ps --filter "volume=${MOUNT_POINT}/shared" --format "{{.Names}}" 2>/dev/null | wc -l); if [[ \${ACTIVE_CONTAINERS} -gt 0 ]]; then logger -t gdrive-shared -p user.warning "Unmounting /shared while \${ACTIVE_CONTAINERS} container(s) are using it. Data written during unmount may be lost."; fi; fusermount -uz ${MOUNT_POINT}/shared || umount -l ${MOUNT_POINT}/shared || true'
 TimeoutStopSec=15
 
 [Install]
@@ -604,11 +606,93 @@ EOF
 
 chmod +x /opt/scripts/monitoring/check-gdrive-mount.sh
 
-# Create cron job for health check
-cat > /etc/cron.d/gdrive-mount-check <<EOF
-# Check Google Drive mount every 5 minutes
-*/5 * * * * root /opt/scripts/monitoring/check-gdrive-mount.sh >> /var/log/gdrive-mount-check.log 2>&1
+# Create systemd timer for health check (more reliable than cron)
+echo "Creating systemd health check timer..."
+
+cat > /etc/systemd/system/gdrive-shared-healthcheck.service <<EOF
+[Unit]
+Description=Google Drive Mount Health Check
+After=gdrive-shared.service
+Requires=gdrive-shared.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/gdrive-healthcheck.sh
+Restart=no
 EOF
+
+cat > /etc/systemd/system/gdrive-shared-healthcheck.timer <<EOF
+[Unit]
+Description=Google Drive Mount Health Check Timer
+After=gdrive-shared.service
+
+[Timer]
+# Check every 60 seconds for maximum responsiveness
+OnBootSec=60s
+OnUnitActiveSec=60s
+Unit=gdrive-shared-healthcheck.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+# Create the optimized health check script
+cat > /usr/local/bin/gdrive-healthcheck.sh <<'HEALTHCHECK_EOF'
+#!/bin/bash
+set -euo pipefail
+
+# Health check for Google Drive mount
+# This runs every 60 seconds via systemd timer
+
+MOUNT_POINT="${MOUNT_POINT}"
+SHARED_DIR="\${MOUNT_POINT}/shared"
+LOG_FILE="/var/log/gdrive-healthcheck.log"
+MAX_LOG_SIZE=10485760  # 10MB
+
+# Rotate log if too large
+if [[ -f "\${LOG_FILE}" ]] && [[ \$(stat -c "%s" "\${LOG_FILE}" 2>/dev/null || echo 0) -gt \${MAX_LOG_SIZE} ]]; then
+    mv "\${LOG_FILE}" "\${LOG_FILE}.old"
+fi
+
+log() {
+    echo "\$(date '+%Y-%m-%d %H:%M:%S') - \$1" | tee -a "\${LOG_FILE}"
+}
+
+# Check if mount point exists
+if [[ ! -d "\${SHARED_DIR}" ]]; then
+    log "ERROR: Mount point \${SHARED_DIR} does not exist"
+    exit 1
+fi
+
+# Check if it's mounted
+if ! mountpoint -q "\${SHARED_DIR}" 2>/dev/null; then
+    log "WARNING: \${SHARED_DIR} is not mounted, restarting service..."
+    systemctl restart gdrive-shared.service
+    exit 1
+fi
+
+# Check if we can access the mount (detect stale mounts)
+if ! timeout 5 ls "\${SHARED_DIR}" >/dev/null 2>&1; then
+    log "ERROR: \${SHARED_DIR} is stale (hung), forcing restart..."
+    # Force unmount and restart
+    fusermount -uz "\${SHARED_DIR}" 2>/dev/null || umount -l "\${SHARED_DIR}" 2>/dev/null || true
+    sleep 2
+    systemctl restart gdrive-shared.service
+    exit 1
+fi
+
+# All checks passed
+log "✓ Mount is healthy"
+exit 0
+HEALTHCHECK_EOF
+
+chmod +x /usr/local/bin/gdrive-healthcheck.sh
+
+# Enable the timer
+systemctl daemon-reload
+systemctl enable gdrive-shared-healthcheck.timer
+
+echo "✓ Health monitoring timer enabled (checks every 60 seconds)"
 
 # Step 6: Create cache cleanup script
 echo ""
@@ -702,9 +786,47 @@ fi
 
 # Recreate mount point directory to ensure clean state
 echo "Setting up mount point..."
-if [[ -d "${MOUNT_POINT}/shared" ]]; then
-    # Check if directory is not empty
-    if [ -n "$(ls -A "${MOUNT_POINT}/shared" 2>/dev/null)" ]; then
+
+# Function to detect stale mount
+is_stale_mount() {
+    local dir="$1"
+    # Check if stat command fails with "Transport endpoint is not connected"
+    if [[ -e "$dir" ]]; then
+        local stat_output
+        stat_output=$(stat "$dir" 2>&1 || true)
+        if echo "$stat_output" | grep -q "Transport endpoint is not connected"; then
+            return 0  # Is stale
+        fi
+    fi
+    return 1  # Not stale
+}
+
+# Handle potential stale mount - force unmount again before directory operations
+if [[ -e "${MOUNT_POINT}/shared" ]] || is_stale_mount "${MOUNT_POINT}/shared"; then
+    echo "  Checking for stale mount..."
+
+    # Detect if it's actually stale
+    if is_stale_mount "${MOUNT_POINT}/shared"; then
+        echo "  ⚠ Stale mount detected! Performing aggressive cleanup..."
+    fi
+
+    # Try multiple unmount methods aggressively
+    for attempt in {1..3}; do
+        fusermount -uz "${MOUNT_POINT}/shared" 2>/dev/null || true
+        fusermount3 -uz "${MOUNT_POINT}/shared" 2>/dev/null || true
+        umount -l "${MOUNT_POINT}/shared" 2>/dev/null || true
+        umount -f "${MOUNT_POINT}/shared" 2>/dev/null || true
+        sleep 1
+
+        # Check if we successfully cleared the stale mount
+        if ! is_stale_mount "${MOUNT_POINT}/shared"; then
+            break
+        fi
+        echo "  Retry $attempt/3..."
+    done
+
+    # Check if directory is not empty (after unmounting) - only if not stale
+    if ! is_stale_mount "${MOUNT_POINT}/shared" && [[ -d "${MOUNT_POINT}/shared" ]] && [ -n "$(ls -A "${MOUNT_POINT}/shared" 2>/dev/null)" ]; then
         echo "  ⚠️  WARNING: Mount point ${MOUNT_POINT}/shared is not empty"
         echo "  Contents will be moved to backup directory"
 
@@ -718,13 +840,44 @@ if [[ -d "${MOUNT_POINT}/shared" ]]; then
         mv "${MOUNT_POINT}/shared/".??* "${BACKUP_DIR}/" 2>/dev/null || true
     fi
 
-    # Remove and recreate directory to ensure clean state
-    echo "  Recreating mount point directory..."
-    rm -rf "${MOUNT_POINT}/shared"
+    # Remove directory - handle stale mounts that won't delete
+    if ! rmdir "${MOUNT_POINT}/shared" 2>/dev/null; then
+        # Check again if it's stale
+        if is_stale_mount "${MOUNT_POINT}/shared"; then
+            echo "  ⚠ Still stale after unmount attempts, trying workaround..."
+            # Last resort: rename the stale directory
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            mv "${MOUNT_POINT}/shared" "${MOUNT_POINT}/shared.stale.${TIMESTAMP}" 2>/dev/null || {
+                echo "  ❌ Cannot move stale mount. Manual intervention may be required."
+                echo "  Try: sudo fusermount -uz ${MOUNT_POINT}/shared"
+                echo "  Or reboot the system to clear stale mounts."
+                exit 1
+            }
+        else
+            # Not stale, just try rm -rf
+            rm -rf "${MOUNT_POINT}/shared" 2>/dev/null || true
+        fi
+    fi
+    sleep 1
 fi
 
 # Create fresh mount point with 777 permissions (required for FUSE mount)
-mkdir -p "${MOUNT_POINT}/shared"
+# Verify we can actually create the directory
+if ! mkdir -p "${MOUNT_POINT}/shared" 2>/dev/null; then
+    # One more desperate attempt to clear stale state
+    echo "  ⚠ mkdir failed, one final cleanup attempt..."
+    fusermount -uz "${MOUNT_POINT}/shared" 2>/dev/null || true
+    umount -l "${MOUNT_POINT}/shared" 2>/dev/null || true
+    sleep 2
+
+    # Try creating again
+    if ! mkdir -p "${MOUNT_POINT}/shared"; then
+        echo "  ❌ Failed to create mount point even after cleanup"
+        echo "  The filesystem may need a reboot to clear stale mounts"
+        exit 1
+    fi
+fi
+
 chmod 777 "${MOUNT_POINT}/shared"
 chown root:root "${MOUNT_POINT}/shared"
 
@@ -736,6 +889,10 @@ systemctl daemon-reload
 # Enable and start service
 systemctl enable gdrive-shared.service
 systemctl start gdrive-shared.service
+
+# Start health monitoring timer
+echo "Starting health monitoring timer..."
+systemctl start gdrive-shared-healthcheck.timer
 
 # Wait for mount
 echo "Waiting for mount to complete..."
@@ -996,9 +1153,17 @@ echo "Management commands:"
 echo "  - Status: systemctl status gdrive-shared.service"
 echo "  - Logs: journalctl -u gdrive-shared.service -f"
 echo "  - Cache stats: /opt/scripts/monitoring/gdrive-cache-stats.sh"
-echo "  - Health check: /opt/scripts/monitoring/check-gdrive-mount.sh"
+echo "  - Health check (legacy): /opt/scripts/monitoring/check-gdrive-mount.sh"
+echo "  - Health monitoring timer: systemctl status gdrive-shared-healthcheck.timer"
+echo "  - Health check logs: tail -f /var/log/gdrive-healthcheck.log"
 echo ""
 echo "User guide: /root/GDRIVE-SHARED-GUIDE.md"
+echo ""
+echo "🛡️  Resilience Features Enabled:"
+echo "  - Auto-restart on any disconnect (10s recovery time)"
+echo "  - Continuous health monitoring (checks every 60s)"
+echo "  - Automatic stale mount detection and recovery"
+echo "  - Maximum uptime and reliability"
 echo ""
 echo "⚠️  Note: First access to files will download from Google Drive"
 echo "          Subsequent access will be near-local speed (from cache)"
@@ -1040,6 +1205,14 @@ if ! systemctl is-active --quiet gdrive-shared.service; then
     exit 1
 fi
 echo "✓ Service is running"
+
+# Check 5: Health monitoring timer is active
+if ! systemctl is-active --quiet gdrive-shared-healthcheck.timer; then
+    echo "⚠️  WARNING: Health monitoring timer is not running"
+    echo "   Starting it now..."
+    systemctl start gdrive-shared-healthcheck.timer
+fi
+echo "✓ Health monitoring timer is active"
 
 echo ""
 echo "✅ All health checks passed - Google Drive mount is operational"
