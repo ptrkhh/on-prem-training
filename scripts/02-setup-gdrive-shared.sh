@@ -72,6 +72,7 @@ fi
 
 # Auto-import rclone config from sudo user if root doesn't have one
 if [[ ! -f /root/.config/rclone/rclone.conf ]]; then
+    # Try SUDO_USER first
     if [[ -n "${SUDO_USER}" && "${SUDO_USER}" != "root" ]]; then
         USER_RCLONE_CONF="/home/${SUDO_USER}/.config/rclone/rclone.conf"
         if [[ -f "${USER_RCLONE_CONF}" ]]; then
@@ -82,8 +83,34 @@ if [[ ! -f /root/.config/rclone/rclone.conf ]]; then
             cp "${USER_RCLONE_CONF}" /root/.config/rclone/rclone.conf
             echo "✓ rclone config imported from ${SUDO_USER}"
         fi
+    # If SUDO_USER not set, look for rclone configs in /home
+    else
+        echo ""
+        echo "SUDO_USER not set, searching for rclone configs in /home..."
+        for user_home in /home/*; do
+            if [[ -f "${user_home}/.config/rclone/rclone.conf" ]]; then
+                username=$(basename "${user_home}")
+                echo "Found rclone config for user '${username}'"
+                echo "Copying to root's config directory..."
+                mkdir -p /root/.config/rclone
+                cp "${user_home}/.config/rclone/rclone.conf" /root/.config/rclone/rclone.conf
+                echo "✓ rclone config imported from ${username}"
+                break
+            fi
+        done
     fi
 fi
+
+# Verify root has rclone config before proceeding
+if [[ ! -f /root/.config/rclone/rclone.conf ]]; then
+    echo ""
+    echo "❌ ERROR: Root does not have rclone configuration!"
+    echo "Please configure rclone as root: sudo rclone config"
+    echo "Or ensure a user has configured rclone and re-run this script."
+    exit 1
+fi
+
+echo "✓ Root rclone config verified"
 
 # Check network connectivity (required for rclone and Google Drive)
 echo ""
@@ -291,32 +318,57 @@ echo "  VFS cache size: ${CACHE_SIZE_GB}GB (${CACHE_PERCENT}% of total disk)"
 echo "  Safety buffer: ${SAFETY_BUFFER_GB}GB (${STORAGE_SAFETY_MARGIN_PERCENT}% reserved for filesystem headroom)"
 echo ""
 
-# Create cache directory
+# Create cache directory (remove and recreate to ensure clean state)
 CACHE_DIR="${GDRIVE_CACHE_DIR}"
+
+echo "Setting up cache directory..."
+if [[ -d "${CACHE_DIR}" ]]; then
+    echo "  Removing existing cache directory to ensure clean state..."
+    rm -rf "${CACHE_DIR}"
+fi
+
+echo "  Creating cache directory: ${CACHE_DIR}"
 mkdir -p "${CACHE_DIR}"
-echo "Cache directory: ${CACHE_DIR}"
+
+# Set cache directory permissions to allow rclone to create subdirectories (777 for maximum compatibility)
+echo "  Setting cache directory permissions (777)..."
+chmod -R 777 "${CACHE_DIR}"
+
+echo "✓ Cache directory ready"
 
 # Ensure FUSE allows shared mounts
 FUSE_CONF="/etc/fuse.conf"
 
+echo "Configuring FUSE for shared mounts..."
+
 # Fix malformed lines in fuse.conf (e.g., "user_allow_other - some text")
 # These malformed lines cause fusermount errors and must be commented out
-if [[ -f "${FUSE_CONF}" ]] && grep -q '^user_allow_other[[:space:]]\+[^[:space:]]' "${FUSE_CONF}"; then
-    echo "Fixing malformed user_allow_other lines in ${FUSE_CONF}"
+if [[ -f "${FUSE_CONF}" ]]; then
     # Comment out any lines that have user_allow_other followed by non-whitespace text
-    sed -i '/^user_allow_other[[:space:]]\+[^[:space:]]/s/^/# /' "${FUSE_CONF}"
+    if grep -q '^user_allow_other[[:space:]]\+[^[:space:]]' "${FUSE_CONF}"; then
+        echo "  Fixing malformed user_allow_other lines in ${FUSE_CONF}"
+        sed -i '/^user_allow_other[[:space:]]\+[^[:space:]]/s/^/# /' "${FUSE_CONF}"
+    fi
+
+    # Also fix any lines with hyphens after user_allow_other (common malformation)
+    if grep -q '^user_allow_other.*-' "${FUSE_CONF}"; then
+        echo "  Fixing user_allow_other lines with trailing content"
+        sed -i '/^user_allow_other.*-/s/^/# /' "${FUSE_CONF}"
+    fi
 fi
 
 if [[ ! -f "${FUSE_CONF}" ]]; then
-    echo "Creating ${FUSE_CONF} to enable user_allow_other"
+    echo "  Creating ${FUSE_CONF} to enable user_allow_other"
     echo "user_allow_other" > "${FUSE_CONF}"
-elif grep -q '^\s*#\s*user_allow_other' "${FUSE_CONF}"; then
-    echo "Enabling user_allow_other in ${FUSE_CONF}"
-    sed -i 's/^\s*#\s*user_allow_other/user_allow_other/' "${FUSE_CONF}"
-elif ! grep -q '^\s*user_allow_other' "${FUSE_CONF}"; then
-    echo "Adding user_allow_other to ${FUSE_CONF}"
+elif grep -q '^\s*#\s*user_allow_other\s*$' "${FUSE_CONF}"; then
+    echo "  Enabling user_allow_other in ${FUSE_CONF}"
+    sed -i 's/^\s*#\s*user_allow_other\s*$/user_allow_other/' "${FUSE_CONF}"
+elif ! grep -q '^\s*user_allow_other\s*$' "${FUSE_CONF}"; then
+    echo "  Adding user_allow_other to ${FUSE_CONF}"
     echo "user_allow_other" >> "${FUSE_CONF}"
 fi
+
+echo "✓ FUSE configuration complete"
 
 # Step 4: Create systemd service for automatic mounting
 echo ""
@@ -329,14 +381,17 @@ After=network-online.target
 Wants=network-online.target
 Before=docker.service
 OnFailure=gdrive-mount-failure-alert.service
+StartLimitBurst=5
+StartLimitIntervalSec=600
 
 [Service]
 Type=simple
 # Pre-flight validation to catch connectivity issues before mount attempt
-ExecStartPre=/usr/bin/rclone lsd ${GDRIVE_SHARED_REMOTE}: --max-depth 1 --timeout 300s
+ExecStartPre=/usr/bin/rclone --config /root/.config/rclone/rclone.conf lsd ${GDRIVE_SHARED_REMOTE}: --max-depth 1 --timeout 300s
 
 # Mount Shared Drive with aggressive VFS caching for local-like performance
 ExecStart=/usr/bin/rclone mount ${GDRIVE_SHARED_REMOTE}: ${MOUNT_POINT}/shared \\
+    --config /root/.config/rclone/rclone.conf \\
     --vfs-cache-mode full \\
     --vfs-cache-max-size ${CACHE_SIZE_GB}G \\
     --vfs-cache-max-age ${GDRIVE_CACHE_MAX_AGE} \\
@@ -364,14 +419,11 @@ ExecStart=/usr/bin/rclone mount ${GDRIVE_SHARED_REMOTE}: ${MOUNT_POINT}/shared \
     --fast-list \\
     --no-modtime \\
     --log-level ${GDRIVE_LOG_LEVEL} \\
-    --log-file /var/log/gdrive-shared.log \\
-    --syslog
+    --log-file /var/log/gdrive-shared.log
 
 # Restart on failure with circuit breaker
 Restart=on-failure
 RestartSec=30s
-StartLimitBurst=5
-StartLimitIntervalSec=600
 
 # Health monitoring with retry logic
 ExecStartPost=/bin/bash -c 'for i in {1..30}; do if ls ${MOUNT_POINT}/shared > /dev/null 2>&1; then exit 0; fi; sleep 1; done; exit 1'
@@ -539,8 +591,57 @@ fi
 echo ""
 echo "=== Step 9: Starting Google Drive Shared Drive mount ==="
 
-# Ensure mount point exists
+# Stop service if already running (ensure clean state)
+echo "Ensuring clean state..."
+if systemctl is-active --quiet gdrive-shared.service; then
+    echo "  Stopping existing gdrive-shared service..."
+    systemctl stop gdrive-shared.service || true
+    sleep 2
+fi
+
+# Unmount if something is already mounted there
+if mountpoint -q "${MOUNT_POINT}/shared" 2>/dev/null; then
+    echo "  Unmounting existing mount at ${MOUNT_POINT}/shared..."
+    fusermount -uz "${MOUNT_POINT}/shared" 2>/dev/null || umount -l "${MOUNT_POINT}/shared" 2>/dev/null || true
+    sleep 1
+fi
+
+# Kill any stray rclone processes for this mount
+if pgrep -f "rclone mount.*${MOUNT_POINT}/shared" >/dev/null; then
+    echo "  Killing stray rclone processes..."
+    pkill -9 -f "rclone mount.*${MOUNT_POINT}/shared" || true
+    sleep 1
+fi
+
+# Recreate mount point directory to ensure clean state
+echo "Setting up mount point..."
+if [[ -d "${MOUNT_POINT}/shared" ]]; then
+    # Check if directory is not empty
+    if [ -n "$(ls -A "${MOUNT_POINT}/shared" 2>/dev/null)" ]; then
+        echo "  ⚠️  WARNING: Mount point ${MOUNT_POINT}/shared is not empty"
+        echo "  Contents will be moved to backup directory"
+
+        # Create backup directory
+        BACKUP_DIR="${MOUNT_POINT}/shared.backup.$(date +%Y%m%d_%H%M%S)"
+        mkdir -p "${BACKUP_DIR}"
+
+        # Move all contents to backup
+        echo "  Moving contents to ${BACKUP_DIR}..."
+        mv "${MOUNT_POINT}/shared/"* "${BACKUP_DIR}/" 2>/dev/null || true
+        mv "${MOUNT_POINT}/shared/".??* "${BACKUP_DIR}/" 2>/dev/null || true
+    fi
+
+    # Remove and recreate directory to ensure clean state
+    echo "  Recreating mount point directory..."
+    rm -rf "${MOUNT_POINT}/shared"
+fi
+
+# Create fresh mount point with 777 permissions (required for FUSE mount)
 mkdir -p "${MOUNT_POINT}/shared"
+chmod 777 "${MOUNT_POINT}/shared"
+chown root:root "${MOUNT_POINT}/shared"
+
+echo "✓ Mount point ready (777 permissions for FUSE compatibility)"
 
 # Reload systemd
 systemctl daemon-reload
