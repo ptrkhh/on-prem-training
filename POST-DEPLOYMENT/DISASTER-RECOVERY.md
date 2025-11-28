@@ -57,11 +57,12 @@
    sudo ./scripts/02-setup-gdrive-shared.sh
    sudo ./scripts/04-setup-users.sh
    sudo ./scripts/05-setup-docker.sh
-   sudo ./scripts/06-setup-cloudflare-tunnel.sh
-   sudo ./scripts/07-setup-firewall.sh
-   sudo ./scripts/08-setup-monitoring.sh
-   sudo ./scripts/09-setup-backups.sh
-   sudo ./scripts/10-setup-data-pipeline.sh
+   sudo ./scripts/06-deploy-services.sh
+   sudo ./scripts/07-setup-cloudflare-tunnel.sh
+   sudo ./scripts/08-setup-firewall.sh
+   sudo ./scripts/09-setup-monitoring.sh
+   sudo ./scripts/10-setup-backups.sh
+   sudo ./scripts/11-setup-data-pipeline.sh
    ```
 
 8. **Build and start containers**
@@ -77,7 +78,7 @@
    docker ps
    nvidia-smi
    df -h
-   ./scripts/11-run-tests.sh
+   ./scripts/12-run-tests.sh
    ```
 
 **Time estimate:** 2-4 hours

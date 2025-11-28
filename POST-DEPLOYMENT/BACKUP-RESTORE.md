@@ -187,7 +187,7 @@
 
 2. **Re-run backup setup**
    ```bash
-   sudo ./scripts/09-setup-backups.sh
+   sudo ./scripts/10-setup-backups.sh
    # This updates cron jobs
    ```
 

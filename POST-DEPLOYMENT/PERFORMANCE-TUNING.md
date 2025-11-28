@@ -207,8 +207,8 @@ torch.cuda.set_per_process_memory_fraction(0.5, 0)  # Use max 50% GPU memory
 
 2. **Re-run affected setup scripts**
    ```bash
-   sudo ./scripts/09-setup-backups.sh
-   sudo ./scripts/10-setup-data-pipeline.sh
+   sudo ./scripts/10-setup-backups.sh
+   sudo ./scripts/11-setup-data-pipeline.sh
    ```
 
 3. **Test bandwidth usage**

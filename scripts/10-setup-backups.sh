@@ -288,7 +288,7 @@ RESTIC_PASSWORD_FILE="/root/.restic-password"
 
 if [[ ! -s "${RESTIC_PASSWORD_FILE}" ]]; then
     echo "ERROR: Restic password file missing at ${RESTIC_PASSWORD_FILE}"
-    echo "Run scripts/09-setup-backups.sh again after setting RESTIC_PASSWORD in config.sh."
+    echo "Run scripts/10-setup-backups.sh again after setting RESTIC_PASSWORD in config.sh."
     exit 1
 fi
 
@@ -345,7 +345,7 @@ GDRIVE_SHARED_REMOTE="${GDRIVE_SHARED_REMOTE}"
 
 if [[ ! -s "${RESTIC_PASSWORD_FILE}" ]]; then
     echo "ERROR: Restic password file missing at ${RESTIC_PASSWORD_FILE}"
-    echo "Run scripts/09-setup-backups.sh again after setting RESTIC_PASSWORD in config.sh."
+    echo "Run scripts/10-setup-backups.sh again after setting RESTIC_PASSWORD in config.sh."
     exit 1
 fi
 
@@ -637,7 +637,7 @@ ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 
 if [[ ! -s "${RESTIC_PASSWORD_FILE}" ]]; then
     echo "ERROR: Restic password file missing at ${RESTIC_PASSWORD_FILE}"
-    echo "Run scripts/09-setup-backups.sh again after setting RESTIC_PASSWORD in config.sh."
+    echo "Run scripts/10-setup-backups.sh again after setting RESTIC_PASSWORD in config.sh."
     exit 1
 fi
 

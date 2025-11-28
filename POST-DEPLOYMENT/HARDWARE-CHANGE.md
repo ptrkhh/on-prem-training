@@ -251,7 +251,7 @@
 
 9. **Verify everything works**
    ```bash
-   ./scripts/11-run-tests.sh
+   ./scripts/12-run-tests.sh
    ```
 
 10. **Decommission old server**

@@ -470,7 +470,7 @@ Cloudflare Edge ──────────────> Local DNS/Hosts
 
    ```bash
    cd ~/train-server/scripts
-   sudo ./06-setup-cloudflare-tunnel.sh
+   sudo ./07-setup-cloudflare-tunnel.sh
    ```
 
 2. **Configure Public Hostname**
@@ -530,7 +530,7 @@ After configuration, local users get:
 
 ```bash
 cd ~/train-server/scripts
-sudo ./07-setup-firewall.sh
+sudo ./08-setup-firewall.sh
 ```
 
 This configures:
@@ -601,7 +601,7 @@ Alerts are sent for:
 
 ```bash
 cd ~/train-server/scripts
-sudo ./08-setup-monitoring.sh
+sudo ./09-setup-monitoring.sh
 ```
 
 This installs:
@@ -633,7 +633,7 @@ This installs:
 
 ```bash
 cd ~/train-server/scripts
-sudo ./09-setup-backups.sh
+sudo ./10-setup-backups.sh
 ```
 
 This configures:
@@ -699,7 +699,7 @@ After migration, daily sync runs at 4 AM:
 
 ```bash
 cd ~/train-server/scripts
-sudo ./10-setup-data-pipeline.sh
+sudo ./11-setup-data-pipeline.sh
 ```
 
 This configures:
@@ -728,7 +728,7 @@ Run the comprehensive test suite:
 
 ```bash
 cd ~/train-server/scripts
-sudo ./11-run-tests.sh
+sudo ./12-run-tests.sh
 ```
 
 This tests:

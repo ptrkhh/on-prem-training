@@ -311,7 +311,7 @@
    docker compose ps
    nvidia-smi
    df -h
-   ./scripts/11-run-tests.sh
+   ./scripts/12-run-tests.sh
    ```
 
 9. **Notify users of completion**

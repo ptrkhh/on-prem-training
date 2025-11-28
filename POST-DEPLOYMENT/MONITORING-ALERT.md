@@ -32,7 +32,7 @@
 
 4. **Re-run monitoring setup**
    ```bash
-   sudo ./scripts/08-setup-monitoring.sh
+   sudo ./scripts/09-setup-monitoring.sh
    ```
 
 5. **Test alert**
@@ -121,7 +121,7 @@ UseSTARTTLS=YES
 
 2. **Re-run monitoring setup**
    ```bash
-   sudo ./scripts/08-setup-monitoring.sh
+   sudo ./scripts/09-setup-monitoring.sh
    ```
 
 3. **Test new thresholds** (optional)
