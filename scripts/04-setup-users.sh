@@ -125,9 +125,9 @@ fi
 
 USER_INDEX=0
 for USERNAME in "${USER_ARRAY[@]}"; do
-    UID=$((FIRST_UID + USER_INDEX))
+    USER_UID=$((FIRST_UID + USER_INDEX))
 
-    echo "Setting up user: ${USERNAME} (UID: ${UID})"
+    echo "Setting up user: ${USERNAME} (UID: ${USER_UID})"
 
     # Create user if doesn't exist
     if id "${USERNAME}" &>/dev/null; then
@@ -135,18 +135,18 @@ for USERNAME in "${USER_ARRAY[@]}"; do
 
         # Verify existing user has correct UID
         EXISTING_UID=$(id -u "${USERNAME}")
-        if [[ "${EXISTING_UID}" -ne "${UID}" ]]; then
-            echo "  ⚠ WARNING: User ${USERNAME} has UID ${EXISTING_UID}, expected ${UID}"
+        if [[ "${EXISTING_UID}" -ne "${USER_UID}" ]]; then
+            echo "  ⚠ WARNING: User ${USERNAME} has UID ${EXISTING_UID}, expected ${USER_UID}"
             echo "    This may cause permission issues. Consider:"
             echo "    1. Using the existing UID (update FIRST_UID in config.sh)"
             echo "    2. Deleting and recreating the user: userdel ${USERNAME} && re-run script"
-            echo "    3. Manually changing the UID: usermod -u ${UID} ${USERNAME}"
+            echo "    3. Manually changing the UID: usermod -u ${USER_UID} ${USERNAME}"
         else
-            echo "  ✓ User ${USERNAME} has correct UID: ${UID}"
+            echo "  ✓ User ${USERNAME} has correct UID: ${USER_UID}"
         fi
     else
         # Create user with specific UID
-        useradd -m -u "${UID}" -s /bin/bash -d "${MOUNT_POINT}/homes/${USERNAME}" "${USERNAME}"
+        useradd -m -u "${USER_UID}" -s /bin/bash -d "${MOUNT_POINT}/homes/${USERNAME}" "${USERNAME}"
         echo "  Created user ${USERNAME}"
     fi
 
