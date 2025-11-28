@@ -35,6 +35,94 @@ echo ""
 # Check if running as root
 require_root
 
+# ============================================================================
+# CRITICAL PRE-FLIGHT CHECKS - Fail early if prerequisites are not met
+# ============================================================================
+
+echo ""
+echo "=== Pre-flight Checks ==="
+echo ""
+
+# Check 1: Ensure rclone is installed
+echo "Checking if rclone is installed..."
+if ! command -v rclone &> /dev/null; then
+    echo ""
+    echo "❌ ERROR: rclone is NOT installed!"
+    echo ""
+    echo "Please install rclone before running this script:"
+    echo ""
+    echo "  Option 1 - Install via package manager (recommended):"
+    echo "    sudo apt-get update && sudo apt-get install -y rclone"
+    echo ""
+    echo "  Option 2 - Install latest version from rclone.org:"
+    echo "    curl https://rclone.org/install.sh | sudo bash"
+    echo ""
+    echo "After installation, you must configure rclone with:"
+    echo "  sudo rclone config"
+    echo ""
+    exit 1
+fi
+echo "✓ rclone is installed: $(rclone version | head -n1)"
+
+# Check 2: Ensure rclone is configured (has a valid config)
+echo "Checking if rclone is configured..."
+
+# Check if root has rclone config
+ROOT_CONFIG="/root/.config/rclone/rclone.conf"
+USER_CONFIG=""
+
+# Try to find user config if SUDO_USER is set
+if [[ -n "${SUDO_USER}" && "${SUDO_USER}" != "root" ]]; then
+    USER_CONFIG="/home/${SUDO_USER}/.config/rclone/rclone.conf"
+fi
+
+# Check if either root or user has a config
+HAS_CONFIG=false
+if [[ -f "${ROOT_CONFIG}" && -s "${ROOT_CONFIG}" ]]; then
+    HAS_CONFIG=true
+    echo "✓ Found rclone config for root"
+elif [[ -n "${USER_CONFIG}" && -f "${USER_CONFIG}" && -s "${USER_CONFIG}" ]]; then
+    HAS_CONFIG=true
+    echo "✓ Found rclone config for user ${SUDO_USER}"
+else
+    # Search for any user config in /home
+    for user_home in /home/*; do
+        if [[ -f "${user_home}/.config/rclone/rclone.conf" && -s "${user_home}/.config/rclone/rclone.conf" ]]; then
+            HAS_CONFIG=true
+            username=$(basename "${user_home}")
+            echo "✓ Found rclone config for user ${username}"
+            break
+        fi
+    done
+fi
+
+if [[ "${HAS_CONFIG}" != "true" ]]; then
+    echo ""
+    echo "❌ ERROR: rclone is NOT configured!"
+    echo ""
+    echo "Before running this script, you must configure rclone to access your Google Drive:"
+    echo ""
+    echo "  1. Run: sudo rclone config"
+    echo "  2. Choose 'n' for new remote"
+    echo "  3. Name the remote (e.g., 'gdrive-shared')"
+    echo "  4. Choose 'drive' for Google Drive"
+    echo "  5. Follow the prompts to authenticate with OAuth"
+    echo "  6. When asked about Shared Drive/Team Drive, choose 'yes' and select your Shared Drive"
+    echo ""
+    echo "For detailed instructions, see:"
+    echo "  - SETUP-GUIDE.md"
+    echo "  - https://rclone.org/drive/"
+    echo ""
+    echo "Note: This script requires rclone to be configured for a Google Workspace Shared Drive,"
+    echo "      not a personal Google Drive."
+    echo ""
+    exit 1
+fi
+
+echo ""
+echo "✅ All pre-flight checks passed"
+echo ""
+
 # Validate BTRFS storage is properly mounted
 echo "Validating BTRFS storage..."
 if ! mountpoint -q "${MOUNT_POINT}"; then
@@ -60,15 +148,10 @@ fi
 echo "✓ BTRFS storage validation passed"
 echo ""
 
-# Step 1: Install rclone
-echo "=== Step 1: Installing rclone ==="
-if ! command -v rclone &> /dev/null; then
-    echo "Installing rclone via apt..."
-    apt-get update
-    apt-get install -y rclone
-else
-    echo "rclone already installed: $(rclone version | head -n1)"
-fi
+# Step 1: Ensure root has rclone config (auto-import if needed)
+echo "=== Step 1: Ensuring root has rclone config ==="
+echo "rclone version: $(rclone version | head -n1)"
+echo ""
 
 # Auto-import rclone config from sudo user if root doesn't have one
 if [[ ! -f /root/.config/rclone/rclone.conf ]]; then
@@ -104,9 +187,13 @@ fi
 # Verify root has rclone config before proceeding
 if [[ ! -f /root/.config/rclone/rclone.conf ]]; then
     echo ""
-    echo "❌ ERROR: Root does not have rclone configuration!"
-    echo "Please configure rclone as root: sudo rclone config"
-    echo "Or ensure a user has configured rclone and re-run this script."
+    echo "❌ ERROR: Could not import rclone configuration to root!"
+    echo ""
+    echo "A user rclone config exists but could not be copied to root."
+    echo "Please configure rclone as root manually:"
+    echo "  sudo rclone config"
+    echo ""
+    echo "Or check permissions on the user's rclone config file."
     exit 1
 fi
 

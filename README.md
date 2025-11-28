@@ -194,7 +194,30 @@ Break-even: ~1.5 months (even if buying all new hardware)
 
 ## Quick Start (~2-3 hours total, 30 minutes hands-on)
 
-**Prerequisites**: Fresh Ubuntu 24.04 LTS or Debian 12+ installation on dedicated hardware
+**Prerequisites**:
+- Fresh Ubuntu 24.04 LTS or Debian 12+ installation on dedicated hardware
+- **rclone installed AND configured** (required before running script 02)
+
+**IMPORTANT - rclone Setup (Required!):**
+
+Before running the setup scripts, you MUST install and configure rclone:
+
+```bash
+# Install rclone
+sudo apt-get update && sudo apt-get install -y rclone
+
+# Configure rclone for Google Workspace Shared Drive
+sudo rclone config
+# Follow the prompts:
+# - Choose 'n' for new remote
+# - Name it (e.g., 'gdrive-shared')
+# - Choose 'drive' for Google Drive
+# - Authenticate with OAuth (opens browser)
+# - When asked about Shared Drive/Team Drive, choose 'yes'
+# - Select your Shared Drive from the list
+```
+
+**Setup Steps:**
 
 ```bash
 # 1. Clone and configure
@@ -210,6 +233,7 @@ chmod +x scripts/*.sh scripts/lib/*.sh docker/*.sh
 cd docker && ./generate-compose.sh && cd ..
 
 # 4. Run setup scripts (scripts 01-10, reboot after 01)
+#    Note: Script 02 will FAIL if rclone is not installed/configured
 # 5. Build and start containers
 # 6. Run tests
 ```

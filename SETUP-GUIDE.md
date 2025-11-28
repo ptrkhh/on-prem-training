@@ -85,7 +85,53 @@ After setup, you should have:
 
 The `/shared` directory should be mounted from a Google Workspace Shared Drive with local caching for near-disk performance.
 
-**Run the Google Drive setup script:**
+#### Prerequisites (CRITICAL!)
+
+**⚠️ BEFORE running the setup script, you MUST:**
+
+1. **Install rclone:**
+   ```bash
+   sudo apt-get update && sudo apt-get install -y rclone
+
+   # Verify installation
+   rclone version
+   ```
+
+2. **Configure rclone for your Google Workspace Shared Drive:**
+   ```bash
+   sudo rclone config
+   ```
+
+   Follow the interactive prompts:
+   - Choose `n` for new remote
+   - Name: Enter your remote name (e.g., `gdrive-shared`)
+   - Storage: Choose `drive` (Google Drive)
+   - Client ID/Secret: Leave blank or use your own OAuth credentials
+   - Scope: Choose `drive` (full access)
+   - Service Account: Leave blank (unless using service account)
+   - Advanced config: Choose `n` (no)
+   - Auto config: Choose `y` (opens browser for OAuth authentication)
+   - **Configure for Shared Drive**: Choose `y` (THIS IS CRITICAL!)
+   - **Select your Shared Drive** from the list
+   - Confirm configuration
+
+3. **Verify rclone can access your Shared Drive:**
+   ```bash
+   # List contents of your Shared Drive (replace 'gdrive-shared' with your remote name)
+   sudo rclone lsd gdrive-shared: --max-depth 1
+   ```
+
+   If this command fails, DO NOT proceed. Fix your rclone configuration first.
+
+**Important Notes:**
+- You must use a Google Workspace **Shared Drive** (Team Drive), NOT a personal Google Drive
+- The rclone configuration must be done as root (`sudo rclone config`)
+- The script will validate these prerequisites and **FAIL EARLY** if rclone is not installed or configured
+- Personal Google Drives have different quota and sharing limitations
+
+#### Run the Setup Script
+
+**After completing all prerequisites above, run:**
 
 ```bash
 cd ~/train-server/scripts
@@ -93,12 +139,13 @@ sudo ./02-setup-gdrive-shared.sh
 ```
 
 This script will:
-1. Install rclone (if not already installed)
-2. Configure OAuth access to Google Workspace Shared Drive
-3. Create local cache directory
-4. Mount Shared Drive to `/mnt/storage/shared` with VFS cache
-5. Configure systemd service for automatic mounting on boot
-6. Setup health monitoring (checks mount every 5 minutes)
+1. Verify rclone is installed and configured (fails early if not)
+2. Auto-import rclone config to root if needed
+3. Validate OAuth access to Google Workspace Shared Drive
+4. Create local cache directory
+5. Mount Shared Drive to `/mnt/storage/shared` with VFS cache
+6. Configure systemd service for automatic mounting on boot
+7. Setup health monitoring (checks mount every 5 minutes)
 
 **Configuration details:**
 - **Cache mode**: Full VFS cache (files downloaded on first access, cached locally)
