@@ -57,6 +57,11 @@ echo "=== Step 1: Installing Docker ==="
 # Remove old versions
 apt remove -y docker docker-engine docker.io containerd runc 2>/dev/null || true
 
+# Remove any existing Docker repository configurations to avoid conflicts
+# This must be done BEFORE apt update to prevent GPG key conflicts
+rm -f /etc/apt/sources.list.d/docker.list
+rm -f /etc/apt/sources.list.d/docker.sources
+
 # Install dependencies
 apt update
 apt install -y \
@@ -123,9 +128,8 @@ echo ""
 echo "=== Step 3: Installing NVIDIA Container Toolkit ==="
 
 # Add NVIDIA Container Toolkit repository
-distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
     sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
     tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 
@@ -238,8 +242,9 @@ CUDA_VERSION=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader | hea
 echo "Detected NVIDIA driver version: ${CUDA_VERSION}"
 DRIVER_MAJOR=$(echo ${CUDA_VERSION} | cut -d. -f1)
 
+# Use valid CUDA image tags
 if [[ ${DRIVER_MAJOR} -ge 550 ]]; then
-    CUDA_IMAGE="nvidia/cuda:12.4.1-base-ubuntu24.04"
+    CUDA_IMAGE="nvidia/cuda:12.6.0-base-ubuntu22.04"
 elif [[ ${DRIVER_MAJOR} -ge 535 ]]; then
     CUDA_IMAGE="nvidia/cuda:12.2.0-base-ubuntu22.04"
 elif [[ ${DRIVER_MAJOR} -ge 525 ]]; then
@@ -250,15 +255,19 @@ fi
 
 echo "Selected CUDA image: ${CUDA_IMAGE}"
 
-# Test with selected version, fall back to latest if it fails
+# Test with selected version, fall back to 12.6.0 if it fails
 if ! docker run --rm --gpus all ${CUDA_IMAGE} nvidia-smi; then
     echo "WARNING: Selected CUDA image ${CUDA_IMAGE} failed"
-    echo "Falling back to latest CUDA image..."
-    CUDA_IMAGE="nvidia/cuda:latest"
+    echo "Falling back to CUDA 12.6.0 image..."
+    CUDA_IMAGE="nvidia/cuda:12.6.0-base-ubuntu22.04"
 
     if ! docker run --rm --gpus all ${CUDA_IMAGE} nvidia-smi; then
-        echo "ERROR: NVIDIA runtime test failed with both specific and latest CUDA images"
+        echo "ERROR: NVIDIA runtime test failed"
         echo "This may indicate a driver/runtime compatibility issue"
+        echo "Please check:"
+        echo "  1. NVIDIA drivers are properly installed"
+        echo "  2. Docker daemon has been restarted: systemctl restart docker"
+        echo "  3. Your user has access to GPU (nvidia-smi works)"
         exit 1
     fi
 fi
@@ -301,10 +310,10 @@ echo "NVIDIA Driver:"
 nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
 echo ""
 echo "Test GPU in container:"
-docker run --rm --gpus all nvidia/cuda:latest nvidia-smi
+docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu22.04 nvidia-smi
 echo ""
 echo "Next steps:"
 echo "  1. Verify Docker is working: docker run hello-world"
-echo "  2. Verify GPU access: docker run --rm --gpus all nvidia/cuda:latest nvidia-smi"
+echo "  2. Verify GPU access: docker run --rm --gpus all nvidia/cuda:12.6.0-base-ubuntu22.04 nvidia-smi"
 echo "  3. Deploy services: cd docker && docker compose up -d"
 echo ""
