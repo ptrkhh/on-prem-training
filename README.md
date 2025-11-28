@@ -307,32 +307,12 @@ cd docker && ./generate-compose.sh && cd ..
 
 ## Example Configurations
 
-### Original Spec (5 users, 1TB NVMe, 4x20TB)
-
 ```bash
 USERS="alice bob charlie dave eve"
 NVME_DEVICE="/dev/nvme0n1"
 HDD_DEVICES="/dev/sda /dev/sdb /dev/sdc /dev/sdd"
 BTRFS_RAID_LEVEL="raid10"
 BCACHE_MODE="writeback"
-```
-
-### Minimal (2 users, 2 disks, no SSD)
-
-```bash
-USERS="admin user1"
-NVME_DEVICE=""  # None
-HDD_DEVICES="/dev/sdb /dev/sdc"
-BTRFS_RAID_LEVEL="raid1"
-BCACHE_MODE="none"
-```
-
-### Large (10 users, 6 disks)
-
-```bash
-USERS="u1 u2 u3 u4 u5 u6 u7 u8 u9 u10"
-HDD_DEVICES="/dev/sdb /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg"
-BTRFS_RAID_LEVEL="raid10"
 MEMORY_GUARANTEE_GB=16  # Less RAM per user
 MEMORY_LIMIT_GB=64
 ```

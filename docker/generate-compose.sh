@@ -88,7 +88,7 @@ if command -v promtool &>/dev/null; then
 else
     echo "promtool not found locally; using prom/prometheus container for validation..."
     PROMTOOL_TIMEOUT_SECONDS=600
-    if ! timeout ${PROMTOOL_TIMEOUT_SECONDS} docker run --rm -v "${SCRIPT_DIR}/prometheus:/etc/prometheus:ro" prom/prometheus promtool check config /etc/prometheus/prometheus.yml >/tmp/promtool.log 2>&1; then
+    if ! timeout ${PROMTOOL_TIMEOUT_SECONDS} docker run --rm --entrypoint promtool -v "${SCRIPT_DIR}/prometheus:/etc/prometheus:ro" prom/prometheus check config /etc/prometheus/prometheus.yml >/tmp/promtool.log 2>&1; then
         cat /tmp/promtool.log
         echo "ERROR: Prometheus configuration validation failed or timed out after ${PROMTOOL_TIMEOUT_SECONDS}s"
         echo "This could indicate:"
@@ -120,13 +120,13 @@ if [[ -n "${CUDA_VERSION}" ]]; then
     echo "Using manually configured CUDA version: ${CUDA_BUILD_VERSION}"
     echo "  (Set in config.sh CUDA_VERSION variable)"
 elif command -v nvidia-smi &>/dev/null; then
-    # Query maximum supported CUDA version directly from nvidia-smi
-    DETECTED_CUDA=$(nvidia-smi --query-gpu=cuda_version --format=csv,noheader | head -n1)
+    # Parse CUDA version from nvidia-smi header output
+    DETECTED_CUDA=$(nvidia-smi | grep -oP "CUDA Version: \K[0-9]+\.[0-9]+" | head -n1)
 
     if [[ -n "${DETECTED_CUDA}" ]]; then
         CUDA_BUILD_VERSION="${DETECTED_CUDA}"
         echo "Auto-detected maximum supported CUDA version: ${CUDA_BUILD_VERSION}"
-        echo "  (Source: nvidia-smi --query-gpu=cuda_version)"
+        echo "  (Source: nvidia-smi output)"
     else
         # Cannot detect CUDA version - require manual specification
         echo "ERROR: Could not auto-detect CUDA version from nvidia-smi"
@@ -235,7 +235,6 @@ volumes:
   portainer-data:
   dozzle-data:
   guacamole-db-data:
-  kasm-data:
 
 services:
   #============================================================================
@@ -376,32 +375,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
-  # Kasm Workspaces - Container Streaming Platform
-  kasm:
-    image: kasmweb/workspaces:latest
-    container_name: kasm
-    restart: unless-stopped
-    privileged: true
-    environment:
-      - KASM_PORT=443
-    volumes:
-      - kasm-data:/opt/kasm/current
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - ml-net
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fk https://localhost:443/api/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.kasm.rule=Host(\"kasm.${DOMAIN}\")"
-      - "traefik.http.routers.kasm.entrypoints=web"
-      - "traefik.http.services.kasm.loadbalancer.server.port=443"
-      - "traefik.http.services.kasm.loadbalancer.server.scheme=https"
 
   # Netdata - Real-time System Monitoring
   netdata:
@@ -614,7 +587,7 @@ EOFMAIN
 
 USER_INDEX=0
 for USERNAME in ${USER_ARRAY[@]}; do
-    UID=$((FIRST_UID + USER_INDEX))
+    USER_UID=$((FIRST_UID + USER_INDEX))
 
     # Pre-process username to uppercase for environment variable lookup
     USERNAME_UPPER=$(echo "${USERNAME}" | tr '[:lower:]' '[:upper:]')
@@ -628,10 +601,10 @@ for USERNAME in ${USER_ARRAY[@]}; do
     # RDP port: RDP_BASE_PORT + user_index
     RDP_PORT=$((RDP_BASE_PORT + USER_INDEX))
 
-    # noVNC port: NOVNC_BASE_PORT + user_index
-    NOVNC_PORT=$((NOVNC_BASE_PORT + USER_INDEX))
+    # KasmVNC web interface port: NOVNC_BASE_PORT + user_index (reusing the same base port)
+    KASMVNC_PORT=$((NOVNC_BASE_PORT + USER_INDEX))
 
-    echo "Adding user container: ${USERNAME} (UID: ${UID}, SSH: ${SSH_PORT}, VNC: ${VNC_PORT}, RDP: ${RDP_PORT}, noVNC: ${NOVNC_PORT})"
+    echo "Adding user container: ${USERNAME} (UID: ${USER_UID}, SSH: ${SSH_PORT}, VNC: ${VNC_PORT}, RDP: ${RDP_PORT}, KasmVNC: ${KASMVNC_PORT})"
 
     cat >> "${OUTPUT_FILE}" << EOF
   # User: ${USERNAME}
@@ -649,8 +622,8 @@ for USERNAME in ${USER_ARRAY[@]}; do
     privileged: true  # For Docker-in-Docker
     environment:
       - USER_NAME=${USERNAME}
-      - USER_UID=${UID}
-      - USER_GID=${UID}
+      - USER_UID=${USER_UID}
+      - USER_GID=${USER_UID}
       - USER_PASSWORD=\${USER_${USERNAME_UPPER}_PASSWORD:-changeme}
       - CODE_SERVER_PASSWORD=\${USER_${USERNAME_UPPER}_PASSWORD:-changeme}
       - USER_GROUPS=${USER_GROUPS}
@@ -685,15 +658,18 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - "${SSH_PORT}:22"         # SSH (for terminal access)
       - "${VNC_PORT}:5900"       # VNC (for Guacamole/direct VNC clients)
       - "${RDP_PORT}:3389"       # XRDP (for Guacamole/direct RDP clients)
-      - "${NOVNC_PORT}:6080"     # noVNC (HTML5 VNC client)
-    mem_limit: ${MEMORY_LIMIT_GB:-100}G           # Hard memory cap (applies without Swarm/compat mode)
-    mem_reservation: ${MEMORY_GUARANTEE_GB:-32}G  # Soft memory reservation for proactive reclaim
-    cpus: '${CPU_LIMIT:-32}'                      # Maximum CPU cores per container (prevents monopolization)
-    device_requests:
-      - driver: nvidia
-        count: all
-        capabilities:
-          - gpu
+      - "${KASMVNC_PORT}:6901"   # KasmVNC web interface (HTML5 client)
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT_GB:-100}G
+          cpus: '${CPU_LIMIT:-32}'
+        reservations:
+          memory: ${MEMORY_GUARANTEE_GB:-32}G
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     healthcheck:
       test: ["CMD", "pgrep", "-f", "Xvnc"]
       interval: 30s
@@ -704,11 +680,11 @@ for USERNAME in ${USER_ARRAY[@]}; do
       - ml-net
     labels:
       - "traefik.enable=true"
-      # Desktop (noVNC HTML5)
+      # Desktop (KasmVNC web interface)
       - "traefik.http.routers.${USERNAME}-desktop.rule=Host(\"${USERNAME}-desktop.${DOMAIN}\") || Host(\"${USERNAME}.${DOMAIN}\")"
       - "traefik.http.routers.${USERNAME}-desktop.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-desktop.service=${USERNAME}-desktop"
-      - "traefik.http.services.${USERNAME}-desktop.loadbalancer.server.port=6080"
+      - "traefik.http.services.${USERNAME}-desktop.loadbalancer.server.port=6901"
       # Code-server (VS Code in browser)
       - "traefik.http.routers.${USERNAME}-code.rule=Host(\"${USERNAME}-code.${DOMAIN}\")"
       - "traefik.http.routers.${USERNAME}-code.entrypoints=web"
@@ -735,7 +711,7 @@ echo "✅ Generated: ${OUTPUT_FILE}"
 echo ""
 echo "Services created:"
 echo "  - Infrastructure: 9 services (Traefik, Netdata, Prometheus, Grafana, etc.)"
-echo "  - User workspaces: ${USER_COUNT} containers (with VNC/RDP via Guacamole/Kasm)"
+echo "  - User workspaces: ${USER_COUNT} containers (KasmVNC + Guacamole backup)"
 echo ""
 echo "Access URLs (via Cloudflare Tunnel or local network):"
 echo "  Infrastructure:"
@@ -747,9 +723,8 @@ echo "    - FileBrowser: http://files.${DOMAIN}"
 echo "    - Dozzle (Logs): http://logs.${DOMAIN}"
 echo "    - Portainer: http://portainer.${DOMAIN}"
 echo ""
-echo "  Remote Desktop Gateways:"
-echo "    - Guacamole: http://guacamole.${DOMAIN} (primary web gateway)"
-echo "    - Kasm Workspaces: http://kasm.${DOMAIN} (alternative streaming platform)"
+echo "  Remote Desktop Gateway:"
+echo "    - Guacamole: http://guacamole.${DOMAIN} (web-based remote desktop gateway)"
 echo ""
 echo "  Per-user services:"
 USER_INDEX=0
@@ -757,13 +732,13 @@ for USERNAME in ${USER_ARRAY[@]}; do
     SSH_PORT=$((SSH_BASE_PORT + USER_INDEX))
     VNC_PORT=$((VNC_BASE_PORT + USER_INDEX))
     RDP_PORT=$((RDP_BASE_PORT + USER_INDEX))
-    NOVNC_PORT=$((NOVNC_BASE_PORT + USER_INDEX))
+    KASMVNC_PORT=$((NOVNC_BASE_PORT + USER_INDEX))
     echo "    ${USERNAME}:"
-    echo "      - Desktop (Web): http://${USERNAME}-desktop.${DOMAIN} or http://${USERNAME}.${DOMAIN}"
-    echo "      - Desktop (Guacamole): http://guacamole.${DOMAIN} → Select ${USERNAME}-desktop"
-    echo "      - Desktop (Kasm): http://kasm.${DOMAIN} → Launch ${USERNAME} workspace"
+    echo "      - Desktop (KasmVNC): http://${USERNAME}-desktop.${DOMAIN} or http://${USERNAME}.${DOMAIN}"
+    echo "      - Desktop (Guacamole backup): http://guacamole.${DOMAIN} → Select ${USERNAME}-desktop"
     echo "      - Desktop (VNC Direct): SERVER_IP:${VNC_PORT}"
     echo "      - Desktop (RDP Direct): SERVER_IP:${RDP_PORT}"
+    echo "      - Desktop (KasmVNC Direct): SERVER_IP:${KASMVNC_PORT}"
     echo "      - VS Code: http://${USERNAME}-code.${DOMAIN}"
     echo "      - Jupyter: http://${USERNAME}-jupyter.${DOMAIN}"
     echo "      - TensorBoard: http://${USERNAME}-tensorboard.${DOMAIN}"
@@ -777,7 +752,7 @@ echo "  - All services accessible via http://hostname.${DOMAIN}"
 echo "  - SSH directly to ports ${SSH_BASE_PORT}, $((SSH_BASE_PORT+1)), $((SSH_BASE_PORT+2)), etc."
 echo "  - VNC directly to ports ${VNC_BASE_PORT}, $((VNC_BASE_PORT+1)), $((VNC_BASE_PORT+2)), etc."
 echo "  - RDP directly to ports ${RDP_BASE_PORT}, $((RDP_BASE_PORT+1)), $((RDP_BASE_PORT+2)), etc."
-echo "  - noVNC (HTML5) to ports ${NOVNC_BASE_PORT}, $((NOVNC_BASE_PORT+1)), $((NOVNC_BASE_PORT+2)), etc."
+echo "  - KasmVNC web to ports ${NOVNC_BASE_PORT}, $((NOVNC_BASE_PORT+1)), $((NOVNC_BASE_PORT+2)), etc."
 echo ""
 echo "Cloudflare Tunnel (internet access):"
 echo "  - Routes *.${DOMAIN} through Cloudflare to Traefik on port 80"
@@ -851,6 +826,6 @@ echo "     export DOCKER_BUILDKIT=1"
 echo "     export COMPOSE_DOCKER_CLI_BUILD=1"
 echo "     docker compose build --parallel"
 echo "  3. Start services: docker compose up -d"
-echo "     (Per-user CPU/RAM limits now apply automatically via mem_limit/cpus — no Swarm compatibility flag required.)"
+echo "     (Per-user CPU/RAM limits are applied via deploy.resources)"
 echo "  4. Setup Cloudflare Tunnel (for remote access)"
 echo ""

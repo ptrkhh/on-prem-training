@@ -79,7 +79,7 @@
    ```bash
    cd ~/train-server/docker
    cat Dockerfile.user-workspace | grep FROM
-   # Example: FROM nvidia/cuda:12.4.0-devel-ubuntu24.04
+   # Example: FROM nvidia/cuda:12.4.0-ubuntu24.04
    ```
 
 2. **Update base image tag**
@@ -87,7 +87,7 @@
    nano Dockerfile.user-workspace
 
    # Update FROM line
-   FROM nvidia/cuda:12.6.0-devel-ubuntu24.04
+   FROM nvidia/cuda:12.6.0-ubuntu24.04
    ```
 
 3. **Test with single user first**

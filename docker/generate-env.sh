@@ -42,9 +42,13 @@ cat > "${ENV_FILE}" << 'HEADER'
 
 HEADER
 
-# Add Grafana password
+# Add service passwords
 echo "# Grafana" >> "${ENV_FILE}"
 echo "GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}" >> "${ENV_FILE}"
+echo "" >> "${ENV_FILE}"
+
+echo "# Guacamole Database" >> "${ENV_FILE}"
+echo "GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD}" >> "${ENV_FILE}"
 echo "" >> "${ENV_FILE}"
 
 # Add per-user passwords
@@ -75,16 +79,22 @@ echo "# Mount point for storage" >> "${ENV_FILE}"
 echo "MOUNT_POINT=${MOUNT_POINT}" >> "${ENV_FILE}"
 echo "" >> "${ENV_FILE}"
 
+echo "# Docker network configuration" >> "${ENV_FILE}"
+echo "DOCKER_SUBNET=${DOCKER_SUBNET}" >> "${ENV_FILE}"
+echo "" >> "${ENV_FILE}"
+
 echo "✅ Generated: ${ENV_FILE}"
 echo ""
 echo "Contents:"
 echo "  - GRAFANA_ADMIN_PASSWORD"
+echo "  - GUACAMOLE_DB_PASSWORD"
 for username in "${USER_ARRAY[@]}"; do
     USERNAME_UPPER=$(echo "${username}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
     echo "  - USER_${USERNAME_UPPER}_PASSWORD"
 done
 echo "  - DOMAIN (${DOMAIN})"
 echo "  - MOUNT_POINT (${MOUNT_POINT})"
+echo "  - DOCKER_SUBNET (${DOCKER_SUBNET})"
 echo ""
 
 if [[ ${WARNINGS} -gt 0 ]]; then
