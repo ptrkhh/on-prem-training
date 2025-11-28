@@ -154,6 +154,56 @@ else
     exit 1
 fi
 
+# Fetch latest patch version from Docker Hub if only major.minor version was detected
+if [[ -n "${CUDA_BUILD_VERSION}" ]]; then
+    # Check if version is in major.minor format (e.g., 13.0) without patch version
+    if [[ "${CUDA_BUILD_VERSION}" =~ ^[0-9]+\.[0-9]+$ ]]; then
+        echo ""
+        echo "=== Fetching Latest CUDA Patch Version from Docker Hub ==="
+        echo "Detected CUDA version: ${CUDA_BUILD_VERSION} (major.minor only)"
+        echo "Querying Docker Hub for latest patch version..."
+
+        # Suffix for the Docker image tag
+        CUDA_IMAGE_SUFFIX="cudnn-runtime-ubuntu24.04"
+
+        # Fetch the latest patch version from Docker Hub
+        LATEST_PATCH_VERSION=$(curl -s "https://registry.hub.docker.com/v2/repositories/nvidia/cuda/tags/?page_size=200" | \
+python3 -c "
+import sys, json
+cv = '${CUDA_BUILD_VERSION}'
+sf = '${CUDA_IMAGE_SUFFIX}'
+try:
+    data = json.load(sys.stdin)
+    tags = [t['name'] for t in data['results']
+            if t['name'].startswith(cv + '.') and t['name'].endswith(sf)]
+    if tags:
+        # Sort by version number (extract version part before first dash)
+        tags.sort(key=lambda x: [int(n) for n in x.split('-')[0].split('.')])
+        latest_tag = tags[-1]
+        # Extract just the version part (before the first dash)
+        version = latest_tag.split('-')[0]
+        print(version)
+    else:
+        sys.exit(1)
+except Exception as e:
+    print(f'Error: {e}', file=sys.stderr)
+    sys.exit(1)
+" 2>/dev/null)
+
+        if [[ -n "${LATEST_PATCH_VERSION}" ]]; then
+            CUDA_BUILD_VERSION="${LATEST_PATCH_VERSION}"
+            echo "✓ Found latest patch version: ${CUDA_BUILD_VERSION}"
+            echo "  Full image tag: nvidia/cuda:${CUDA_BUILD_VERSION}-${CUDA_IMAGE_SUFFIX}"
+        else
+            echo "⚠️  WARNING: Could not fetch latest patch version from Docker Hub"
+            echo "  Falling back to detected version: ${CUDA_BUILD_VERSION}"
+            echo "  You may want to manually specify the full version in config.sh"
+            echo "  Example: CUDA_VERSION=\"${CUDA_BUILD_VERSION}.2\""
+        fi
+        echo ""
+    fi
+fi
+
 # Validate CUDA version format
 if [[ -n "${CUDA_BUILD_VERSION}" ]]; then
     if ! [[ "${CUDA_BUILD_VERSION}" =~ ^[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then

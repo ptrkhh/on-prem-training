@@ -1,10 +1,11 @@
 # ML Training Server - User Workspace Container
 # This container behaves like a full VM with desktop, dev tools, and ML stack
 
-# Build argument for CUDA version (auto-detected from host)
+# Build argument for CUDA version (auto-detected from host or specified in config.sh)
+# The generate-compose.sh script automatically fetches the latest patch version
 ARG CUDA_VERSION=12.4.1
 
-FROM nvidia/cuda:$(CUDA_VERSION)-cudnn-runtime-ubuntu24.04
+FROM nvidia/cuda:${CUDA_VERSION}-cudnn-runtime-ubuntu24.04
 
 # Build arguments for version configuration
 ARG PYCHARM_VERSION=2024.3
