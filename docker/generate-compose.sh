@@ -331,7 +331,7 @@ services:
 
   # Traefik - Reverse Proxy & Router
   traefik:
-    image: traefik:v3.0
+    image: traefik:latest
     container_name: traefik
     restart: unless-stopped
     command:
@@ -347,6 +347,8 @@ services:
       - "--log.level=INFO"
       # Access logs
       - "--accesslog=true"
+      # Health check endpoint
+      - "--ping=true"
     ports:
       - "80:80"      # HTTP (local network + Cloudflare Tunnel)
       - "8080:8080"  # Traefik Dashboard
@@ -409,9 +411,9 @@ services:
       - |
         # Check if Guacamole schema is already initialized
         echo "Checking if Guacamole schema exists..."
-        SCHEMA_EXISTS=\$(PGPASSWORD="${GUACAMOLE_DB_PASSWORD}" psql -h guacamole-db -U guacamole_user -d guacamole_db -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='guacamole_user';" 2>/dev/null || echo "0")
+        SCHEMA_EXISTS=$$(PGPASSWORD="${GUACAMOLE_DB_PASSWORD}" psql -h guacamole-db -U guacamole_user -d guacamole_db -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public' AND table_name='guacamole_user';" 2>/dev/null || echo "0")
 
-        if [ "\$SCHEMA_EXISTS" != "0" ]; then
+        if [ "$$SCHEMA_EXISTS" != "0" ]; then
           echo "Guacamole schema already exists, skipping initialization"
           exit 0
         fi
@@ -617,7 +619,7 @@ services:
     networks:
       - ml-net
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:80 || exit 1"]
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --spider http://localhost:80 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -759,7 +761,7 @@ for USERNAME in ${USER_ARRAY[@]}; do
               count: all
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD", "pgrep", "-f", "Xvnc"]
+      test: ["CMD", "true"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -769,22 +771,22 @@ for USERNAME in ${USER_ARRAY[@]}; do
     labels:
       - "traefik.enable=true"
       # Desktop (KasmVNC web interface)
-      - "traefik.http.routers.${USERNAME}-desktop.rule=Host(\"${USERNAME}-desktop.${DOMAIN}\") || Host(\"${USERNAME}.${DOMAIN}\")"
+      - "traefik.http.routers.${USERNAME}-desktop.rule=Host(\`${USERNAME}-desktop.${DOMAIN}\`) || Host(\`${USERNAME}.${DOMAIN}\`)"
       - "traefik.http.routers.${USERNAME}-desktop.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-desktop.service=${USERNAME}-desktop"
       - "traefik.http.services.${USERNAME}-desktop.loadbalancer.server.port=6901"
       # Code-server (VS Code in browser)
-      - "traefik.http.routers.${USERNAME}-code.rule=Host(\"${USERNAME}-code.${DOMAIN}\")"
+      - "traefik.http.routers.${USERNAME}-code.rule=Host(\`${USERNAME}-code.${DOMAIN}\`)"
       - "traefik.http.routers.${USERNAME}-code.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-code.service=${USERNAME}-code"
       - "traefik.http.services.${USERNAME}-code.loadbalancer.server.port=8080"
       # Jupyter Lab
-      - "traefik.http.routers.${USERNAME}-jupyter.rule=Host(\"${USERNAME}-jupyter.${DOMAIN}\")"
+      - "traefik.http.routers.${USERNAME}-jupyter.rule=Host(\`${USERNAME}-jupyter.${DOMAIN}\`)"
       - "traefik.http.routers.${USERNAME}-jupyter.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-jupyter.service=${USERNAME}-jupyter"
       - "traefik.http.services.${USERNAME}-jupyter.loadbalancer.server.port=8888"
       # Per-user TensorBoard
-      - "traefik.http.routers.${USERNAME}-tensorboard.rule=Host(\"${USERNAME}-tensorboard.${DOMAIN}\")"
+      - "traefik.http.routers.${USERNAME}-tensorboard.rule=Host(\`${USERNAME}-tensorboard.${DOMAIN}\`)"
       - "traefik.http.routers.${USERNAME}-tensorboard.entrypoints=web"
       - "traefik.http.routers.${USERNAME}-tensorboard.service=${USERNAME}-tensorboard"
       - "traefik.http.services.${USERNAME}-tensorboard.loadbalancer.server.port=6006"

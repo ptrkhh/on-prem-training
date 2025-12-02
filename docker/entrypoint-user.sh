@@ -121,7 +121,8 @@ mkdir -p ~/.ssh
 mkdir -p ~/.local/share
 mkdir -p ~/.cache
 
-# Create convenient symlinks
+# Create convenient symlinks (remove old ones first if they exist)
+rm -rf ~/workspace-shared ~/shared-data
 ln -sf /workspace ~/workspace-shared
 ln -sf /shared ~/shared-data
 EOF

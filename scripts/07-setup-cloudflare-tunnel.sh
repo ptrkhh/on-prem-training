@@ -230,6 +230,11 @@ CONFIG_CONTENT="${CONFIG_CONTENT}
 # Write the complete configuration atomically
 echo "${CONFIG_CONTENT}" > /root/.cloudflared/config.yml
 
+# Copy config to /etc/cloudflared/ for systemd service
+mkdir -p /etc/cloudflared
+cp /root/.cloudflared/config.yml /etc/cloudflared/config.yml
+chmod 644 /etc/cloudflared/config.yml
+
 echo "Tunnel configuration created"
 fi
 
@@ -237,57 +242,45 @@ fi
 echo ""
 echo "=== Step 4: Routing DNS ==="
 
-# Helper function to check if DNS route exists
-check_dns_route() {
-    local domain="$1"
-    local list_output
-
-    if ! list_output=$(cloudflared tunnel route dns list 2>&1); then
-        echo "ERROR: Failed to list DNS routes: ${list_output}" >&2
-        return 2  # Command failed
-    fi
-
-    if echo "${list_output}" | grep -qF "${domain}"; then
-        return 0  # Route exists
-    else
-        return 1  # Route doesn't exist
-    fi
-}
-
-# Check if route already exists (idempotent)
-check_dns_route "*.${DOMAIN}"
-ROUTE_CHECK_RESULT=$?
-
-if [[ ${ROUTE_CHECK_RESULT} -eq 0 ]]; then
-    echo "DNS route for *.${DOMAIN} already exists, skipping..."
-elif [[ ${ROUTE_CHECK_RESULT} -eq 1 ]]; then
-    echo "Creating DNS route for *.${DOMAIN}..."
-    if cloudflared tunnel route dns ${TUNNEL_NAME} "*.${DOMAIN}"; then
-        echo "✓ DNS route created for *.${DOMAIN}"
+# Create DNS route (will overwrite if exists to ensure correct configuration)
+echo "Creating/updating DNS route for *.${DOMAIN}..."
+if cloudflared tunnel route dns --overwrite-dns ${TUNNEL_NAME} "*.${DOMAIN}" 2>&1 | tee /tmp/cloudflared_route.log; then
+    echo "✓ DNS route created/updated for *.${DOMAIN}"
+else
+    # Check if the error is benign (route already exists)
+    if grep -qi "already exists\|already configured" /tmp/cloudflared_route.log; then
+        echo "⚠️  DNS route already exists (this is OK)"
     else
         echo "ERROR: Failed to create DNS route"
+        echo "Check the logs above for details"
         exit 1
     fi
-elif [[ ${ROUTE_CHECK_RESULT} -eq 2 ]]; then
-    echo "ERROR: Failed to check DNS routes. Cannot proceed."
-    exit 1
 fi
+
+rm -f /tmp/cloudflared_route.log
 
 # Step 5: Install as service
 echo ""
 echo "=== Step 5: Installing tunnel as systemd service ==="
 
 # Check if service already exists
-if systemctl list-unit-files | grep -q "cloudflared.service"; then
-    echo "Cloudflare Tunnel service already installed, restarting..."
+if systemctl is-active cloudflared &>/dev/null || systemctl is-enabled cloudflared &>/dev/null; then
+    echo "Cloudflare Tunnel service already installed"
+    echo "Reloading configuration and restarting service..."
     systemctl daemon-reload
     systemctl restart cloudflared
+    echo "✓ Service restarted with new configuration"
 else
     echo "Installing Cloudflare Tunnel as systemd service..."
-    cloudflared service install
+    # Ensure config is in /etc/cloudflared/ before installing
+    if [[ ! -f /etc/cloudflared/config.yml ]]; then
+        echo "ERROR: Config not found at /etc/cloudflared/config.yml"
+        exit 1
+    fi
+    cloudflared --config /etc/cloudflared/config.yml service install
     systemctl enable cloudflared
     systemctl start cloudflared
-    echo "Cloudflare Tunnel service installed and started"
+    echo "✓ Cloudflare Tunnel service installed and started"
 fi
 
 # Verify tunnel connection

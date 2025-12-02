@@ -23,6 +23,9 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Set consistent project name to avoid network conflicts
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-on-prem-training}"
+
 # Step 1: Verify Prerequisites
 echo ""
 echo "=== Step 1: Verifying Prerequisites ==="
