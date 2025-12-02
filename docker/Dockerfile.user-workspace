@@ -107,6 +107,10 @@ RUN apt-get update && apt-get install -y \
     libxkbfile1 \
     libssl3 \
     libpixman-1-0 \
+    # noVNC dependencies (for HTML5 VNC client)
+    websockify \
+    python3-websockify \
+    novnc \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and install KasmVNC
@@ -174,6 +178,8 @@ RUN apt-get update && apt-get install -y \
 #==============================================================================
 
 # Install Python ML libraries
+# Remove conflicting system packages that pip will try to upgrade
+RUN apt-get remove -y python3-typing-extensions || true
 RUN pip3 install --break-system-packages --no-cache-dir jupyter jupyterlab ipywidgets notebook tensorboard jupyterlab-git jupyterlab-lsp
 
 # Install JupyterLab extensions

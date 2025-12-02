@@ -195,9 +195,6 @@ ingress:
 
   - hostname: remote.${DOMAIN}
     service: http://localhost:80
-
-  - hostname: kasm.${DOMAIN}
-    service: http://localhost:80
 "
 
 # Add per-user services dynamically
@@ -328,9 +325,8 @@ echo "  https://logs.${DOMAIN} → Dozzle"
 echo "  https://portainer.${DOMAIN} → Portainer"
 echo ""
 echo "Remote Desktop Gateways:"
-echo "  https://guacamole.${DOMAIN} → Apache Guacamole (primary)"
+echo "  https://guacamole.${DOMAIN} → Apache Guacamole (web-based gateway)"
 echo "  https://remote.${DOMAIN} → Apache Guacamole (alias)"
-echo "  https://kasm.${DOMAIN} → Kasm Workspaces (alternative)"
 echo ""
 echo "Per-user services (${USER_COUNT} users):"
 for USERNAME in ${USER_ARRAY[@]}; do
@@ -343,14 +339,14 @@ for USERNAME in ${USER_ARRAY[@]}; do
 done
 echo ""
 echo "Desktop Access:"
-echo "  Primary: Apache Guacamole (https://guacamole.${DOMAIN})"
-echo "    - Browser-based, no client needed"
+echo "  Apache Guacamole (https://guacamole.${DOMAIN})"
+echo "    - Browser-based gateway, no client needed"
 echo "    - Select user desktop connection from list"
 echo "    - Supports VNC and RDP protocols"
 echo ""
-echo "  Alternative: Kasm Workspaces (https://kasm.${DOMAIN})"
-echo "    - Container streaming platform"
-echo "    - Launch user workspace from dashboard"
+echo "  KasmVNC Web Interface (https://<user>-desktop.${DOMAIN})"
+echo "    - Direct HTML5 desktop access per user"
+echo "    - High-performance optimized web desktop"
 echo ""
 echo "  Direct connections (local network or via SSH tunnel):"
 echo "    - VNC: ports ${VNC_BASE_PORT}+"

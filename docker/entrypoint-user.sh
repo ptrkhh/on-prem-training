@@ -353,7 +353,7 @@ priority=9
 exitcodes=0
 
 [program:novnc]
-command=/bin/bash -c 'websockify --web /usr/share/novnc 6080 localhost:5900'
+command=/bin/bash -c 'websockify --web /usr/share/novnc 6901 localhost:5900'
 autostart=true
 autorestart=true
 startsecs=5
@@ -379,7 +379,7 @@ stderr_logfile_maxbytes=0
 exitcodes=0
 
 [program:jupyter]
-command=/bin/bash -c 'su - ${USER_NAME} -c "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root"'
+command=/bin/bash -c 'su - ${USER_NAME} -c "jupyter lab --ip=0.0.0.0 --port=8888 --no-browser"'
 autostart=true
 autorestart=true
 startsecs=10
@@ -510,14 +510,13 @@ echo "User: ${USER_NAME}"
 echo ""
 echo "Access Methods:"
 echo "  SSH:          ssh ${USER_NAME}@<server> -p <mapped-port>"
-echo "  Guacamole:    http://<server>/guacamole (browser-based, primary)"
-echo "  Kasm:         http://<server>/kasm (alternative browser access)"
+echo "  Guacamole:    http://<server>/guacamole (browser-based gateway)"
+echo "  KasmVNC Web:  http://<server>:<desktop-port> (HTML5 desktop, primary)"
 echo "  VNC Direct:   <server>:<vnc-port> (use VNC client)"
 echo "  RDP Direct:   <server>:<rdp-port> (use RDP client)"
-echo "  noVNC:        http://<server>:<novnc-port> (HTML5 VNC)"
 echo "  VS Code:      http://<server>:<code-port>"
 echo "  Jupyter:      http://<server>:<jupyter-port>"
-echo "  Desktop:      Via Guacamole/Kasm web interface (recommended)"
+echo "  Desktop:      Via KasmVNC web interface or Guacamole (recommended)"
 echo ""
 echo "Volumes:"
 echo "  Home:       /home/${USER_NAME}"
