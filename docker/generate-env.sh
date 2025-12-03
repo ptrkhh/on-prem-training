@@ -47,6 +47,10 @@ echo "# Grafana" >> "${ENV_FILE}"
 echo "GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}" >> "${ENV_FILE}"
 echo "" >> "${ENV_FILE}"
 
+echo "# Portainer" >> "${ENV_FILE}"
+echo "PORTAINER_ADMIN_PASSWORD=${PORTAINER_ADMIN_PASSWORD:-changeme123}" >> "${ENV_FILE}"
+echo "" >> "${ENV_FILE}"
+
 echo "# Guacamole Database" >> "${ENV_FILE}"
 echo "GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD}" >> "${ENV_FILE}"
 echo "" >> "${ENV_FILE}"
@@ -87,6 +91,7 @@ echo "✅ Generated: ${ENV_FILE}"
 echo ""
 echo "Contents:"
 echo "  - GRAFANA_ADMIN_PASSWORD"
+echo "  - PORTAINER_ADMIN_PASSWORD"
 echo "  - GUACAMOLE_DB_PASSWORD"
 for username in "${USER_ARRAY[@]}"; do
     USERNAME_UPPER=$(echo "${username}" | tr '[:lower:]' '[:upper:]' | tr '-' '_')
