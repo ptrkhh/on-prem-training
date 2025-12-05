@@ -54,7 +54,6 @@ validate_yes_no_full() {
 echo ""
 echo "=== Step 1: Installing UFW and dependencies ==="
 
-apt update
 apt install -y ufw netcat-openbsd
 
 # Step 2: Configure UFW

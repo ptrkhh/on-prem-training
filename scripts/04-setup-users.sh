@@ -87,7 +87,6 @@ fi
 echo "Checking SSH server installation..."
 if ! dpkg -l | grep -q "^ii.*openssh-server"; then
     echo "OpenSSH server not found. Installing..."
-    apt-get update -qq
     apt-get install -y openssh-server
     echo "✓ OpenSSH server installed"
 else

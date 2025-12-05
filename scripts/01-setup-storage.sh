@@ -288,7 +288,6 @@ fi
 # Install required packages
 echo ""
 echo "Installing required packages..."
-apt update
 apt install -y btrfs-progs parted gdisk smartmontools
 
 if [[ "${BCACHE_MODE}" != "none" ]]; then

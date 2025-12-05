@@ -63,7 +63,6 @@ rm -f /etc/apt/sources.list.d/docker.list
 rm -f /etc/apt/sources.list.d/docker.sources
 
 # Install dependencies
-apt update
 apt install -y \
     ca-certificates \
     curl \
@@ -80,7 +79,6 @@ echo \
   $(lsb_release -cs) stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
 
 # Install Docker Engine
-apt update
 apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 echo "Docker installed successfully"
@@ -95,7 +93,6 @@ if command -v nvidia-smi &> /dev/null; then
     nvidia-smi
 else
     # Install NVIDIA drivers
-    apt update
     apt install -y ubuntu-drivers-common
     ubuntu-drivers autoinstall
 
@@ -134,7 +131,6 @@ curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-contai
     tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
 
 # Install nvidia-container-toolkit
-apt update
 apt install -y nvidia-container-toolkit
 
 # Configure Docker to use NVIDIA runtime

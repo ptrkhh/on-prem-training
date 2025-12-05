@@ -150,7 +150,6 @@ fi
 
 # Install required packages
 echo "Installing required packages..."
-apt update
 apt install -y restic rclone bc mailutils jq
 
 # Step 1: Setup rclone for GDrive

@@ -27,7 +27,6 @@ SCRIPTS_DIR="/opt/scripts/monitoring"
 
 # Install required packages
 echo "Installing required packages..."
-apt update
 apt install -y smartmontools bc jq curl mailutils
 
 # Step 1: Create monitoring scripts directory
