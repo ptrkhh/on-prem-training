@@ -51,10 +51,8 @@ echo ""
 if ! command -v rclone &> /dev/null; then
     echo "Installing rclone via apt..."
     if [[ $EUID -ne 0 ]]; then
-        sudo apt-get update
         sudo apt-get install -y rclone
     else
-        apt-get update
         apt-get install -y rclone
     fi
 fi
