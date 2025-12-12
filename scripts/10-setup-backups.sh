@@ -64,11 +64,10 @@ BACKUP_CACHE_DIR="${MOUNT_POINT}/cache/restic"
 mkdir -p "${BACKUP_CACHE_DIR}"
 
 # Define directories to include in backups
+# Note: Excludes /shared directory since it's already backed up to Google Drive
 BACKUP_SOURCES=(
     "${MOUNT_POINT}/homes"
     "${MOUNT_POINT}/docker-volumes"
-    "${MOUNT_POINT}/shared/tensorboard"
-    "${MOUNT_POINT}/shared/datasets"
 )
 
 SHARED_DIR="${MOUNT_POINT}/shared"
@@ -745,8 +744,8 @@ WEEKLY_RETENTION=52
 TOTAL_SNAPSHOTS=$((DAILY_RETENTION + WEEKLY_RETENTION))
 
 # Estimate backup size (assume compressed size is 30% of uncompressed)
-# Include homes, docker-volumes, and shared/tensorboard
-BACKUP_DIRS="${MOUNT_POINT}/homes ${MOUNT_POINT}/docker-volumes ${MOUNT_POINT}/shared/tensorboard"
+# Include homes and docker-volumes (excluding /shared since it's already on Google Drive)
+BACKUP_DIRS="${MOUNT_POINT}/homes ${MOUNT_POINT}/docker-volumes"
 TOTAL_SIZE_GB=0
 
 for dir in ${BACKUP_DIRS}; do
