@@ -335,11 +335,18 @@ set -euo pipefail
 RESTIC_REPOSITORY="rclone:${BACKUP_REMOTE}"
 RESTIC_PASSWORD_FILE="/root/.restic-password"
 MOUNT_POINT="${MOUNT_POINT}"
+BACKUP_CACHE_DIR="${BACKUP_CACHE_DIR}"
 ALERT_SCRIPT="/opt/scripts/monitoring/send-telegram-alert.sh"
 LOG_FILE="/var/log/restic-backup.log"
 BACKUP_STATUS="success"
 SHARED_DIR="\${MOUNT_POINT}/shared"
 GDRIVE_SHARED_REMOTE="${GDRIVE_SHARED_REMOTE}"
+
+# Define backup sources
+BACKUP_SOURCES=(
+    "${MOUNT_POINT}/homes"
+    "${MOUNT_POINT}/docker-volumes"
+)
 
 if [[ ! -s "${RESTIC_PASSWORD_FILE}" ]]; then
     echo "ERROR: Restic password file missing at ${RESTIC_PASSWORD_FILE}"
@@ -348,6 +355,7 @@ if [[ ! -s "${RESTIC_PASSWORD_FILE}" ]]; then
 fi
 
 export RESTIC_PASSWORD_FILE
+export RESTIC_CACHE_DIR="\${BACKUP_CACHE_DIR}"
 
 format_bytes() {
     local bytes="\$1"
