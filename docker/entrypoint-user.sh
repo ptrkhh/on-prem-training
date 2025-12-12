@@ -132,9 +132,9 @@ echo "Configuring VNC server..."
 su - "${USER_NAME}" << EOF
 mkdir -p ~/.vnc
 
-# Create VNC password file using SHA256 format (matches USER_PASSWORD)
+# Create VNC password file using echo to pipe password (KasmVNC format)
 VNC_PASSWORD="${USER_PASSWORD}"
-vncpasswd -type=sha256 -f <<<"\${VNC_PASSWORD}" > ~/.vnc/passwd
+echo -e "\${VNC_PASSWORD}\n\${VNC_PASSWORD}" | vncpasswd -f > ~/.vnc/passwd
 chmod 600 ~/.vnc/passwd
 
 # Create VNC startup script
@@ -445,6 +445,9 @@ chown -R "${USER_NAME}:${USER_NAME}" "/home/${USER_NAME}"
 
 # Start DBUS (needed for KDE)
 mkdir -p /run/dbus
+
+# Clean up old DBUS files from previous container runs
+rm -f /var/run/dbus/pid /var/run/dbus/system_bus_socket
 
 # Use dbus-launch for synchronous startup with exponential backoff fallback
 echo "Starting DBUS..."

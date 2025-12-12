@@ -270,13 +270,12 @@ fi
 
 echo "✓ NVIDIA runtime test passed with ${CUDA_IMAGE}"
 
-# Step 6: Configure GPU time-slicing (optional)
+# Step 6: Configure GPU time-slicing (mandatory for shared access)
 echo ""
-if validate_yes_no "Configure GPU time-slicing for shared access?"; then
-    echo "Configuring GPU time-slicing..."
+echo "Configuring GPU time-slicing..."
 
-    # Create time-slicing config
-    cat > /etc/nvidia-container-runtime/config.toml <<'EOF'
+# Create time-slicing config
+cat > /etc/nvidia-container-runtime/config.toml <<'EOF'
 [nvidia-container-cli]
 no-cgroups = false
 
@@ -288,11 +287,10 @@ annotation-prefixes = ["cdi.k8s.io/"]
 spec-dirs = ["/etc/cdi", "/var/run/cdi"]
 EOF
 
-    # Note: Time-slicing is primarily handled by manual coordination via Telegram
-    # No formal reservation system needed due to RTX 5080 being much faster than T4
+# Note: Time-slicing is primarily handled by manual coordination via Telegram
+# No formal reservation system needed due to RTX 5080 being much faster than T4
 
-    echo "GPU time-slicing config created (manual coordination via Telegram)"
-fi
+echo "GPU time-slicing config created (manual coordination via Telegram)"
 
 # Display summary
 echo ""

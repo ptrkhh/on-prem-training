@@ -508,8 +508,8 @@ WRAPPER_EOF
 
 chmod +x /usr/local/bin/smartd-alert.sh
 
-systemctl enable smartd
-systemctl restart smartd
+systemctl enable smartmontools
+systemctl restart smartmontools
 
 echo "SMART monitoring enabled with Telegram alerting"
 

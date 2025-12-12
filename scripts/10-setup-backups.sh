@@ -303,9 +303,9 @@ if [[ "\${RESTIC_REPOSITORY}" =~ ^rclone: ]]; then
 fi
 
 # Initialize repository
-if ! restic -r ${RESTIC_REPOSITORY} snapshots &>/dev/null; then
+if ! restic -r \${RESTIC_REPOSITORY} snapshots &>/dev/null; then
     echo "Initializing Restic repository..."
-    if ! restic -r ${RESTIC_REPOSITORY} init 2>&1 | tee /tmp/restic-init-error.log; then
+    if ! restic -r \${RESTIC_REPOSITORY} init 2>&1 | tee /tmp/restic-init-error.log; then
         ERROR_MSG=\$(cat /tmp/restic-init-error.log)
         echo "ERROR: Failed to initialize Restic repository"
         echo "Error details: \${ERROR_MSG}"
@@ -323,7 +323,7 @@ else
 fi
 
 # Test connection
-restic -r ${RESTIC_REPOSITORY} snapshots
+restic -r \${RESTIC_REPOSITORY} snapshots
 EOF
 
 chmod +x ${SCRIPTS_DIR}/init-restic.sh
@@ -422,18 +422,35 @@ check_mount_health "\${SHARED_DIR}" "${GDRIVE_SHARED_REMOTE}"
 # Check disk space before backup
 echo "Checking disk space..."
 
-# Calculate source data size
+# Calculate source data size (skip rclone mounts to avoid slow du operations)
 echo "Calculating backup size requirements..."
-SOURCE_SIZE_GB=\$(du -sb ${BACKUP_SOURCES[@]} 2>/dev/null | awk '{sum+=\$1} END {print int(sum/1024/1024/1024)+1}')
+SOURCE_SIZE_GB=0
+for source in "\${BACKUP_SOURCES[@]}"; do
+    # Check if this is a rclone mount (fuse.rclone)
+    if mountpoint -q "\${source}" 2>/dev/null; then
+        FSTYPE=\$(findmnt -n -o FSTYPE "\${source}" 2>/dev/null || echo "")
+        if [[ "\${FSTYPE}" == "fuse.rclone" ]]; then
+            echo "  Skipping size calculation for rclone mount: \${source}"
+            continue
+        fi
+    fi
+    # Only calculate size for local directories
+    if [[ -d "\${source}" ]]; then
+        DIR_SIZE_GB=\$(du -sb "\${source}" 2>/dev/null | awk '{print int(\$1/1024/1024/1024)+1}')
+        SOURCE_SIZE_GB=\$((SOURCE_SIZE_GB + DIR_SIZE_GB))
+        echo "  \${source}: \${DIR_SIZE_GB}GB"
+    fi
+done
 
 # Determine if this is initial or incremental backup
 if [ ! -d "\${BACKUP_CACHE_DIR}/snapshots" ]; then
     # First backup needs more space (compression ratio ~0.6)
-    REQUIRED_GB=\$((SOURCE_SIZE_GB * 60 / 100 + 5))  # 60% + 5GB safety margin
+    # Add 50GB buffer for rclone mounts we didn't calculate
+    REQUIRED_GB=\$((SOURCE_SIZE_GB * 60 / 100 + 50))  # 60% + 50GB safety margin
     BACKUP_TYPE="initial"
 else
     # Incremental backups need less space due to deduplication
-    REQUIRED_GB=\$((SOURCE_SIZE_GB * 10 / 100 + 2))  # 10% + 2GB for incremental
+    REQUIRED_GB=\$((SOURCE_SIZE_GB * 10 / 100 + 10))  # 10% + 10GB for incremental
     BACKUP_TYPE="incremental"
 fi
 
@@ -441,26 +458,24 @@ fi
 AVAILABLE_GB=\$(df -BG "\${BACKUP_CACHE_DIR}" | tail -1 | awk '{print \$4}' | sed 's/G//')
 
 if [[ \${AVAILABLE_GB} -lt \${REQUIRED_GB} ]]; then
-    echo "ERROR: Insufficient space for \${BACKUP_TYPE} backup!"
-    echo "  Source data: \${SOURCE_SIZE_GB}GB"
-    echo "  Required: \${REQUIRED_GB}GB"
+    echo "WARNING: Low disk space for \${BACKUP_TYPE} backup"
+    echo "  Calculated local data: \${SOURCE_SIZE_GB}GB"
+    echo "  Estimated required: \${REQUIRED_GB}GB"
     echo "  Available: \${AVAILABLE_GB}GB"
-    echo "  Shortfall: \$((REQUIRED_GB - AVAILABLE_GB))GB"
+    echo "  Note: Remote mounts were skipped from size calculation"
+    echo "  Proceeding with backup, but monitor disk space during execution"
     if [[ -x "\${ALERT_SCRIPT}" ]]; then
-        "\${ALERT_SCRIPT}" "critical" "Backup failed: Insufficient space (\${AVAILABLE_GB}GB available, \${REQUIRED_GB}GB required)"
+        "\${ALERT_SCRIPT}" "warning" "Backup starting with low space (\${AVAILABLE_GB}GB available, \${REQUIRED_GB}GB estimated)"
     fi
-    exit 1
 fi
 
-echo "Disk space check passed: \${AVAILABLE_GB}GB available, \${REQUIRED_GB}GB required for \${BACKUP_TYPE} backup"
+echo "Disk space check: \${AVAILABLE_GB}GB available, ~\${REQUIRED_GB}GB estimated for \${BACKUP_TYPE} backup"
+echo "  (Note: Size estimates exclude remote mounts to avoid slow calculations)"
 
 # Warn if available space is less than 2x required (helps predict future failures)
 if [[ \${AVAILABLE_GB} -lt \$((REQUIRED_GB * 2)) ]]; then
-    echo "WARNING: Available space (\${AVAILABLE_GB}GB) is less than 2x required (\${REQUIRED_GB}GB)"
-    echo "  Consider freeing up space to avoid future backup failures"
-    if [[ -x "\${ALERT_SCRIPT}" ]]; then
-        "\${ALERT_SCRIPT}" "warning" "Backup space low: \${AVAILABLE_GB}GB available, consider cleanup"
-    fi
+    echo "WARNING: Available space (\${AVAILABLE_GB}GB) is less than 2x estimated (\${REQUIRED_GB}GB)"
+    echo "  Monitor disk usage during backup and consider cleanup if needed"
 fi
 
 # Initialize backup status and repository lock tracking
@@ -661,24 +676,24 @@ if [[ -z "\${RESTORE_DIR}" || "\${RESTORE_DIR}" == "/" ]]; then
     echo "ERROR: Invalid RESTORE_DIR='\${RESTORE_DIR}' - refusing to delete"
     exit 1
 fi
-rm -rf ${RESTORE_DIR}
-mkdir -p ${RESTORE_DIR}
+rm -rf \${RESTORE_DIR}
+mkdir -p \${RESTORE_DIR}
 
 # Get latest snapshot
-LATEST_SNAPSHOT=$(restic -r ${RESTIC_REPOSITORY} snapshots --json | jq -r '.[-1].id')
+LATEST_SNAPSHOT=\$(restic -r \${RESTIC_REPOSITORY} snapshots --json | jq -r '.[-1].id')
 
-if [[ -z "${LATEST_SNAPSHOT}" ]]; then
+if [[ -z "\${LATEST_SNAPSHOT}" ]]; then
     echo "ERROR: No snapshots found!"
-    [[ -x "${ALERT_SCRIPT}" ]] && ${ALERT_SCRIPT} "critical" "Restic restore verification failed: No snapshots"
+    [[ -x "\${ALERT_SCRIPT}" ]] && \${ALERT_SCRIPT} "critical" "Restic restore verification failed: No snapshots"
     exit 1
 fi
 
-echo "Latest snapshot: ${LATEST_SNAPSHOT}"
+echo "Latest snapshot: \${LATEST_SNAPSHOT}"
 
 # Restore a small subset for verification
 echo "Restoring sample files..."
-if restic -r ${RESTIC_REPOSITORY} restore ${LATEST_SNAPSHOT} \
-    --target ${RESTORE_DIR} \
+if restic -r \${RESTIC_REPOSITORY} restore \${LATEST_SNAPSHOT} \
+    --target \${RESTORE_DIR} \
     --include '/homes/*/.*' \
     --include '/docker-volumes/*'; then
 
@@ -695,7 +710,7 @@ if [[ -z "\${RESTORE_DIR}" || "\${RESTORE_DIR}" == "/" ]]; then
     echo "ERROR: Invalid RESTORE_DIR='\${RESTORE_DIR}' - refusing to delete"
     exit 1
 fi
-rm -rf ${RESTORE_DIR}
+rm -rf \${RESTORE_DIR}
 
 # Send alert if verification failed
 if [[ "\${VERIFY_STATUS}" == "failed" ]]; then

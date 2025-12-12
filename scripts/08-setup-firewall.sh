@@ -23,6 +23,20 @@ fi
 
 source "${CONFIG_FILE}"
 
+# Autodetect local network CIDR
+detect_local_network_cidr() {
+    local default_iface=$(ip route | grep default | awk '{print $5}' | head -n1)
+    if [[ -n "${default_iface}" ]]; then
+        # Get the local network CIDR from the routing table
+        local detected_cidr=$(ip route | grep -v default | grep "${default_iface}" | grep -v "linkdown" | awk '/proto kernel/ {print $1}' | head -n1)
+        if [[ -n "${detected_cidr}" ]] && [[ "${detected_cidr}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+            echo "${detected_cidr}"
+            return 0
+        fi
+    fi
+    return 1
+}
+
 # Input validation helper function
 validate_yes_no() {
     local prompt="$1"
@@ -124,19 +138,37 @@ if [[ -n "${LOCAL_NETWORK_CIDR:-}" ]]; then
     done
 fi
 
-# Allow local network access (use LOCAL_NETWORK_CIDR from config)
+# Allow local network access (use LOCAL_NETWORK_CIDR from config or autodetect)
 if [[ -n "${LOCAL_NETWORK_CIDR:-}" ]]; then
-    echo "Allowing local network access from ${LOCAL_NETWORK_CIDR}"
+    echo "Allowing local network access from ${LOCAL_NETWORK_CIDR} (from config)"
     ufw allow from ${LOCAL_NETWORK_CIDR} comment 'Local network'
 else
     if validate_yes_no "Allow local network access?"; then
-        read -p "Enter local network CIDR (e.g., 192.168.1.0/24): " local_cidr
-        # Validate CIDR format
-        if [[ ! "${local_cidr}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
-            echo "ERROR: Invalid CIDR format"
-            exit 1
+        # Try to autodetect the local network CIDR
+        local_cidr=$(detect_local_network_cidr)
+        if [[ -n "${local_cidr}" ]]; then
+            echo "Detected local network: ${local_cidr}"
+            if validate_yes_no "Use detected network CIDR ${local_cidr}?"; then
+                ufw allow from ${local_cidr} comment 'Local network'
+            else
+                read -p "Enter local network CIDR (e.g., 192.168.1.0/24): " local_cidr
+                # Validate CIDR format
+                if [[ ! "${local_cidr}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+                    echo "ERROR: Invalid CIDR format"
+                    exit 1
+                fi
+                ufw allow from ${local_cidr} comment 'Local network'
+            fi
+        else
+            echo "Could not autodetect local network CIDR"
+            read -p "Enter local network CIDR (e.g., 192.168.1.0/24): " local_cidr
+            # Validate CIDR format
+            if [[ ! "${local_cidr}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/[0-9]+$ ]]; then
+                echo "ERROR: Invalid CIDR format"
+                exit 1
+            fi
+            ufw allow from ${local_cidr} comment 'Local network'
         fi
-        ufw allow from ${local_cidr} comment 'Local network'
     fi
 fi
 

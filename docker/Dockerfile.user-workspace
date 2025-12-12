@@ -110,8 +110,13 @@ RUN apt-get update && apt-get install -y \
     # noVNC dependencies (for HTML5 VNC client)
     websockify \
     python3-websockify \
-    novnc \
+    python3-numpy \
     && rm -rf /var/lib/apt/lists/*
+
+# Install noVNC from source (package in Ubuntu 24.04 is broken/missing web assets)
+RUN wget -qO - https://github.com/novnc/noVNC/archive/refs/tags/v1.5.0.tar.gz | tar xz -C /usr/share/ && \
+    mv /usr/share/noVNC-1.5.0 /usr/share/novnc && \
+    cp /usr/share/novnc/vnc.html /usr/share/novnc/index.html
 
 # Download and install KasmVNC
 RUN KASMVNC_VERSION=1.4.0 && \
@@ -392,9 +397,10 @@ EXPOSE 8080
 EXPOSE 8888
 EXPOSE 6006
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD pgrep -x supervisord && pgrep -x sshd || exit 1
+# Health check - verify key services are running
+# Check supervisord, sshd, and websockify (port 6901 for KasmVNC web interface)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD pgrep -x supervisord && pgrep -x sshd && (pgrep -f websockify || exit 1)
 
 # Set working directory
 WORKDIR /workspace

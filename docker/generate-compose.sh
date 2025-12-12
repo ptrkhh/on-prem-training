@@ -291,6 +291,10 @@ if [[ -z "${GRAFANA_ADMIN_PASSWORD:-}" || "${GRAFANA_ADMIN_PASSWORD}" == "admin"
     MISSING_PASSWORDS+=("GRAFANA_ADMIN_PASSWORD")
 fi
 
+if [[ -z "${FILEBROWSER_ADMIN_PASSWORD:-}" ]]; then
+    MISSING_PASSWORDS+=("FILEBROWSER_ADMIN_PASSWORD")
+fi
+
 if [[ ${#MISSING_PASSWORDS[@]} -gt 0 ]]; then
     echo "ERROR: Required passwords not set in config.sh:"
     for missing_pass in "${MISSING_PASSWORDS[@]}"; do
@@ -312,6 +316,7 @@ cat > "${OUTPUT_FILE}" << 'EOFMAIN'
 
 networks:
   ml-net:
+    name: ml-net
     driver: bridge
     ipam:
       config:
@@ -458,8 +463,10 @@ services:
       - "traefik.http.routers.guacamole.rule=Host(`guacamole.${DOMAIN}`) || Host(`remote.${DOMAIN}`)"
       - "traefik.http.routers.guacamole.entrypoints=web"
       - "traefik.http.services.guacamole.loadbalancer.server.port=8080"
-      - "traefik.http.middlewares.guacamole-prefix.stripprefix.prefixes=/guacamole"
-      - "traefik.http.routers.guacamole.middlewares=guacamole-prefix"
+      # Redirect root to /guacamole/ for convenience
+      - "traefik.http.middlewares.guacamole-redirect.redirectregex.regex=^http://(.*)/$$"
+      - "traefik.http.middlewares.guacamole-redirect.redirectregex.replacement=http://$${1}/guacamole/"
+      - "traefik.http.routers.guacamole.middlewares=guacamole-redirect"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/guacamole || exit 1"]
       interval: 30s
@@ -614,8 +621,16 @@ services:
     image: filebrowser/filebrowser:latest
     container_name: filebrowser
     restart: unless-stopped
+    user: "0:0"
+    environment:
+      - FB_DATABASE=/database/filebrowser.db
+      - FB_CONFIG=/config/settings.json
+      - FB_USERNAME=admin
+      - FB_PASSWORD=${FILEBROWSER_ADMIN_PASSWORD}
     volumes:
       - ${MOUNT_POINT:-/mnt/storage}:/srv
+      - ${MOUNT_POINT:-/mnt/storage}/filebrowser-db:/database
+      - ${MOUNT_POINT:-/mnt/storage}/filebrowser-config:/config
     networks:
       - ml-net
     healthcheck:
@@ -761,7 +776,7 @@ for USERNAME in ${USER_ARRAY[@]}; do
               count: all
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD", "true"]
+      test: ["CMD-SHELL", "pgrep -x supervisord && pgrep -x sshd && pgrep -f websockify"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -895,6 +910,7 @@ MOUNT_POINT=${MOUNT_POINT:-/mnt/storage}
 # Service passwords (validated at generation time - no defaults allowed)
 GRAFANA_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD}
 GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD}
+FILEBROWSER_ADMIN_PASSWORD=${FILEBROWSER_ADMIN_PASSWORD}
 
 # Resource limits
 MEMORY_LIMIT_GB=${MEMORY_LIMIT_GB:-100}

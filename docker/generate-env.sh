@@ -55,6 +55,10 @@ echo "# Guacamole Database" >> "${ENV_FILE}"
 echo "GUACAMOLE_DB_PASSWORD=${GUACAMOLE_DB_PASSWORD}" >> "${ENV_FILE}"
 echo "" >> "${ENV_FILE}"
 
+echo "# FileBrowser Admin" >> "${ENV_FILE}"
+echo "FILEBROWSER_ADMIN_PASSWORD=${FILEBROWSER_ADMIN_PASSWORD}" >> "${ENV_FILE}"
+echo "" >> "${ENV_FILE}"
+
 # Add per-user passwords
 echo "# Per-user passwords (for SSH, VNC, RDP, web desktop, etc.)" >> "${ENV_FILE}"
 USER_ARRAY=(${USERS})

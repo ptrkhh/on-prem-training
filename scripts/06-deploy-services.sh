@@ -9,8 +9,17 @@ echo "=== Docker Services Deployment ==="
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib/common.sh"
 
-# Check if running as root
-require_root
+# Check if running as root or has docker access
+if [[ $EUID -ne 0 ]]; then
+    if ! docker info &>/dev/null; then
+        echo "ERROR: This script must be run as root or by a user with Docker access."
+        exit 1
+    fi
+    echo "NOTICE: Running as non-root user (Docker is accessible)"
+else
+    # Running as root is fine
+    :
+fi
 
 # Load configuration
 CONFIG_FILE="${SCRIPT_DIR}/../config.sh"
@@ -29,6 +38,13 @@ export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-on-prem-training}"
 # Step 1: Verify Prerequisites
 echo ""
 echo "=== Step 1: Verifying Prerequisites ==="
+
+# Check for required tools
+if ! command -v jq &> /dev/null; then
+    echo "ERROR: jq is not installed"
+    echo "Please install it: sudo apt-get install jq"
+    exit 1
+fi
 
 # Check Docker is installed
 if ! command -v docker &> /dev/null; then
@@ -121,19 +137,45 @@ else
     echo "✓ Found .env file"
 fi
 
-# Step 3: Pull Docker Images
+# Step 3: Build and Pull Docker Images
 echo ""
-echo "=== Step 3: Pulling Docker Images ==="
+echo "=== Step 3: Building and Pulling Docker Images ==="
 echo "This may take several minutes..."
 
-if ! docker compose pull; then
+# Build custom images first (e.g., ml-workspace)
+echo "Building custom images..."
+if ! docker compose build; then
+    echo "ERROR: Failed to build custom images"
+    exit 1
+fi
+echo "✓ Custom images built"
+
+# Pull other images
+echo "Pulling service images..."
+if ! docker compose pull --ignore-pull-failures; then
     echo "WARNING: Some images failed to pull"
-    echo "This is normal if you're using custom images that need to be built"
+    echo "This is expected for local images that were just built"
 fi
 
 # Step 4: Deploy Services
 echo ""
 echo "=== Step 4: Deploying Services ==="
+
+# Cleanup step - Remove conflicting containers
+# This is necessary because we use fixed container names
+echo "Checking for conflicting containers..."
+# Get list of container names from compose file using proper JSON parsing
+CONTAINER_NAMES=$(docker compose config --format json 2>/dev/null | jq -r '.services[].container_name // empty' 2>/dev/null || true)
+
+if [[ -n "${CONTAINER_NAMES}" ]]; then
+    for NAME in ${CONTAINER_NAMES}; do
+        # Check if a container with this name exists (running or stopped)
+        if docker ps -a --format '{{.Names}}' | grep -q "^${NAME}$"; then
+            echo "Removing conflicting container: ${NAME}"
+            docker rm -f "${NAME}" >/dev/null 2>&1 || true
+        fi
+    done
+fi
 
 echo "Starting all services with Docker Compose..."
 docker compose up -d
